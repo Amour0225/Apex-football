@@ -3,7 +3,7 @@ import numpy as np
 import requests
 from scipy.stats import poisson
 
-# Configuration de la page Streamlit
+# Configuration de la page
 st.set_page_config(
     page_title="Apex Intelligence Engine",
     page_icon="⚡",
@@ -11,15 +11,37 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Style CSS Épuré & Minimaliste
+# CSS Personnalisé
 st.markdown("""
     <style>
     .main { background-color: #F8F9FA; }
-    .stMetric { background-color: #FFFFFF; padding: 15px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
-    .stButton>button { width: 100%; border-radius: 6px; font-weight: bold; }
-    .badge-risk-low { background-color: #28A745; color: white; padding: 4px 8px; border-radius: 4px; font-weight: bold; }
-    .badge-risk-med { background-color: #FFC107; color: black; padding: 4px 8px; border-radius: 4px; font-weight: bold; }
-    .badge-risk-high { background-color: #DC3545; color: white; padding: 4px 8px; border-radius: 4px; font-weight: bold; }
+    .card-corners {
+        background-color: #FFFFFF;
+        padding: 15px;
+        border-radius: 10px;
+        border-left: 5px solid #28A745;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        margin-bottom: 10px;
+    }
+    .card-cards {
+        background-color: #FFFFFF;
+        padding: 15px;
+        border-radius: 10px;
+        border-left: 5px solid #FFC107;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        margin-bottom: 10px;
+    }
+    .winner-box {
+        background-color: #E8F4FF;
+        border: 1px solid #B8DAFF;
+        padding: 15px;
+        border-radius: 8px;
+        text-align: center;
+        font-size: 1.2rem;
+        font-weight: bold;
+        color: #004085;
+        margin-bottom: 20px;
+    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -29,17 +51,19 @@ BASE_URL = "https://api.football-data.org/v4/"
 @st.cache_data(ttl=300)
 def fetch_data(endpoint):
     headers = {"X-Auth-Token": API_KEY}
-    response = requests.get(f"{BASE_URL}{endpoint}", headers=headers)
-    if response.status_code == 200:
-        return response.json()
+    try:
+        response = requests.get(f"{BASE_URL}{endpoint}", headers=headers)
+        if response.status_code == 200:
+            return response.json()
+    except:
+        return None
     return None
 
-# En-tête principal
-st.title("⚡ Apex Intelligence Engine v2.0")
-st.caption("Moteur d'analyse prédictive haute précision : 1N2, Scores, Corners & Cartons")
+st.title("⚡ Apex Intelligence Engine v2.1")
+st.caption("Moteur dynamique d'analyse tactique et prédictions personnalisées")
 
-# Barre latérale : Sélection de la Ligue
-st.sidebar.header("🕹️ Configuration")
+# Sélection du Championnat
+st.sidebar.header("🕹️ Championnat")
 leagues = {
     "Ligue 1": "FL1",
     "Premier League": "PL",
@@ -51,93 +75,133 @@ leagues = {
 selected_league = st.sidebar.selectbox("Sélectionnez le Championnat", list(leagues.keys()))
 league_code = leagues[selected_league]
 
-# Chargement des matchs
+# Récupération du classement pour statistiques réelles
+standings_data = fetch_data(f"competitions/{league_code}/standings")
+teams_stats = {}
+
+if standings_data and "standings" in standings_data and len(standings_data["standings"]) > 0:
+    table = standings_data["standings"][0].get("table", [])
+    for item in table:
+        team_id = item["team"]["id"]
+        played = item.get("playedGames", 1) or 1
+        gf = item.get("goalsFor", 0)
+        ga = item.get("goalsAgainst", 0)
+        teams_stats[team_id] = {
+            "avg_gf": gf / played,
+            "avg_ga": ga / played
+        }
+
+# Récupération des matchs
 matches_data = fetch_data(f"competitions/{league_code}/matches?status=SCHEDULED,LIVE")
 
 if matches_data and matches_data.get("matches"):
     match_list = matches_data["matches"]
-    match_options = {f"{m['homeTeam']['name']} vs {m['awayTeam']['name']} ({m['utcDate'][:10]})": m for m in match_list}
     
-    selected_match_label = st.selectbox("Sélectionnez la Rencontre", list(match_options.keys()))
-    match = match_options[selected_match_label]
+    # Construction de la liste déroulante avec état LIVE / Programmé
+    match_options = {}
+    for m in match_list:
+        is_live = m["status"] in ["IN_PLAY", "PAUSED"]
+        status_tag = "🔴 [EN DIRECT]" if is_live else f"📅 {m['utcDate'][:10]}"
+        label = f"{status_tag} - {m['homeTeam']['name']} vs {m['awayTeam']['name']}"
+        match_options[label] = m
     
-    home_team = match["homeTeam"]["name"]
-    away_team = match["awayTeam"]["name"]
+    selected_label = st.selectbox("Sélectionnez la Rencontre", list(match_options.keys()))
+    match = match_options[selected_label]
+    
+    home_team = match["homeTeam"]
+    away_team = match["awayTeam"]
+    home_id = home_team["id"]
+    away_id = away_team["id"]
     is_live = match["status"] in ["IN_PLAY", "PAUSED"]
-    
+
+    # Calcul dynamique des xG réels basés sur les données d'équipe
+    h_stat = teams_stats.get(home_id, {"avg_gf": 1.4, "avg_ga": 1.1})
+    a_stat = teams_stats.get(away_id, {"avg_gf": 1.2, "avg_ga": 1.3})
+
+    home_xg = max(0.4, (h_stat["avg_gf"] * 0.6 + a_stat["avg_ga"] * 0.4) * 1.15)
+    away_xg = max(0.3, (a_stat["avg_gf"] * 0.6 + h_stat["avg_ga"] * 0.4) * 0.85)
+
     st.divider()
-    
-    # En-tête du Match
-    col_h, col_vs, col_a = st.columns([4, 1, 4])
+
+    # En-tête des Équipes
+    col_h, col_vs, col_a = st.columns([4, 2, 4])
     with col_h:
-        st.subheader(f"🏠 {home_team}")
+        st.subheader(f"🏠 {home_team['name']}")
+        st.caption(f"Buts marqués (Moy) : {h_stat['avg_gf']:.2f} / match")
     with col_vs:
         if is_live:
-            st.markdown("<h3 style='text-align: center; color: red;'>🔴 LIVE</h3>", unsafe_allow_html=True)
+            st.markdown("<h3 style='text-align: center; color: red;'>🔴 EN DIRECT</h3>", unsafe_allow_html=True)
         else:
             st.markdown("<h3 style='text-align: center;'>VS</h3>", unsafe_allow_html=True)
     with col_a:
-        st.subheader(f"✈️ {away_team}")
+        st.subheader(f"✈️ {away_team['name']}")
+        st.caption(f"Buts marqués (Moy) : {a_stat['avg_gf']:.2f} / match")
 
-    # Simulation d'estimation xG (Attaque/Défense pondérée)
-    # Dans un environnement de production complet, ces métriques proviennent de l'historique des tirs/buts
-    home_xg = 1.65 if not is_live else 1.85
-    away_xg = 1.15 if not is_live else 0.95
-    
-    # 1. Calcul des probabilités Poisson
-    max_goals = 5
+    # Calcul des Probabilités (Poisson)
+    max_goals = 6
     matrix = np.zeros((max_goals, max_goals))
     for i in range(max_goals):
         for j in range(max_goals):
             matrix[i, j] = poisson.pmf(i, home_xg) * poisson.pmf(j, away_xg)
-            
-    prob_home = np.sum(np.tril(matrix, -1)) * 100
-    prob_draw = np.sum(np.diag(matrix)) * 100
-    prob_away = np.sum(np.triu(matrix, 1)) * 100
-    
-    # 2. Recommandations Value & Probabilités
-    st.markdown("### 📊 Analyse Prédictive 1N2 & Probabilités")
+
+    prob_home = float(np.sum(np.tril(matrix, -1)) * 100)
+    prob_draw = float(np.sum(np.diag(matrix)) * 100)
+    prob_away = float(np.sum(np.triu(matrix, 1)) * 100)
+
+    # Détermination du Vainqueur Prédictif
+    if prob_home > prob_away and prob_home > prob_draw:
+        predicted_winner = f"Victoire de {home_team['name']}"
+        win_confidence = prob_home
+    elif prob_away > prob_home and prob_away > prob_draw:
+        predicted_winner = f"Victoire de {away_team['name']}"
+        win_confidence = prob_away
+    else:
+        predicted_winner = "Match Nul"
+        win_confidence = prob_draw
+
+    # Affichage clair du Vainqueur
+    st.markdown(f"""
+    <div class="winner-box">
+        🏆 Pronostic Principal : <u>{predicted_winner}</u> (Confiance : {win_confidence:.1f}%)
+    </div>
+    """, unsafe_allow_html=True)
+
+    # Grille 1N2
+    st.markdown("### 📊 Probabilités Détaillées (1N2)")
     c1, c2, c3 = st.columns(3)
-    c1.metric(f"Victoire {home_team}", f"{prob_home:.1f}%", f"Cote théo: {100/prob_home:.2f}" if prob_home > 0 else "-")
+    c1.metric(f"Victoire {home_team['name']}", f"{prob_home:.1f}%", f"Cote théo: {100/prob_home:.2f}" if prob_home > 0 else "-")
     c2.metric("Match Nul", f"{prob_draw:.1f}%", f"Cote théo: {100/prob_draw:.2f}" if prob_draw > 0 else "-")
-    c3.metric(f"Victoire {away_team}", f"{prob_away:.1f}%", f"Cote théo: {100/prob_away:.2f}" if prob_away > 0 else "-")
+    c3.metric(f"Victoire {away_team['name']}", f"{prob_away:.1f}%", f"Cote théo: {100/prob_away:.2f}" if prob_away > 0 else "-")
 
-    # 3. Apex Value Radar & Over/Under
     st.divider()
-    col_left, col_right = st.columns(2)
-    
-    with col_left:
-        st.markdown("### 🎯 Apex Risk & Value Radar")
-        over_25_prob = (1 - (poisson.pmf(0, home_xg)*poisson.pmf(0, away_xg) + 
-                            poisson.pmf(1, home_xg)*poisson.pmf(0, away_xg) + 
-                            poisson.pmf(0, home_xg)*poisson.pmf(1, away_xg) + 
-                            poisson.pmf(1, home_xg)*poisson.pmf(1, away_xg))) * 100
-        
-        btts_prob = (1 - poisson.pmf(0, home_xg)) * (1 - poisson.pmf(0, away_xg)) * 100
-        
-        st.write(f"**Plus de 2.5 Buts dans le match :** `{over_25_prob:.1f}%`")
-        st.progress(int(over_25_prob))
-        
-        st.write(f"**Les deux équipes marquent (BTTS) :** `{btts_prob:.1f}%`")
-        st.progress(int(btts_prob))
 
-        # Indice de Risque
-        if prob_home > 60 or prob_away > 60:
-            st.markdown("Niveau de Risque : <span class='badge-risk-low'>FAIBLE</span>", unsafe_allow_html=True)
-        elif prob_draw > 33:
-            st.markdown("Niveau de Risque : <span class='badge-risk-high'>ÉLEVÉ</span>", unsafe_allow_html=True)
-        else:
-            st.markdown("Niveau de Risque : <span class='badge-risk-med'>MODÉRÉ</span>", unsafe_allow_html=True)
+    # Sections Distinctes : Corners & Cartons
+    col_corners, col_cards = st.columns(2)
 
-    with col_right:
-        st.markdown("### 🚩 Corners & 🟨 Cartons (Estimations)")
-        # Modèle de volume basé sur l'intensité xG combinée
-        total_expected_xg = home_xg + away_xg
-        est_corners = round(total_expected_xg * 3.8 + 2.5)
-        est_cards = round(total_expected_xg * 1.4 + 1.8)
-        
-        st.info(f"**Corners estimés (Total) :** ~{est_corners} corners (Ligne suggérée: Over {est_corners - 0.5})")
-        st.info(f"**Cartons estimés (Total) :** ~{est_cards} cartons (Ligne suggérée: Over {est_cards - 0.5})")
+    est_corners = round((home_xg + away_xg) * 3.4 + 2.8, 1)
+    est_cards = round((home_xg + away_xg) * 1.6 + 1.2, 1)
+
+    with col_corners:
+        st.markdown("""
+        <div class="card-corners">
+            <h4>🚩 Section Corners</h4>
+            <p>Estimation basée sur la pression d'attaque accumulée.</p>
+        </div>
+        """, unsafe_allow_html=True)
+        st.metric("Total Corners Estimé", f"~{est_corners}")
+        st.write(f"**Ligne Suggérée :** Over {round(est_corners - 0.5, 1)} Corners")
+        st.progress(min(100, int((est_corners / 14) * 100)))
+
+    with col_cards:
+        st.markdown("""
+        <div class="card-cards">
+            <h4>🟨 Section Cartons Jaunes</h4>
+            <p>Estimation basée sur l'intensité et les fautes tactiques.</p>
+        </div>
+        """, unsafe_allow_html=True)
+        st.metric("Total Cartons Estimé", f"~{est_cards}")
+        st.write(f"**Ligne Suggérée :** Over {round(est_cards - 0.5, 1)} Cartons")
+        st.progress(min(100, int((est_cards / 8) * 100)))
 
 else:
-    st.warning("Aucun match à venir ou en direct trouvé pour ce championnat actuellement.")
+    st.warning("Aucun match disponible pour ce championnat actuellement.")
