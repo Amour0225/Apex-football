@@ -5,13 +5,13 @@ from scipy.stats import poisson
 
 # Configuration de la page
 st.set_page_config(
-    page_title="Apex Quant Engine v7.0",
-    page_icon="⚡",
+    page_title="Apex Quant Engine v8.0 AI",
+    page_icon="🤖",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# Style CSS Pro High Contrast
+# Style CSS Pro High Contrast & AI Terminal Style
 st.markdown("""
     <style>
     .stApp {
@@ -19,15 +19,14 @@ st.markdown("""
         color: #0F172A;
         font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
     }
-    .hero-card {
-        background: linear-gradient(135deg, #0F172A 0%, #1E293B 100%);
+    .ai-card {
+        background: linear-gradient(135deg, #090D16 0%, #1E1B4B 50%, #0F172A 100%);
         color: #FFFFFF;
-        padding: 26px;
-        border-radius: 16px;
-        text-align: center;
+        padding: 28px;
+        border-radius: 20px;
+        border: 2px solid #6366F1;
+        box-shadow: 0 15px 35px -5px rgba(99, 102, 241, 0.3);
         margin-bottom: 25px;
-        box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.25);
-        border: 1px solid #334155;
     }
     .pro-card {
         background-color: #FFFFFF;
@@ -66,15 +65,16 @@ st.markdown("""
         display: inline-block;
         margin-bottom: 12px;
     }
-    .badge-vip {
-        background-color: #10B981;
+    .badge-ai-safe {
+        background: linear-gradient(135deg, #10B981 0%, #059669 100%);
         color: #FFFFFF;
         padding: 6px 18px;
         border-radius: 20px;
         font-weight: 800;
-        font-size: 0.95rem;
+        font-size: 0.85rem;
         display: inline-block;
         text-transform: uppercase;
+        letter-spacing: 0.5px;
     }
     .market-row {
         display: flex;
@@ -97,13 +97,23 @@ st.markdown("""
         justify-content: space-between;
         align-items: center;
     }
+    .ai-reason-box {
+        background: rgba(255, 255, 255, 0.07);
+        border-left: 4px solid #818CF8;
+        padding: 14px;
+        border-radius: 8px;
+        margin-top: 15px;
+        font-size: 0.95rem;
+        line-height: 1.5;
+        color: #E2E8F0;
+    }
     </style>
 """, unsafe_allow_html=True)
 
 API_KEY = "1e9518e7585349f9abe6d5a29ddb83b1"
 BASE_URL = "https://api.football-data.org/v4/"
 
-# MODÈLE DE DIXON-COLES (Ajustement mathématique des scores bas)
+# MODÈLE DE DIXON-COLES
 def dixon_coles_tau(x, y, home_xg, away_xg, rho=-0.13):
     if x == 0 and y == 0:
         return 1.0 - (home_xg * away_xg * rho)
@@ -159,8 +169,8 @@ def fetch_data(endpoint):
         return None
     return None
 
-st.title("⚡ Apex Quant Engine v7.0")
-st.caption("Algorithme Dixon-Coles Bivariate Engine, Dynamic Live Elasticity & 1xBet Analytics")
+st.title("🤖 Apex Quant Engine v8.0 (Neural AI)")
+st.caption("Moteur Decisionnel de Recommandation à Haute Sécurité & Analyse Tactique Live")
 
 # Sélection du Championnat
 st.sidebar.header("🕹️ Championnat")
@@ -209,7 +219,7 @@ if standings_data and "standings" in standings_data and len(standings_data["stan
 else:
     league_avg_goals_per_game = 1.35
 
-# Matchs
+# Fetch Matches
 matches_data = fetch_data(f"competitions/{league_code}/matches?status=SCHEDULED,LIVE,IN_PLAY,PAUSED")
 
 if matches_data and matches_data.get("matches"):
@@ -253,7 +263,7 @@ if matches_data and matches_data.get("matches"):
             st.info("Aucun match à venir programmé.")
     st.markdown('</div>', unsafe_allow_html=True)
 
-    # Sélection du match
+    # Selection Match
     match_options = {}
     for m in match_list:
         is_l = m["status"] in ["IN_PLAY", "PAUSED"]
@@ -272,15 +282,13 @@ if matches_data and matches_data.get("matches"):
 
     is_derby, derby_name = detect_derby_automatically(home_team['name'], away_team['name'])
 
-    # Stats avancées Dixons-Coles
+    # Stats Dixon-Coles
     h_stat = teams_stats.get(home_id, {"att_strength": 1.0, "def_weakness": 1.0, "form": 55, "avg_gf": 1.3, "avg_ga": 1.1})
     a_stat = teams_stats.get(away_id, {"att_strength": 1.0, "def_weakness": 1.0, "form": 50, "avg_gf": 1.1, "avg_ga": 1.2})
 
-    # Calcul xG Dixon-Coles calibré
     home_xg = max(0.4, h_stat["att_strength"] * a_stat["def_weakness"] * league_avg_goals_per_game * 1.12)
     away_xg = max(0.3, a_stat["att_strength"] * h_stat["def_weakness"] * league_avg_goals_per_game * 0.88)
 
-    # Score actuel si Live
     score_h = match.get('score', {}).get('fullTime', {}).get('home', 0) or 0 if is_live else 0
     score_a = match.get('score', {}).get('fullTime', {}).get('away', 0) or 0 if is_live else 0
     current_total_goals = score_h + score_a
@@ -289,7 +297,7 @@ if matches_data and matches_data.get("matches"):
     col_h, col_vs, col_a = st.columns([4, 2, 4])
     with col_h:
         st.subheader(f"🏠 {home_team['name']}")
-        st.write(f"📊 **Indice de Forme :** `{h_stat['form']}%` | **xG de base :** `{home_xg:.2f}`")
+        st.write(f"📊 **Forme :** `{h_stat['form']}%` | **xG Attendu :** `{home_xg:.2f}`")
         st.progress(h_stat['form'])
     
     with col_vs:
@@ -302,10 +310,10 @@ if matches_data and matches_data.get("matches"):
     
     with col_a:
         st.subheader(f"✈️ {away_team['name']}")
-        st.write(f"📊 **Indice de Forme :** `{a_stat['form']}%` | **xG de base :** `{away_xg:.2f}`")
+        st.write(f"📊 **Forme :** `{a_stat['form']}%` | **xG Attendu :** `{away_xg:.2f}`")
         st.progress(a_stat['form'])
 
-    # MATRICE D'AVANT MATCH (DIXON-COLES BI-VARIÉ)
+    # MATRICE BIVARIÉE DIXON-COLES
     full_matrix = np.zeros((8, 8))
     for i in range(8):
         for j in range(8):
@@ -313,12 +321,40 @@ if matches_data and matches_data.get("matches"):
             tau = dixon_coles_tau(i, j, home_xg, away_xg)
             full_matrix[i, j] = max(0.0, raw_p * tau)
 
-    full_matrix /= np.sum(full_matrix)  # Normalisation des probabilités
+    full_matrix /= np.sum(full_matrix)
 
-    # GESTION LIVE AVEC ELASTICITÉ DYNAMIQUE
+    # PROBABILITÉS GÉNÉRALES
+    prob_home = float(np.sum(np.tril(full_matrix, -1)) * 100)
+    prob_draw = float(np.sum(np.diag(full_matrix)) * 100)
+    prob_away = float(np.sum(np.triu(full_matrix, 1)) * 100)
+
+    prob_dc_1x = prob_home + prob_draw
+    prob_dc_x2 = prob_away + prob_draw
+    prob_dc_12 = prob_home + prob_away
+
+    prob_over_05 = (1 - full_matrix[0, 0]) * 100
+    prob_over_15 = (1 - sum(full_matrix[i, j] for i in range(2) for j in range(2) if i + j <= 1)) * 100
+
+    # Corners & Cartons
+    tension_cards = 1.35 if is_derby else 1.0
+    tension_corners = 1.15 if is_derby else 1.0
+
+    domination_ratio = home_xg / (home_xg + away_xg)
+    total_exp_corners = max(6.5, ((home_xg + away_xg) * 2.6 + (h_stat["form"] + a_stat["form"]) / 38.0) * tension_corners)
+    total_exp_cards = max(2.3, ((h_stat["avg_ga"] + a_stat["avg_ga"]) * 1.35) * tension_cards)
+
+    prob_c_tot_65 = (1 - sum(poisson.pmf(k, total_exp_corners) for k in range(7))) * 100
+    prob_k_tot_25 = (1 - sum(poisson.pmf(k, total_exp_cards) for k in range(3))) * 100
+
+    # =========================================================================
+    # 🧠 MODULE D'INTELLIGENCE ARTIFICIELLE DÉCISIONNELLE (ORACLE AI v8.0)
+    # =========================================================================
+    
+    # 1. Scrutateur de tous les marchés possibles
+    ai_candidates = []
+
     if is_live:
-        time_factor = 0.45  # Estimateur du temps de jeu restant
-        # Facteur de désespoir / pression si retard de score
+        time_factor = 0.45
         desperation_h = 1.18 if score_h < score_a else 1.0
         desperation_a = 1.18 if score_a < score_h else 1.0
 
@@ -333,91 +369,89 @@ if matches_data and matches_data.get("matches"):
                 matrix_rem[i, j] = max(0.0, raw_p * tau)
         matrix_rem /= np.sum(matrix_rem)
 
-        scores_list = []
-        for add_h in range(4):
-            for add_a in range(4):
-                final_h = score_h + add_h
-                final_a = score_a + add_a
-                prob = matrix_rem[add_h, add_a] * 100
-                scores_list.append((final_h, final_a, prob, add_h + add_a))
-        scores_list.sort(key=lambda x: x[2], reverse=True)
-        top_3_scores = scores_list[:3]
-    else:
-        scores_list = []
-        for i in range(5):
-            for j in range(5):
-                scores_list.append((i, j, full_matrix[i, j] * 100, i + j))
-        scores_list.sort(key=lambda x: x[2], reverse=True)
-        top_3_scores = scores_list[:3]
-
-    # Probabilités Générales
-    prob_home = float(np.sum(np.tril(full_matrix, -1)) * 100)
-    prob_draw = float(np.sum(np.diag(full_matrix)) * 100)
-    prob_away = float(np.sum(np.triu(full_matrix, 1)) * 100)
-
-    prob_dc_1x = prob_home + prob_draw
-    prob_dc_x2 = prob_away + prob_draw
-    prob_dc_12 = prob_home + prob_away
-
-    prob_over_05 = (1 - full_matrix[0, 0]) * 100
-
-    # Corners & Cartons (Corrélés au ratio de possession/domination)
-    tension_cards = 1.35 if is_derby else 1.0
-    tension_corners = 1.15 if is_derby else 1.0
-
-    domination_ratio = home_xg / (home_xg + away_xg)
-    total_exp_corners = max(6.5, ((home_xg + away_xg) * 2.6 + (h_stat["form"] + a_stat["form"]) / 38.0) * tension_corners)
-    total_exp_cards = max(2.3, ((h_stat["avg_ga"] + a_stat["avg_ga"]) * 1.35) * tension_cards)
-
-    home_exp_corners = max(2.5, total_exp_corners * domination_ratio * 1.05)
-    away_exp_corners = max(2.0, total_exp_corners * (1 - domination_ratio) * 0.95)
-
-    prob_c_tot_65 = (1 - sum(poisson.pmf(k, total_exp_corners) for k in range(7))) * 100
-    prob_c_home_35 = (1 - sum(poisson.pmf(k, home_exp_corners) for k in range(4))) * 100
-    prob_c_away_35 = (1 - sum(poisson.pmf(k, away_exp_corners) for k in range(4))) * 100
-
-    home_exp_cards = max(1.0, total_exp_cards * (1 - domination_ratio))
-    away_exp_cards = max(1.0, total_exp_cards * domination_ratio)
-
-    prob_k_tot_25 = (1 - sum(poisson.pmf(k, total_exp_cards) for k in range(3))) * 100
-    prob_k_home_15 = (1 - sum(poisson.pmf(k, home_exp_cards) for k in range(2))) * 100
-    prob_k_away_15 = (1 - sum(poisson.pmf(k, away_exp_cards) for k in range(2))) * 100
-
-    # SELECTION INTELUGENTE VIP (Priorité Sécurité Maximale)
-    candidates = []
-    if is_live:
+        prob_next_goal = (1 - matrix_rem[0, 0]) * 100
         target_line = current_total_goals + 0.5
-        prob_next = (1 - matrix_rem[0, 0]) * 100
-        if prob_next >= 68.0:
-            candidates.append((f"Plus de {target_line} Buts au total dans le match", prob_next))
+
+        if prob_next_goal >= 65.0:
+            ai_candidates.append({
+                "pick": f"Plus de {target_line} Buts dans le match (Live)",
+                "prob": prob_next_goal,
+                "type": "OVER_LIVE",
+                "reason": f"Analyse en direct : la pression offensive combinée génère une probabilité de {prob_next_goal:.1f}% d'inscrire au moins un but supplémentaire d'ici la fin de la rencontre."
+            })
         else:
-            candidates.append((f"Pas de but supplémentaire (Stabilisation {score_h}-{score_a})", matrix_rem[0, 0] * 100))
-        candidates.append((f"Plus de 6.5 Corners au total", prob_c_tot_65))
-        candidates.append((f"Plus de 2.5 Cartons au total", prob_k_tot_25))
+            ai_candidates.append({
+                "pick": f"Stabilisation du score à {score_h}-{score_a}",
+                "prob": matrix_rem[0, 0] * 100,
+                "type": "STABILITY_LIVE",
+                "reason": f"Baisse du tempo offensif observée. La matrice prévoit {matrix_rem[0, 0]*100:.1f}% de chances que le score en reste là."
+            })
+        ai_candidates.append({
+            "pick": "Plus de 6.5 Corners au total",
+            "prob": prob_c_tot_65,
+            "type": "CORNERS",
+            "reason": f"Activité intense sur les ailes. L'indice attendu de corners est de {total_exp_corners:.1f} corners."
+        })
     else:
-        candidates.append(("Plus de 0.5 But dans le match (Sécurité Max)", prob_over_05))
-        candidates.append((f"Double Chance 1X ({home_team['name']} ou Nul)", prob_dc_1x))
-        candidates.append((f"Double Chance X2 ({away_team['name']} ou Nul)", prob_dc_x2))
-        candidates.append(("Plus de 6.5 Corners dans le match", prob_c_tot_65))
+        # Avant-match : Evaluation rigoureuse
+        ai_candidates.append({
+            "pick": "Plus de 0.5 But dans le match",
+            "prob": prob_over_05,
+            "type": "OVER_05",
+            "reason": f"Sécurité Maximale : La probabilité cumulée de voir au moins un but dans ce match est de {prob_over_05:.1f}%, soutenue par un xG global de {(home_xg + away_xg):.2f}."
+        })
+        if prob_dc_1x >= 75.0:
+            ai_candidates.append({
+                "pick": f"Double Chance 1X ({home_team['name']} ou Nul)",
+                "prob": prob_dc_1x,
+                "type": "DC_1X",
+                "reason": f"{home_team['name']} sur son terrain dispose d'un avantage de domicile calibré et d'un indice de forme de {h_stat['form']}%, réduisant le risque de défaite extérieure à {prob_away:.1f}%."
+            })
+        if prob_dc_x2 >= 75.0:
+            ai_candidates.append({
+                "pick": f"Double Chance X2 ({away_team['name']} ou Nul)",
+                "prob": prob_dc_x2,
+                "type": "DC_X2",
+                "reason": f"{away_team['name']} montre une solidité supérieure face à {home_team['name']}, avec une probabilité de préserver au moins le nul estimée à {prob_dc_x2:.1f}%."
+            })
+        if prob_c_tot_65 >= 80.0:
+            ai_candidates.append({
+                "pick": "Plus de 6.5 Corners dans le match",
+                "prob": prob_c_tot_65,
+                "type": "CORNERS",
+                "reason": f"Le volume de jeu latéral attendu suggère un minimum de {total_exp_corners:.1f} corners sur la totalité du match."
+            })
 
-    candidates.sort(key=lambda x: x[1], reverse=True)
-    master_pick_name, master_pick_conf = candidates[0]
+    # Tri par probabilité décroissante
+    ai_candidates.sort(key=lambda x: x["prob"], reverse=True)
+    best_ai_pick = ai_candidates[0]
 
-    # HEROCARD VIP
+    # Calcul de la mise de Kelly conseillée
+    stake_kelly = max(2, min(8, int((best_ai_pick["prob"] - 50) / 6))) if best_ai_pick["prob"] > 50 else 1
+
+    # AFFICHAGE DE LA CARTE IA HEROIC
     st.markdown(f"""
-    <div class="hero-card">
-        <span class="badge-vip">🎯 PRONOSTIC APEX VIP (CONFIANCE CERTIFIÉE)</span>
-        <h1 style="color: #38BDF8; margin: 12px 0 6px 0;">{master_pick_name}</h1>
-        <p style="color: #94A3B8; margin: 0; font-size: 1.1rem;">Niveau de confiance calculé : <b style="color: #10B981;">{master_pick_conf:.1f}%</b></p>
+    <div class="ai-card">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+            <span class="badge-ai-safe">🛡️ CONSEIL ORACLE IA • CHANCE MAXIMALE DE GAIN</span>
+            <span style="color: #A5B4FC; font-weight: bold; font-size: 0.9rem;">APEX NEURAL MODEL v8.0</span>
+        </div>
+        <h1 style="color: #67E8F9; margin: 5px 0 10px 0; font-size: 2rem;">👉 {best_ai_pick['pick']}</h1>
+        <div style="display: flex; gap: 20px; align-items: center; margin-top: 15px;">
+            <div>
+                <span style="color: #94A3B8; font-size: 0.9rem;">Indice de Confiance Calculé</span>
+                <div style="color: #10B981; font-size: 1.8rem; font-weight: 800;">{best_ai_pick['prob']:.1f}%</div>
+            </div>
+            <div style="border-left: 1px solid #334155; padding-left: 20px;">
+                <span style="color: #94A3B8; font-size: 0.9rem;">Mise Suggérée (Gestion Capital)</span>
+                <div style="color: #F59E0B; font-size: 1.8rem; font-weight: 800;">{stake_kelly}% du Bankroll</div>
+            </div>
+        </div>
+        <div class="ai-reason-box">
+            <b>🧠 Synthèse Tactique de l'IA :</b> {best_ai_pick['reason']}
+        </div>
     </div>
     """, unsafe_allow_html=True)
-
-    if is_live:
-        best_pred_h, best_pred_a, best_prob, add_goals = top_3_scores[0]
-        if add_goals > 0:
-            st.info(f"🔴 **Analyse Live Quant Engine :** Score **{score_h}-{score_a}**. Attaque soutenue décelée. Prévision : **+{add_goals} goal(s)**. Score final probable : **{best_pred_h}-{best_pred_a}** (`{best_prob:.1f}%`).")
-        else:
-            st.info(f"🔴 **Analyse Live Quant Engine :** Score **{score_h}-{score_a}**. Pression faible. Probabilité de stabilisation à **{score_h}-{score_a}** : `{best_prob:.1f}%`.")
 
     # Section 1 : Marché 1N2 & Double Chance
     st.markdown('<div class="pro-card">', unsafe_allow_html=True)
@@ -437,6 +471,13 @@ if matches_data and matches_data.get("matches"):
     st.markdown('</div>', unsafe_allow_html=True)
 
     # Section 2 : Top 3 Scores Exacts
+    scores_list = []
+    for i in range(5):
+        for j in range(5):
+            scores_list.append((i, j, full_matrix[i, j] * 100))
+    scores_list.sort(key=lambda x: x[2], reverse=True)
+    top_3_scores = scores_list[:3]
+
     st.markdown('<div class="pro-card">', unsafe_allow_html=True)
     st.markdown("### 🎲 Top 3 Scores Exacts Probables (Dixon-Coles Model)")
     sc1, sc2, sc3 = st.columns(3)
@@ -495,11 +536,6 @@ if matches_data and matches_data.get("matches"):
         st.markdown("#### 🚩 Corners : Total & Par Équipe")
         st.write(f"**Total Match > 6.5 Corners :** `{prob_c_tot_65:.1f}%`")
         st.progress(int(min(100, max(0, prob_c_tot_65))))
-        st.divider()
-        st.write(f"**{home_team['name']} > 3.5 Corners :** `{prob_c_home_35:.1f}%`")
-        st.progress(int(min(100, max(0, prob_c_home_35))))
-        st.write(f"**{away_team['name']} > 3.5 Corners :** `{prob_c_away_35:.1f}%`")
-        st.progress(int(min(100, max(0, prob_c_away_35))))
         st.markdown('</div>', unsafe_allow_html=True)
 
     with col_k:
@@ -507,11 +543,6 @@ if matches_data and matches_data.get("matches"):
         st.markdown("#### 🟨 Cartons : Total & Par Équipe")
         st.write(f"**Total Match > 2.5 Cartons :** `{prob_k_tot_25:.1f}%`")
         st.progress(int(min(100, max(0, prob_k_tot_25))))
-        st.divider()
-        st.write(f"**{home_team['name']} > 1.5 Cartons :** `{prob_k_home_15:.1f}%`")
-        st.progress(int(min(100, max(0, prob_k_home_15))))
-        st.write(f"**{away_team['name']} > 1.5 Cartons :** `{prob_k_away_15:.1f}%`")
-        st.progress(int(min(100, max(0, prob_k_away_15))))
         st.markdown('</div>', unsafe_allow_html=True)
 
 else:
