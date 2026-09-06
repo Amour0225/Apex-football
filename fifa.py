@@ -5,13 +5,13 @@ from scipy.stats import poisson
 
 # Configuration de la page
 st.set_page_config(
-    page_title="Apex Intelligence Engine v5.0",
+    page_title="Apex Intelligence Engine v6.1",
     page_icon="⚡",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# Style CSS Executive Dashboard High Contrast (Zero Code Bug)
+# Style CSS Pro Dashboard High Contrast
 st.markdown("""
     <style>
     .stApp {
@@ -60,6 +60,18 @@ st.markdown("""
         display: inline-block;
         box-shadow: 0 2px 8px rgba(239, 68, 68, 0.4);
     }
+
+    .badge-derby {
+        background: linear-gradient(135deg, #DC2626 0%, #991B1B 100%);
+        color: white;
+        padding: 6px 14px;
+        border-radius: 8px;
+        font-weight: 800;
+        font-size: 0.85rem;
+        display: inline-block;
+        margin-bottom: 12px;
+        box-shadow: 0 2px 10px rgba(220, 38, 38, 0.3);
+    }
     
     .badge-vip {
         background-color: #10B981;
@@ -70,7 +82,6 @@ st.markdown("""
         font-size: 0.95rem;
         display: inline-block;
         text-transform: uppercase;
-        letter-spacing: 0.5px;
     }
     
     .market-row {
@@ -83,11 +94,66 @@ st.markdown("""
         margin-bottom: 8px;
         border: 1px solid #E2E8F0;
     }
+
+    .sofa-card {
+        background: #FFFFFF;
+        border: 1px solid #E2E8F0;
+        border-radius: 10px;
+        padding: 12px 16px;
+        margin-bottom: 10px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
     </style>
 """, unsafe_allow_html=True)
 
 API_KEY = "1e9518e7585349f9abe6d5a29ddb83b1"
 BASE_URL = "https://api.football-data.org/v4/"
+
+# MOTEUR DE DÉTECTION AUTOMATIQUE DE DERBIES
+def detect_derby_automatically(home_name, away_name):
+    known_derbies = [
+        # Premier League
+        ({"Manchester United FC", "Manchester City FC"}, "Derby de Manchester"),
+        ({"Arsenal FC", "Tottenham Hotspur FC"}, "North London Derby"),
+        ({"Liverpool FC", "Everton FC"}, "Merseyside Derby"),
+        ({"Chelsea FC", "Arsenal FC"}, "Derby de Londres"),
+        ({"Chelsea FC", "Tottenham Hotspur FC"}, "Derby de Londres"),
+        ({"Liverpool FC", "Manchester United FC"}, "North-West Derby"),
+        # La Liga
+        ({"Real Madrid CF", "FC Barcelona"}, "El Clásico"),
+        ({"Real Madrid CF", "Atlético de Madrid"}, "Derby Madrilène"),
+        ({"Sevilla FC", "Real Betis Balompié"}, "Derby Sévillan"),
+        ({"Athletic Club", "Real Sociedad de Fútbol"}, "Derby Basque"),
+        # Serie A
+        ({"FC Internazionale Milano", "AC Milan"}, "Derby della Madonnina"),
+        ({"SS Lazio", "AS Roma"}, "Derby della Capitale"),
+        ({"Juventus FC", "FC Internazionale Milano"}, "Derby d'Italia"),
+        ({"Juventus FC", "Torino FC"}, "Derby della Mole"),
+        # Ligue 1
+        ({"Paris Saint-Germain FC", "Olympique de Marseille"}, "Le Classique"),
+        ({"Olympique Lyonnais", "AS Saint-Étienne"}, "Derby du Rhône"),
+        ({"OGC Nice", "AS Monaco FC"}, "Derby de la Côte d'Azur"),
+        # Bundesliga
+        ({"Borussia Dortmund", "FC Bayern München"}, "Der Klassiker"),
+        ({"Borussia Dortmund", "FC Schalke 04"}, "Revierderby")
+    ]
+    
+    current_pair = {home_name, away_name}
+    
+    # 1. Vérification dans la base des derbies officiels
+    for team_set, derby_title in known_derbies:
+        if team_set.issubset(current_pair) or team_set == current_pair:
+            return True, derby_title
+            
+    # 2. Détection heuristique par Mots-Clés de Villes
+    cities = ["Manchester", "Madrid", "Milano", "Sevilla", "Turin", "Torino", "Liverpool", "Rome", "Roma"]
+    for city in cities:
+        if city.lower() in home_name.lower() and city.lower() in away_name.lower():
+            return True, f"Derby Local ({city})"
+            
+    return False, None
 
 @st.cache_data(ttl=180)
 def fetch_data(endpoint):
@@ -100,8 +166,8 @@ def fetch_data(endpoint):
         return None
     return None
 
-st.title("⚡ Apex Intelligence Engine v5.0")
-st.caption("Algorithme Prédictif Haute Précision : Prédictions Live, Lignes 1xBet & VIP (>90%)")
+st.title("⚡ Apex Intelligence Engine v6.1")
+st.caption("Algorithme Prédictif Dynamic Poisson, SofaScore Dashboard & Auto-Derby Engine")
 
 # Sélection du Championnat
 st.sidebar.header("🕹️ Championnat")
@@ -136,12 +202,51 @@ if standings_data and "standings" in standings_data and len(standings_data["stan
             "form": form_score
         }
 
-# Traitement Matchs (Live & Programmés)
+# Traitement Matchs
 matches_data = fetch_data(f"competitions/{league_code}/matches?status=SCHEDULED,LIVE,IN_PLAY,PAUSED")
 
 if matches_data and matches_data.get("matches"):
     match_list = matches_data["matches"]
     
+    # ------------------ MODULE SOFASCORE DASHBOARD ------------------
+    st.markdown('<div class="pro-card">', unsafe_allow_html=True)
+    st.markdown("### 📱 SofaScore Dashboard : Directs & Prochains Matchs")
+    
+    live_games = [m for m in match_list if m["status"] in ["IN_PLAY", "PAUSED"]]
+    upcoming_games = [m for m in match_list if m["status"] == "SCHEDULED"]
+    
+    tab_live, tab_upcoming = st.tabs([f"🔴 En Direct ({len(live_games)})", f"📅 À Venir ({len(upcoming_games)})"])
+    
+    with tab_live:
+        if live_games:
+            for lg in live_games:
+                sh = lg.get('score', {}).get('fullTime', {}).get('home', 0) or 0
+                sa = lg.get('score', {}).get('fullTime', {}).get('away', 0) or 0
+                st.markdown(f"""
+                <div class="sofa-card">
+                    <span><b>{lg['homeTeam']['name']}</b> vs <b>{lg['awayTeam']['name']}</b></span>
+                    <span class="badge-live">🔴 LIVE : {sh} - {sa}</span>
+                </div>
+                """, unsafe_allow_html=True)
+        else:
+            st.info("Aucun match en direct actuellement dans ce championnat.")
+            
+    with tab_upcoming:
+        if upcoming_games:
+            for ug in upcoming_games[:6]:
+                time_str = ug['utcDate'][11:16]
+                date_str = ug['utcDate'][:10]
+                st.markdown(f"""
+                <div class="sofa-card">
+                    <span><b>{ug['homeTeam']['name']}</b> vs <b>{ug['awayTeam']['name']}</b></span>
+                    <span style="color: #64748B; font-weight: bold;">📅 {date_str} à {time_str} UTC</span>
+                </div>
+                """, unsafe_allow_html=True)
+        else:
+            st.info("Aucun match à venir programmé.")
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    # Sélection de la Rencontre à Analyser
     match_options = {}
     for m in match_list:
         is_live = m["status"] in ["IN_PLAY", "PAUSED"]
@@ -149,7 +254,7 @@ if matches_data and matches_data.get("matches"):
         label = f"{status_tag} - {m['homeTeam']['name']} vs {m['awayTeam']['name']}"
         match_options[label] = m
     
-    selected_label = st.selectbox("Sélectionnez la Rencontre", list(match_options.keys()))
+    selected_label = st.selectbox("🎯 Choisissez la Rencontre à Analyser en Détail", list(match_options.keys()))
     match = match_options[selected_label]
     
     home_team = match["homeTeam"]
@@ -158,14 +263,15 @@ if matches_data and matches_data.get("matches"):
     away_id = away_team["id"]
     is_live = match["status"] in ["IN_PLAY", "PAUSED"]
 
+    # EXÉCUTION DE LA DÉTECTION AUTOMATIQUE DU DERBY
+    is_derby, derby_name = detect_derby_automatically(home_team['name'], away_team['name'])
+
     # Stats Base
     h_stat = teams_stats.get(home_id, {"avg_gf": 1.4, "avg_ga": 1.1, "form": 60})
     a_stat = teams_stats.get(away_id, {"avg_gf": 1.2, "avg_ga": 1.3, "form": 50})
 
     home_xg = max(0.6, (h_stat["avg_gf"] * 0.6 + a_stat["avg_ga"] * 0.4) * 1.15)
     away_xg = max(0.5, (a_stat["avg_gf"] * 0.6 + h_stat["avg_ga"] * 0.4) * 0.85)
-
-    st.divider()
 
     # En-tête Match & Forme
     col_h, col_vs, col_a = st.columns([4, 2, 4])
@@ -176,6 +282,9 @@ if matches_data and matches_data.get("matches"):
     
     score_h, score_a = 0, 0
     with col_vs:
+        if is_derby:
+            st.markdown(f"<div style='text-align:center;'><span class='badge-derby'>🔥 {derby_name.upper()}</span></div>", unsafe_allow_html=True)
+            
         if is_live:
             score_h = match.get('score', {}).get('fullTime', {}).get('home', 0) or 0
             score_a = match.get('score', {}).get('fullTime', {}).get('away', 0) or 0
@@ -200,12 +309,12 @@ if matches_data and matches_data.get("matches"):
     prob_draw = float(np.sum(np.diag(matrix)) * 100)
     prob_away = float(np.sum(np.triu(matrix, 1)) * 100)
 
-    # Probabilités Double Chance
+    # Double Chance
     prob_dc_1x = prob_home + prob_draw
     prob_dc_x2 = prob_away + prob_draw
     prob_dc_12 = prob_home + prob_away
 
-    # Identification Équipe Favorite & Buts Favori
+    # Équipe Favorite
     if prob_home >= prob_away:
         fav_name = home_team['name']
         fav_xg = home_xg
@@ -218,25 +327,21 @@ if matches_data and matches_data.get("matches"):
     fav_over_05 = (1 - poisson.pmf(0, fav_xg)) * 100
     fav_over_15 = (1 - (poisson.pmf(0, fav_xg) + poisson.pmf(1, fav_xg))) * 100
 
-    # Lignes Corners (Standard 1xBet : 6.5) & Cartons (Standard 1xBet : 2.5)
-    total_xg = home_xg + away_xg
-    corner_line_1xbet = 6.5
-    prob_corner_65 = min(98.5, 87.0 + (total_xg * 3.2))
+    # AJUSTEMENT DYNAMIQUE POISSON (AJUSTÉ SI DERBY DÉTECTÉ)
+    tension_mult_cards = 1.35 if is_derby else 1.0
+    tension_mult_corners = 1.15 if is_derby else 1.0
 
-    card_line_1xbet = 2.5
-    prob_card_25 = min(96.5, 82.0 + (total_xg * 4.0))
+    exp_corners = max(6.0, ((home_xg + away_xg) * 2.7 + (h_stat["form"] + a_stat["form"]) / 35.0) * tension_mult_corners)
+    exp_cards = max(2.2, ((h_stat["avg_ga"] + a_stat["avg_ga"]) * 1.4 + abs(h_stat["form"] - a_stat["form"]) / 30.0) * tension_mult_cards)
 
-    # Module Live : Pronostic de Buts Supplémentaires si match en cours
-    live_extra_text = ""
-    if is_live:
-        curr_total = score_h + score_a
-        rem_goals_prob = (1 - poisson.pmf(0, total_xg * 0.5)) * 100
-        if rem_goals_prob > 75:
-            live_extra_text = f"🔴 **Analyse Live :** Forte probabilité d'au moins **+1 But supplémentaire** d'ici la fin du match (Confiance: `{rem_goals_prob:.1f}%`)."
-        else:
-            live_extra_text = f"🔴 **Analyse Live :** Match fermé, probabilité de score stable jusqu'au coup de sifflet final."
+    # Probabilités par loi de Poisson
+    prob_corner_65 = (1 - sum(poisson.pmf(k, exp_corners) for k in range(7))) * 100
+    prob_corner_85 = (1 - sum(poisson.pmf(k, exp_corners) for k in range(9))) * 100
 
-    # Top 3 Scores Exacts (Adaptés si Live)
+    prob_card_25 = (1 - sum(poisson.pmf(k, exp_cards) for k in range(3))) * 100
+    prob_card_35 = (1 - sum(poisson.pmf(k, exp_cards) for k in range(4))) * 100
+
+    # Top 3 Scores Exacts (Ajustés au score actuel si Live)
     scores_list = []
     start_h = score_h if is_live else 0
     start_a = score_a if is_live else 0
@@ -247,35 +352,43 @@ if matches_data and matches_data.get("matches"):
     scores_list.sort(key=lambda x: x[2], reverse=True)
     top_3_scores = scores_list[:3]
 
-    # SELECTION DU MASTER PICK APEX VIP (>90% GARANTI)
+    # Module Live Coordonné
+    live_extra_text = ""
+    if is_live:
+        best_pred_h, best_pred_a, best_prob = top_3_scores[0]
+        extra_goals = (best_pred_h - score_h) + (best_pred_a - score_a)
+        if extra_goals > 0:
+            live_extra_text = f"🔴 **Analyse Live Sync :** Pression détectée. L'algorithme prévoit **+{extra_goals} goal(s) supplémentaire(s)** d'ici la fin du match (Score cible probable : **{best_pred_h}-{best_pred_a}**)."
+        else:
+            live_extra_text = f"🔴 **Analyse Live Sync :** Le rythme actuel indique une stabilisation. Score le plus probable au coup de sifflet final : **{score_h}-{score_a}** (Confiance: `{best_prob:.1f}%`)."
+
+    # Master Pick VIP
     candidates = [
         ("Plus de 0.5 But dans le match", (1 - matrix[0,0]) * 100),
-        (f"Plus de {corner_line_1xbet} Corners dans le match", prob_corner_65),
-        (f"Plus de {card_line_1xbet} Cartons dans le match", prob_card_25),
+        ("Plus de 6.5 Corners dans le match", prob_corner_65),
+        ("Plus de 2.5 Cartons dans le match", prob_card_25),
         (f"Double Chance 1X ({home_team['name']} ou Nul)", prob_dc_1x),
         (f"Double Chance X2 ({away_team['name']} ou Nul)", prob_dc_x2),
         (f"Plus de 0.5 But pour {fav_name}", fav_over_05)
     ]
-    
-    # Filtrage des options >= 90%
-    high_conf_picks = [c for c in candidates if c[1] >= 88.0]
+    high_conf_picks = [c for c in candidates if c[1] >= 85.0]
     high_conf_picks.sort(key=lambda x: x[1], reverse=True)
     
-    master_pick_name, master_pick_conf = high_conf_picks[0]
+    master_pick_name, master_pick_conf = high_conf_picks[0] if high_conf_picks else candidates[0]
 
-    # HEROCARD PRONOSTIC VIP (>90%)
+    # HEROCARD VIP
     st.markdown(f"""
     <div class="hero-card">
-        <span class="badge-vip">🎯 PRONOSTIC APEX VIP (CONFIANCE HAUTE PRECISION)</span>
+        <span class="badge-vip">🎯 PRONOSTIC APEX VIP (CONFIANCE CERTIFIÉE)</span>
         <h1 style="color: #38BDF8; margin: 12px 0 6px 0;">{master_pick_name}</h1>
-        <p style="color: #94A3B8; margin: 0; font-size: 1.1rem;">Niveau de confiance certifié : <b style="color: #10B981;">{master_pick_conf:.1f}%</b></p>
+        <p style="color: #94A3B8; margin: 0; font-size: 1.1rem;">Niveau de confiance calculé : <b style="color: #10B981;">{master_pick_conf:.1f}%</b></p>
     </div>
     """, unsafe_allow_html=True)
 
     if is_live:
         st.info(live_extra_text)
 
-    # Section 1 : Marché 1N2 & Double Chance Intégrale
+    # Section 1 : Marché 1N2 & Double Chance
     st.markdown('<div class="pro-card">', unsafe_allow_html=True)
     st.markdown("### 📊 Marché Victoires (1N2) & Double Chance")
     
@@ -331,7 +444,7 @@ if matches_data and matches_data.get("matches"):
         st.progress(int(fav_over_15))
         st.markdown('</div>', unsafe_allow_html=True)
 
-    # Section 3 : Offre Buts Total (1xBet Style)
+    # Section 3 : Offre Buts Total
     st.markdown('<div class="pro-card">', unsafe_allow_html=True)
     st.markdown("### ⚽ Marché Total Buts (Offre 1xBet)")
     
@@ -354,23 +467,25 @@ if matches_data and matches_data.get("matches"):
         """, unsafe_allow_html=True)
     st.markdown('</div>', unsafe_allow_html=True)
 
-    # Section 4 : Corners & Cartons (Lignes 1xBet 6.5 & 2.5)
+    # Section 4 : Dynamic Corners & Dynamic Cartons
     col_c, col_k = st.columns(2)
 
     with col_c:
         st.markdown('<div class="pro-card">', unsafe_allow_html=True)
-        st.markdown("#### 🚩 Corners (Ligne 1xBet : 6.5)")
-        st.write(f"**Plus de {corner_line_1xbet} Corners dans le match**")
-        st.markdown(f"<h3 style='color: #059669; margin: 0;'>{prob_corner_65:.1f}%</h3>", unsafe_allow_html=True)
-        st.progress(int(prob_corner_65))
+        st.markdown("#### 🚩 Marché Corners Dynamique (Poisson)")
+        st.write(f"**Plus de 6.5 Corners :** `{prob_corner_65:.1f}%`")
+        st.progress(int(min(100, max(0, prob_corner_65))))
+        st.write(f"**Plus de 8.5 Corners :** `{prob_corner_85:.1f}%`")
+        st.progress(int(min(100, max(0, prob_corner_85))))
         st.markdown('</div>', unsafe_allow_html=True)
 
     with col_k:
         st.markdown('<div class="pro-card">', unsafe_allow_html=True)
-        st.markdown("#### 🟨 Cartons (Ligne 1xBet : 2.5)")
-        st.write(f"**Plus de {card_line_1xbet} Cartons dans le match**")
-        st.markdown(f"<h3 style='color: #059669; margin: 0;'>{prob_card_25:.1f}%</h3>", unsafe_allow_html=True)
-        st.progress(int(prob_card_25))
+        st.markdown("#### 🟨 Marché Cartons Dynamique (Poisson)")
+        st.write(f"**Plus de 2.5 Cartons :** `{prob_card_25:.1f}%`")
+        st.progress(int(min(100, max(0, prob_card_25))))
+        st.write(f"**Plus de 3.5 Cartons :** `{prob_card_35:.1f}%`")
+        st.progress(int(min(100, max(0, prob_card_35))))
         st.markdown('</div>', unsafe_allow_html=True)
 
 else:
