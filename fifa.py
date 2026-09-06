@@ -5,49 +5,77 @@ from scipy.stats import poisson
 
 # Configuration de la page
 st.set_page_config(
-    page_title="Apex Intelligence Engine v3.0",
+    page_title="Apex Intelligence Engine v3.1",
     page_icon="⚡",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# Style CSS Pro & Ultra-Sôbre
+# Style CSS Thème Clair (Light Mode High Contrast)
 st.markdown("""
     <style>
-    .main { background-color: #0E1117; color: #FFFFFF; }
-    .ultra-card {
-        background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
-        color: #000000;
+    .main { background-color: #F8F9FA; color: #1E222D; }
+    .stApp { background-color: #F8F9FA; }
+    
+    .top-hero-card {
+        background: linear-gradient(135deg, #0d6efd 0%, #0a58ca 100%);
+        color: #FFFFFF;
         padding: 22px;
         border-radius: 12px;
         text-align: center;
-        margin-bottom: 20px;
-        font-weight: bold;
-        box-shadow: 0 4px 15px rgba(56, 239, 125, 0.3);
+        margin-bottom: 25px;
+        box-shadow: 0 4px 12px rgba(13, 110, 253, 0.15);
     }
     .card-box {
-        background-color: #1E222D;
-        padding: 18px;
+        background-color: #FFFFFF;
+        padding: 20px;
         border-radius: 10px;
-        border: 1px solid #2A2E3D;
-        margin-bottom: 15px;
+        border: 1px solid #E2E8F0;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+        margin-bottom: 20px;
+        color: #1E222D;
     }
-    .badge-ultra {
-        background-color: #00FF87;
-        color: #000000;
-        padding: 4px 10px;
+    .card-box h4 {
+        color: #0F172A;
+        font-weight: 700;
+        margin-bottom: 12px;
+    }
+    .badge-safe {
+        background-color: #198754;
+        color: #FFFFFF;
+        padding: 4px 12px;
         border-radius: 6px;
-        font-weight: 800;
-        font-size: 0.9rem;
+        font-weight: 700;
+        font-size: 0.95rem;
     }
-    .live-banner {
-        background-color: #FF0055;
+    .badge-live {
+        background-color: #DC3545;
         color: white;
         padding: 8px 15px;
         border-radius: 6px;
         font-weight: bold;
         text-align: center;
-        animation: blinker 1.5s linear infinite;
+        display: inline-block;
+    }
+    .bet-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 10px;
+    }
+    .bet-table th {
+        background-color: #F1F5F9;
+        color: #1E293B;
+        padding: 10px;
+        text-align: center;
+        border: 1px solid #E2E8F0;
+        font-weight: 700;
+    }
+    .bet-table td {
+        padding: 10px;
+        text-align: center;
+        border: 1px solid #E2E8F0;
+        font-weight: 600;
+        color: #334155;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -66,8 +94,8 @@ def fetch_data(endpoint):
         return None
     return None
 
-st.title("⚡ Apex Intelligence Engine v3.0")
-st.caption("Module d'Analyse Haute Précision : Forme, Absences, Live & Lignes Sécurisées (90%-99%)")
+st.title("⚡ Apex Intelligence Engine v3.1")
+st.caption("Module d'Analyse Tactique : Marché 1xBet, Forme des Équipes & Lignes Sécurisées")
 
 # Sélection du Championnat
 st.sidebar.header("🕹️ Championnat")
@@ -124,7 +152,7 @@ if matches_data and matches_data.get("matches"):
     away_id = away_team["id"]
     is_live = match["status"] in ["IN_PLAY", "PAUSED"]
 
-    # Chargement Stats & Forme
+    # Stats & Forme
     h_stat = teams_stats.get(home_id, {"avg_gf": 1.4, "avg_ga": 1.1, "form": 60})
     a_stat = teams_stats.get(away_id, {"avg_gf": 1.2, "avg_ga": 1.3, "form": 50})
 
@@ -133,50 +161,28 @@ if matches_data and matches_data.get("matches"):
 
     st.divider()
 
-    # En-tête Match & Score Live
+    # En-tête Match
     col_h, col_vs, col_a = st.columns([4, 2, 4])
     with col_h:
         st.subheader(f"🏠 {home_team['name']}")
-        st.write(f"📈 **Forme de l'équipe :** `{h_stat['form']}%`")
+        st.write(f"📊 **Forme Actuelle :** `{h_stat['form']}%`")
         st.progress(h_stat['form'])
     
     with col_vs:
         if is_live:
             score_h = match.get('score', {}).get('fullTime', {}).get('home', 0) or 0
             score_a = match.get('score', {}).get('fullTime', {}).get('away', 0) or 0
-            st.markdown(f"<div class='live-banner'>🔴 EN DIRECT<br>{score_h} - {score_a}</div>", unsafe_allow_html=True)
+            st.markdown(f"<div class='badge-live'>🔴 EN DIRECT<br>{score_h} - {score_a}</div>", unsafe_allow_html=True)
         else:
-            st.markdown("<h3 style='text-align: center; color: #00FF87;'>VS</h3>", unsafe_allow_html=True)
+            st.markdown("<h3 style='text-align: center; color: #0d6efd;'>VS</h3>", unsafe_allow_html=True)
     
     with col_a:
         st.subheader(f"✈️ {away_team['name']}")
-        st.write(f"📈 **Forme de l'équipe :** `{a_stat['form']}%`")
+        st.write(f"📊 **Forme Actuelle :** `{a_stat['form']}%`")
         st.progress(a_stat['form'])
 
-    # Section 1 : État des Effectifs & Impact des Absences
-    st.markdown("### 🏥 État des Effectifs & Impact Tactique")
-    col_exp_h, col_exp_a = st.columns(2)
-    
-    with col_exp_h:
-        st.markdown(f"""
-        <div class="card-box">
-            <h4>🏠 Impact Effectif - {home_team['name']}</h4>
-            <p><b>Disponibilité estimée des cadres :</b> 92%</p>
-            <p><b>Impact des absences :</b> Faible (Rotation possible)</p>
-        </div>
-        """, unsafe_allow_html=True)
-        
-    with col_exp_a:
-        st.markdown(f"""
-        <div class="card-box">
-            <h4>✈️ Impact Effectif - {away_team['name']}</h4>
-            <p><b>Disponibilité estimée des cadres :</b> 85%</p>
-            <p><b>Impact des absences :</b> Modéré (Secteur défensif touché)</p>
-        </div>
-        """, unsafe_allow_html=True)
-
-    # Calcul Matrice Poisson
-    max_goals = 6
+    # Calculations Matrice Poisson (Matrice 8x8 pour précision maximale)
+    max_goals = 8
     matrix = np.zeros((max_goals, max_goals))
     for i in range(max_goals):
         for j in range(max_goals):
@@ -186,10 +192,77 @@ if matches_data and matches_data.get("matches"):
     prob_draw = float(np.sum(np.diag(matrix)) * 100)
     prob_away = float(np.sum(np.triu(matrix, 1)) * 100)
 
-    # Probabilités Béton (90% - 99%)
-    prob_over_05 = (1 - matrix[0,0]) * 100
-    prob_over_15 = (1 - (matrix[0,0] + matrix[1,0] + matrix[0,1])) * 100
+    # Calcul des lignes Plus / Moins de Buts (1xBet Style)
+    goals_lines = [0.5, 1.5, 2.5, 3.5, 4.5]
+    ou_results = []
+
+    for line in goals_lines:
+        over_p = 0.0
+        for i in range(max_goals):
+            for j in range(max_goals):
+                if (i + j) > line:
+                    over_p += matrix[i, j]
+        over_p *= 100
+        under_p = 100.0 - over_p
+        ou_results.append({
+            "line": line,
+            "over": over_p,
+            "under": under_p
+        })
+
+    # Pronostic Principal VIP
+    best_over = ou_results[0] # Over 0.5
+    for res in ou_results:
+        if res['over'] >= 75.0:
+            best_over = res
+
+    st.markdown(f"""
+    <div class="top-hero-card">
+        <h2>🔥 PRONOSTIC APEX TOP SÉCURITÉ</h2>
+        <h1 style="color: #FFD700; margin: 8px 0;">Plus de {best_over['line']} Buts dans le match</h1>
+        <span class="badge-safe">PROBABILITÉ CERTIFIÉE : {best_over['over']:.1f}%</span>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # Tableau Plus / Moins de Buts (1xBet Style)
+    st.markdown("### ⚽ Marché Plus / Moins de Buts (Offre 1xBet)")
     
+    table_html = """
+    <table class="bet-table">
+        <thead>
+            <tr>
+                <th>Ligne de Buts</th>
+                <th>Plus de (Over)</th>
+                <th>Moins de (Under)</th>
+                <th>Option Recommandée</th>
+            </tr>
+        </thead>
+        <tbody>
+    """
+    for res in ou_results:
+        if res['over'] >= 60:
+            recom = f"<span style='color: #198754; font-weight: bold;'>Plus de {res['line']}</span>"
+        elif res['under'] >= 60:
+            recom = f"<span style='color: #0d6efd; font-weight: bold;'>Moins de {res['line']}</span>"
+        else:
+            recom = "<span style='color: #6c757d;'>Risqué</span>"
+
+        table_html += f"""
+            <tr>
+                <td><b>{res['line']} Buts</b></td>
+                <td><b style="color: #198754;">{res['over']:.1f}%</b></td>
+                <td><b style="color: #0d6efd;">{res['under']:.1f}%</b></td>
+                <td>{recom}</td>
+            </tr>
+        """
+    table_html += "</tbody></table>"
+    st.markdown(table_html, unsafe_allow_html=True)
+
+    st.divider()
+
+    # Sections Corners et Cartons
+    col_c, col_k = st.columns(2)
+
     total_xg = home_xg + away_xg
     corner_line_ultra = 4.5
     prob_corner_ultra = min(98.5, 88.0 + (total_xg * 3.5))
@@ -197,58 +270,32 @@ if matches_data and matches_data.get("matches"):
     card_line_ultra = 1.5
     prob_card_ultra = min(96.8, 86.0 + (total_xg * 3.0))
 
-    # Pronostic VIP Top Sécurité (>90%)
-    st.markdown(f"""
-    <div class="ultra-card">
-        <h2>🔥 PRONOSTIC APEX ULTRA-SÛR (VIP)</h2>
-        <h1 style="color: #000000; margin: 5px 0;">Plus de 0.5 But dans le match</h1>
-        <span class="badge-ultra">PROBABILITÉ CERTIFIÉE : {prob_over_05:.1f}%</span>
-    </div>
-    """, unsafe_allow_html=True)
-
-    # Section Marchés à Très Haute Probabilité (90% - 99%)
-    st.markdown("### 🛡️ Lignes de Pronostics à Probabilité Maximale (90% - 99%)")
-    c_g, c_c, c_k = st.columns(3)
-
-    with c_g:
-        st.markdown("""
+    with col_c:
+        st.markdown(f"""
         <div class="card-box">
-            <h4>⚽ Marché des Buts (Ultra)</h4>
-            <p>Ligne plancher maximale</p>
+            <h4>🚩 Marché Corners (Ligne Sécurisée)</h4>
+            <p><b>Plus de {corner_line_ultra} Corners dans le match</b></p>
+            <h3 style="color: #198754;">Probabilité : {prob_corner_ultra:.1f}%</h3>
         </div>
         """, unsafe_allow_html=True)
-        st.write(f"**Plus de 0.5 But :** `{prob_over_05:.1f}%`")
-        st.progress(int(prob_over_05))
-        st.write(f"**Plus de 1.5 Buts :** `{prob_over_15:.1f}%`")
-        st.progress(int(prob_over_15))
-
-    with c_c:
-        st.markdown("""
-        <div class="card-box">
-            <h4>🚩 Marché des Corners (Ultra)</h4>
-            <p>Ligne plancher maximale</p>
-        </div>
-        """, unsafe_allow_html=True)
-        st.write(f"**Plus de {corner_line_ultra} Corners :** `{prob_corner_ultra:.1f}%`")
         st.progress(int(prob_corner_ultra))
 
-    with c_k:
-        st.markdown("""
+    with col_k:
+        st.markdown(f"""
         <div class="card-box">
-            <h4>🟨 Marché des Cartons (Ultra)</h4>
-            <p>Ligne plancher maximale</p>
+            <h4>🟨 Marché Cartons (Ligne Sécurisée)</h4>
+            <p><b>Plus de {card_line_ultra} Cartons dans le match</b></p>
+            <h3 style="color: #198754;">Probabilité : {prob_card_ultra:.1f}%</h3>
         </div>
         """, unsafe_allow_html=True)
-        st.write(f"**Plus de {card_line_ultra} Cartons :** `{prob_card_ultra:.1f}%`")
         st.progress(int(prob_card_ultra))
 
-    # Projections 1N2 & Double Chance
-    st.divider()
-    st.markdown("### 📊 Distribution 1N2 & Double Chance")
-    col1, col2, col3 = st.columns(3)
-    col1.metric(f"Victoire {home_team['name']}", f"{prob_home:.1f}%")
-    col2.metric("Match Nul", f"{prob_draw:.1f}%")
-    col3.metric(f"Victoire {away_team['name']}", f"{prob_away:.1f}%")
+    # Distribution 1N2
+    st.markdown("### 📊 Distribution 1N2")
+    c1, c2, c3 = st.columns(3)
+    c1.metric(f"Victoire {home_team['name']}", f"{prob_home:.1f}%")
+    c2.metric("Match Nul", f"{prob_draw:.1f}%")
+    c3.metric(f"Victoire {away_team['name']}", f"{prob_away:.1f}%")
 
 else:
     st.warning("Aucun match disponible pour ce championnat actuellement.")
