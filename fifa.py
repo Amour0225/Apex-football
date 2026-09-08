@@ -50,6 +50,11 @@ st.markdown("""
         color: #FFFFFF; padding: 5px 14px; border-radius: 20px;
         font-weight: 800; font-size: 0.78rem; letter-spacing: 1px; text-transform: uppercase;
     }
+    .badge-time {
+        background: #EF4444; color: #FFFFFF; padding: 4px 12px;
+        border-radius: 12px; font-weight: 800; font-size: 0.82rem;
+        display: inline-flex; align-items: center; gap: 4px;
+    }
     .badge-success {
         background-color: #059669; color: #FFFFFF; padding: 4px 10px;
         border-radius: 6px; font-weight: 800; font-size: 0.78rem; display: inline-block;
@@ -57,10 +62,6 @@ st.markdown("""
     .badge-failed {
         background-color: #DC2626; color: #FFFFFF; padding: 4px 10px;
         border-radius: 6px; font-weight: 800; font-size: 0.78rem; display: inline-block;
-    }
-    .badge-live-tag {
-        background-color: #EF4444; color: white; padding: 3px 10px;
-        border-radius: 10px; font-weight: 800; font-size: 0.75rem;
     }
     
     /* Metrics et Box */
@@ -170,7 +171,7 @@ def compute_advanced_match_predictions(data):
 
     btts_yes = sum(score_matrix[h, a] for h in range(1, max_goals) for a in range(1, max_goals))
 
-    # Corners & Cartons basés sur le temps restant
+    # Corners & Cartons basés sur le temps restant réel
     c_factor = (90 - minute) / 90.0 if is_live else 1.0
     tot_c_exp = max(1.0, 9.5 * c_factor)
     corners_ou = {f"{l}": float(1.0 - nbinom.cdf(int(l), 10.0, 10.0 / (10.0 + tot_c_exp))) for l in [8.5, 9.5, 10.5, 11.5]}
@@ -212,7 +213,7 @@ def evaluate_ou_pred(pred_type, line, actual_total):
 API_KEY = "1e9518e7585349f9abe6d5a29ddb83b1"
 BASE_URL = "https://api.football-data.org/v4/"
 
-@st.cache_data(ttl=180)
+@st.cache_data(ttl=60)
 def fetch_data(endpoint):
     try:
         res = requests.get(f"{BASE_URL}{endpoint}", headers={"X-Auth-Token": API_KEY})
@@ -258,7 +259,9 @@ with tab_live:
         match_options = {}
         for m in live_upcoming_matches:
             is_l = m["status"] in ["IN_PLAY", "PAUSED", "LIVE"]
-            tag = "🔴 [EN DIRECT]" if is_l else f"📅 {m['utcDate'][:10]}"
+            min_val = m.get('minute')
+            min_str = f" - {min_val}'" if is_l and min_val is not None else ""
+            tag = f"🔴 [EN DIRECT{min_str}]" if is_l else f"📅 {m['utcDate'][:10]}"
             label = f"{tag} - {m['homeTeam']['name']} vs {m['awayTeam']['name']}"
             match_options[label] = m
 
@@ -268,12 +271,12 @@ with tab_live:
 
         h_name = match['homeTeam']['name']
         a_name = match['awayTeam']['name']
-        minute_input = int(match.get('minute', 45) or 45) if is_live else 0
+        minute_input = int(match.get('minute', 0) or 0) if is_live else 0
         score_h = match.get('score', {}).get('fullTime', {}).get('home', 0) or 0 if is_live else 0
         score_a = match.get('score', {}).get('fullTime', {}).get('away', 0) or 0 if is_live else 0
 
         if is_live:
-            st.info(f"🔴 Match en direct détecté — Score : **{score_h} - {score_a}** ({minute_input}') | Analyse 100% basée sur les données en temps réel.")
+            st.info(f"🔴 **Match en Direct** | Temps écoulé : **{minute_input}'** | Score : **{score_h} - {score_a}**")
 
         if st.button("🔥 GENERER L'ANALYSE TACTIQUE ET STATISTIQUE COMPLETE", type="primary", use_container_width=True):
             engine_input = {
@@ -305,17 +308,22 @@ with tab_live:
                 advice_title = f"Victoire Extérieur : {a_name}"
                 conf_score = p_a
 
+            live_time_badge = f'<span class="badge-time">⏱️ {minute_input}\' EN DIRECT</span>' if is_live else ""
+
             # HERO CARD
             st.markdown(f"""<div class="hero-oracle-card">
 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+<div>
 <span class="badge-oracle">🏆 RECOMMANDATION PRINCIPALE IA</span>
+{live_time_badge}
+</div>
 <span style="color: #94A3B8; font-weight: 700; font-size: 0.85rem;">PROBABILITE CALCULEE</span>
 </div>
 <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;">
 <div>
 <h1 style="color: #38BDF8; font-size: 2rem; margin: 0; font-weight: 900;">{advice_title}</h1>
 <p style="color: #CBD5E1; margin-top: 5px; font-size: 1rem;">
-Match : <b>{h_name}</b> vs <b>{a_name}</b> {f"| Score Actuel : <b style='color:#EF4444;'>{score_h} - {score_a}</b> ({minute_input}')" if is_live else ""}
+Match : <b>{h_name}</b> vs <b>{a_name}</b> {f"| Score : <b style='color:#EF4444;'>{score_h} - {score_a}</b> (<b style='color:#38BDF8;'>{minute_input}'</b>)" if is_live else ""}
 </p>
 </div>
 <div style="text-align: right;">
@@ -325,7 +333,7 @@ Match : <b>{h_name}</b> vs <b>{a_name}</b> {f"| Score Actuel : <b style='color:#
 </div>
 <div class="tactical-box">
 <b>🧠 Synthèse Dynamique :</b><br/>
-{f"Calcul en direct à la {minute_input}e minute avec un score de {score_h}-{score_a}. Expectative de buts restants : <b>{res['rem_home_xg']}</b> ({h_name}) vs <b>{res['rem_away_xg']}</b> ({a_name})." if is_live else f"Analyse d'avant-match basée sur la puissance offensive et défensive de {h_name} et {a_name}."}
+{f"Calcul réajusté en direct à la <b>{minute_input}e minute</b> avec un score de {score_h}-{score_a}. Expectative de buts restants : <b>{res['rem_home_xg']}</b> ({h_name}) vs <b>{res['rem_away_xg']}</b> ({a_name})." if is_live else f"Analyse d'avant-match basée sur la puissance offensive et défensive de {h_name} et {a_name}."}
 </div>
 </div>""", unsafe_allow_html=True)
 
@@ -576,7 +584,9 @@ with tab_calendar:
             elif st_code in ["IN_PLAY", "PAUSED", "LIVE"]:
                 sc_h = m.get("score", {}).get("fullTime", {}).get("home", 0) or 0
                 sc_a = m.get("score", {}).get("fullTime", {}).get("away", 0) or 0
-                status_str = f"<b style='color:#EF4444;'>🔴 EN DIRECT : {sc_h} - {sc_a}</b>"
+                min_live = m.get("minute")
+                time_str = f" ({min_live}')" if min_live is not None else ""
+                status_str = f"<b style='color:#EF4444;'>🔴 EN DIRECT : {sc_h} - {sc_a}{time_str}</b>"
             else:
                 status_str = f"<b style='color:#38BDF8;'>À VENIR à {m_time} GMT</b>"
 
