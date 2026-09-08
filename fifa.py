@@ -5,8 +5,10 @@ import requests
 # Importation du moteur hybride (hybrid_engine.py)
 try:
     from hybrid_engine import run_hybrid_match_prediction
-except ImportError:
-    st.error("⚠️ Le fichier 'hybrid_engine.py' est introuvable. Assurez-vous qu'il est bien placé dans le même dossier que 'fifa.py'.")
+except ImportError as e:
+    st.error(f"⚠️ **Erreur d'importation du moteur :** `{e}`")
+    st.warning("Le fichier `hybrid_engine.py` est introuvable sur le serveur ou une dépendance (comme scipy) est manquante.")
+    st.stop()
 
 # Configuration de la page
 st.set_page_config(
@@ -225,14 +227,11 @@ if standings_data and "standings" in standings_data:
 else:
     league_avg_goals_per_game = 1.45
 
-# 2. RÉCUPÉRATION DES MATCHS (AVEC DÉTECTION ÉLARGIE C1)
+# 2. RÉCUPÉRATION DES MATCHS
 raw_matches = fetch_data(f"competitions/{league_code}/matches")
-
-valid_statuses = ["SCHEDULED", "TIMED", "LIVE", "IN_PLAY", "PAUSED", "FINISHED"]
 match_list = []
 
 if raw_matches and "matches" in raw_matches:
-    # On filtre les matchs programmés, en cours ou récents
     for m in raw_matches["matches"]:
         if m.get("status") in ["SCHEDULED", "TIMED", "LIVE", "IN_PLAY", "PAUSED"]:
             match_list.append(m)
@@ -283,230 +282,245 @@ if match_list:
         label = f"{status_tag} - {m['homeTeam']['name']} vs {m['awayTeam']['name']}"
         match_options[label] = m
 
-    selected_label = st.selectbox("🎯 Choisissez la Rencontre à Analyser en Détail", list(match_options.keys()))
-    match = match_options[selected_label]
+    selected_label = st.selectbox("🎯 Choisissez la Rencontre à Analyser", list(match_options.keys()))
 
-    home_team = match["homeTeam"]
-    away_team = match["awayTeam"]
-    home_id = home_team["id"]
-    away_id = away_team["id"]
-    is_live = match["status"] in ["IN_PLAY", "PAUSED", "LIVE"]
+    # BOUTON DE LANCEMENT D'ANALYSE
+    st.write("")
+    btn_analyze = st.button("🚀 Lancer l'Analyse du Match", type="primary", use_container_width=True)
 
-    is_derby, derby_name = detect_derby_automatically(home_team['name'], away_team['name'])
+    # Mémorisation du clic via st.session_state
+    if "launched_match" not in st.session_state:
+        st.session_state["launched_match"] = None
 
-    # Récupération statistiques d'équipes (avec fallback sécurisé pour la C1)
-    default_stats = {"att_strength": 1.1, "def_weakness": 0.95, "form": 60, "avg_gf": 1.5, "avg_ga": 1.1}
-    h_stat = teams_stats.get(home_id, default_stats)
-    a_stat = teams_stats.get(away_id, default_stats)
+    if btn_analyze:
+        st.session_state["launched_match"] = selected_label
 
-    home_xg = max(0.5, h_stat["att_strength"] * a_stat["def_weakness"] * league_avg_goals_per_game * 1.12)
-    away_xg = max(0.4, a_stat["att_strength"] * h_stat["def_weakness"] * league_avg_goals_per_game * 0.88)
+    # L'ANALYSE SE DÉCLENCHE UNIQUEMENT QUAND LE BOUTON A ÉTÉ CLIQUÉ
+    if st.session_state["launched_match"] == selected_label:
+        match = match_options[selected_label]
 
-    score_h = match.get('score', {}).get('fullTime', {}).get('home', 0) or 0 if is_live else 0
-    score_a = match.get('score', {}).get('fullTime', {}).get('away', 0) or 0 if is_live else 0
-    current_total_goals = score_h + score_a
+        home_team = match["homeTeam"]
+        away_team = match["awayTeam"]
+        home_id = home_team["id"]
+        away_id = away_team["id"]
+        is_live = match["status"] in ["IN_PLAY", "PAUSED", "LIVE"]
 
-    # En-tête du match
-    col_h, col_vs, col_a = st.columns([4, 2, 4])
-    with col_h:
-        st.subheader(f"🏠 {home_team['name']}")
-        st.write(f"📊 **Indice Forme :** `{h_stat['form']}%` | **xG Attendu :** `{home_xg:.2f}`")
-        st.progress(h_stat['form'] / 100)
+        is_derby, derby_name = detect_derby_automatically(home_team['name'], away_team['name'])
 
-    with col_vs:
-        if is_derby:
-            st.markdown(f"<div style='text-align:center;'><span class='badge-derby'>🔥 {derby_name.upper()}</span></div>", unsafe_allow_html=True)
+        default_stats = {"att_strength": 1.1, "def_weakness": 0.95, "form": 60, "avg_gf": 1.5, "avg_ga": 1.1}
+        h_stat = teams_stats.get(home_id, default_stats)
+        a_stat = teams_stats.get(away_id, default_stats)
+
+        home_xg = max(0.5, h_stat["att_strength"] * a_stat["def_weakness"] * league_avg_goals_per_game * 1.12)
+        away_xg = max(0.4, a_stat["att_strength"] * h_stat["def_weakness"] * league_avg_goals_per_game * 0.88)
+
+        score_h = match.get('score', {}).get('fullTime', {}).get('home', 0) or 0 if is_live else 0
+        score_a = match.get('score', {}).get('fullTime', {}).get('away', 0) or 0 if is_live else 0
+        current_total_goals = score_h + score_a
+
+        # En-tête du match
+        col_h, col_vs, col_a = st.columns([4, 2, 4])
+        with col_h:
+            st.subheader(f"🏠 {home_team['name']}")
+            st.write(f"📊 **Indice Forme :** `{h_stat['form']}%` | **xG Attendu :** `{home_xg:.2f}`")
+            st.progress(h_stat['form'] / 100)
+
+        with col_vs:
+            if is_derby:
+                st.markdown(f"<div style='text-align:center;'><span class='badge-derby'>🔥 {derby_name.upper()}</span></div>", unsafe_allow_html=True)
+            if is_live:
+                st.markdown(f"<div class='badge-live'>🔴 EN DIRECT<br>{score_h} - {score_a}</div>", unsafe_allow_html=True)
+            else:
+                st.markdown("<h3 style='text-align: center; color: #0F172A;'>VS</h3>", unsafe_allow_html=True)
+
+        with col_a:
+            st.subheader(f"✈️ {away_team['name']}")
+            st.write(f"📊 **Indice Forme :** `{a_stat['form']}%` | **xG Attendu :** `{away_xg:.2f}`")
+            st.progress(a_stat['form'] / 100)
+
+        # 3. PRÉDICTIONS VIA LE MOTEUR HYBRIDE
+        tension_cards = 1.45 if is_derby else 1.0
+        tension_corners = 1.20 if is_derby else 1.0
+
+        home_exp_corners = max(2.8, (h_stat["att_strength"] * 4.8 + a_stat["def_weakness"] * 0.9) * tension_corners)
+        away_exp_corners = max(2.2, (a_stat["att_strength"] * 4.0 + h_stat["def_weakness"] * 0.8) * tension_corners)
+
+        home_exp_cards = max(1.2, (h_stat["def_weakness"] * 1.8 + a_stat["att_strength"] * 0.6) * tension_cards)
+        away_exp_cards = max(1.3, (a_stat["def_weakness"] * 2.0 + h_stat["att_strength"] * 0.7) * tension_cards)
+
+        hybrid_input = {
+            "exp_goals_home": home_xg,
+            "exp_goals_away": away_xg,
+            "exp_corners_home": home_exp_corners,
+            "exp_corners_away": away_exp_corners,
+            "exp_cards_home": home_exp_cards,
+            "exp_cards_away": away_exp_cards
+        }
+
+        hybrid_out = run_hybrid_match_prediction(hybrid_input)
+
+        # Traitement probabilités 1N2
+        prob_1n2 = hybrid_out["goals_and_1N2"]["prob_1N2"]
+        prob_home = prob_1n2["1"] * 100.0
+        prob_draw = prob_1n2["N"] * 100.0
+        prob_away = prob_1n2["2"] * 100.0
+
+        prob_dc_1x = prob_home + prob_draw
+        prob_dc_x2 = prob_away + prob_draw
+        prob_dc_12 = prob_home + prob_away
+
+        # DECISION ORACLE IA
+        ai_candidates = []
+        prob_over_05 = hybrid_out["goals_and_1N2"]["over_under"].get("Over_1.5", 0.75) * 100
+
         if is_live:
-            st.markdown(f"<div class='badge-live'>🔴 EN DIRECT<br>{score_h} - {score_a}</div>", unsafe_allow_html=True)
+            target_line = current_total_goals + 0.5
+            ai_candidates.append({
+                "pick": f"Plus de {target_line} Buts dans le match (Live)",
+                "prob": 70.0,
+                "reason": f"Analyse en direct : xG cumulé élevé et pressing offensif."
+            })
         else:
-            st.markdown("<h3 style='text-align: center; color: #0F172A;'>VS</h3>", unsafe_allow_html=True)
-
-    with col_a:
-        st.subheader(f"✈️ {away_team['name']}")
-        st.write(f"📊 **Indice Forme :** `{a_stat['form']}%` | **xG Attendu :** `{away_xg:.2f}`")
-        st.progress(a_stat['form'] / 100)
-
-    # 3. PRÉDICTIONS VIA LE MOTEUR HYBRIDE
-    tension_cards = 1.45 if is_derby else 1.0
-    tension_corners = 1.20 if is_derby else 1.0
-
-    home_exp_corners = max(2.8, (h_stat["att_strength"] * 4.8 + a_stat["def_weakness"] * 0.9) * tension_corners)
-    away_exp_corners = max(2.2, (a_stat["att_strength"] * 4.0 + h_stat["def_weakness"] * 0.8) * tension_corners)
-
-    home_exp_cards = max(1.2, (h_stat["def_weakness"] * 1.8 + a_stat["att_strength"] * 0.6) * tension_cards)
-    away_exp_cards = max(1.3, (a_stat["def_weakness"] * 2.0 + h_stat["att_strength"] * 0.7) * tension_cards)
-
-    hybrid_input = {
-        "exp_goals_home": home_xg,
-        "exp_goals_away": away_xg,
-        "exp_corners_home": home_exp_corners,
-        "exp_corners_away": away_exp_corners,
-        "exp_cards_home": home_exp_cards,
-        "exp_cards_away": away_exp_cards
-    }
-
-    hybrid_out = run_hybrid_match_prediction(hybrid_input)
-
-    # Traitement probabilités 1N2
-    prob_1n2 = hybrid_out["goals_and_1N2"]["prob_1N2"]
-    prob_home = prob_1n2["1"] * 100.0
-    prob_draw = prob_1n2["N"] * 100.0
-    prob_away = prob_1n2["2"] * 100.0
-
-    prob_dc_1x = prob_home + prob_draw
-    prob_dc_x2 = prob_away + prob_draw
-    prob_dc_12 = prob_home + prob_away
-
-    # DECISION ORACLE IA
-    ai_candidates = []
-    prob_over_05 = hybrid_out["goals_and_1N2"]["over_under"].get("Over_1.5", 0.75) * 100
-
-    if is_live:
-        target_line = current_total_goals + 0.5
-        ai_candidates.append({
-            "pick": f"Plus de {target_line} Buts dans le match (Live)",
-            "prob": 70.0,
-            "reason": f"Analyse en direct : xG cumulé élevé et pressing offensif."
-        })
-    else:
-        ai_candidates.append({
-            "pick": "Plus de 0.5 But dans le match",
-            "prob": prob_over_05,
-            "reason": f"Sécurité Dixon-Coles : Espérance de buts totale de {(home_xg + away_xg):.2f}."
-        })
-        if prob_dc_1x >= 68.0:
             ai_candidates.append({
-                "pick": f"Double Chance 1X ({home_team['name']} ou Nul)",
-                "prob": prob_dc_1x,
-                "reason": f"{home_team['name']} solide à domicile."
+                "pick": "Plus de 0.5 But dans le match",
+                "prob": prob_over_05,
+                "reason": f"Sécurité Dixon-Coles : Espérance de buts totale de {(home_xg + away_xg):.2f}."
             })
-        if prob_dc_x2 >= 68.0:
-            ai_candidates.append({
-                "pick": f"Double Chance X2 ({away_team['name']} ou Nul)",
-                "prob": prob_dc_x2,
-                "reason": f"{away_team['name']} performant à l'extérieur."
-            })
+            if prob_dc_1x >= 68.0:
+                ai_candidates.append({
+                    "pick": f"Double Chance 1X ({home_team['name']} ou Nul)",
+                    "prob": prob_dc_1x,
+                    "reason": f"{home_team['name']} solide à domicile."
+                })
+            if prob_dc_x2 >= 68.0:
+                ai_candidates.append({
+                    "pick": f"Double Chance X2 ({away_team['name']} ou Nul)",
+                    "prob": prob_dc_x2,
+                    "reason": f"{away_team['name']} performant à l'extérieur."
+                })
 
-    ai_candidates.sort(key=lambda x: x["prob"], reverse=True)
-    best_ai_pick = ai_candidates[0]
-    stake_kelly = max(2, min(8, int((best_ai_pick["prob"] - 50) / 6))) if best_ai_pick["prob"] > 50 else 1
+        ai_candidates.sort(key=lambda x: x["prob"], reverse=True)
+        best_ai_pick = ai_candidates[0]
+        stake_kelly = max(2, min(8, int((best_ai_pick["prob"] - 50) / 6))) if best_ai_pick["prob"] > 50 else 1
 
-    # CARTE IA HEROIC
-    st.markdown(f"""
-    <div class="ai-card">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-            <span class="badge-ai-safe">🛡️ CONSEIL ORACLE IA • MOTEUR HYBRIDE v8.4</span>
-            <span style="color: #A5B4FC; font-weight: bold; font-size: 0.9rem;">DIXON-COLES & NEGBINOMIAL</span>
-        </div>
-        <h1 style="color: #67E8F9; margin: 5px 0 10px 0; font-size: 2rem;">👉 {best_ai_pick['pick']}</h1>
-        <div style="display: flex; gap: 20px; align-items: center; margin-top: 15px;">
-            <div>
-                <span style="color: #94A3B8; font-size: 0.9rem;">Indice de Confiance Calculé</span>
-                <div style="color: #10B981; font-size: 1.8rem; font-weight: 800;">{best_ai_pick['prob']:.1f}%</div>
-            </div>
-            <div style="border-left: 1px solid #334155; padding-left: 20px;">
-                <span style="color: #94A3B8; font-size: 0.9rem;">Mise Suggérée (Kelly)</span>
-                <div style="color: #F59E0B; font-size: 1.8rem; font-weight: 800;">{stake_kelly}% du Capital</div>
-            </div>
-        </div>
-        <div class="ai-reason-box">
-            <b>🧠 Synthèse Tactique de l'IA :</b> {best_ai_pick['reason']}
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
-
-    # 1N2 & Double Chance
-    st.markdown('<div class="pro-card">', unsafe_allow_html=True)
-    st.markdown("### 📊 Marché Victoires (1N2) & Double Chance (Dixon-Coles)")
-
-    col1, col2, col3 = st.columns(3)
-    col1.metric(f"Victoire {home_team['name']} (1)", f"{prob_home:.1f}%")
-    col2.metric("Match Nul (X)", f"{prob_draw:.1f}%")
-    col3.metric(f"Victoire {away_team['name']} (2)", f"{prob_away:.1f}%")
-
-    st.divider()
-
-    dc1, dc2, dc3 = st.columns(3)
-    dc1.write(f"🛡️ **Double Chance 1X :** `{prob_dc_1x:.1f}%`")
-    dc2.write(f"🛡️ **Double Chance X2 :** `{prob_dc_x2:.1f}%`")
-    dc3.write(f"🛡️ **Double Chance 12 :** `{prob_dc_12:.1f}%`")
-    st.markdown('</div>', unsafe_allow_html=True)
-
-    # Top Scores Exacts
-    matrix_scores = hybrid_out["goals_and_1N2"]["score_matrix"]
-    scores_list = []
-    for h_g in range(matrix_scores.shape[0]):
-        for a_g in range(matrix_scores.shape[1]):
-            scores_list.append((h_g, a_g, matrix_scores[h_g, a_g] * 100.0))
-    scores_list.sort(key=lambda x: x[2], reverse=True)
-    top_3 = scores_list[:3]
-
-    st.markdown('<div class="pro-card">', unsafe_allow_html=True)
-    st.markdown("### 🎲 Top 3 Scores Exacts Probables")
-    sc1, sc2, sc3 = st.columns(3)
-    for idx, (col_sc, sc_item) in enumerate(zip([sc1, sc2, sc3], top_3)):
-        with col_sc:
-            st.markdown(f"""
-            <div class="score-badge">
-                <div style="font-size: 1.3rem; color: #2563EB;">{sc_item[0]} - {sc_item[1]}</div>
-                <div style="font-size: 0.85rem; color: #64748B;">Probabilité : {sc_item[2]:.1f}%</div>
-            </div>
-            """, unsafe_allow_html=True)
-    st.markdown('</div>', unsafe_allow_html=True)
-
-    # Offre Total Buts
-    st.markdown('<div class="pro-card">', unsafe_allow_html=True)
-    st.markdown("### ⚽ Marché Total Buts (Dixon-Coles)")
-
-    goals_ou = hybrid_out["goals_and_1N2"]["over_under"]
-    for line in [1.5, 2.5, 3.5, 4.5]:
-        over_p = goals_ou.get(f"Over_{line}", 0.0) * 100.0
-        under_p = goals_ou.get(f"Under_{line}", 0.0) * 100.0
+        # CARTE IA HEROIC
         st.markdown(f"""
-        <div class="market-row">
-            <span><b>Ligne {line} Buts</b></span>
-            <span>Plus de {line} : <b style="color: #059669;">{over_p:.1f}%</b></span>
-            <span>Moins de {line} : <b style="color: #2563EB;">{under_p:.1f}%</b></span>
+        <div class="ai-card">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                <span class="badge-ai-safe">🛡️ CONSEIL ORACLE IA • MOTEUR HYBRIDE v8.4</span>
+                <span style="color: #A5B4FC; font-weight: bold; font-size: 0.9rem;">DIXON-COLES & NEGBINOMIAL</span>
+            </div>
+            <h1 style="color: #67E8F9; margin: 5px 0 10px 0; font-size: 2rem;">👉 {best_ai_pick['pick']}</h1>
+            <div style="display: flex; gap: 20px; align-items: center; margin-top: 15px;">
+                <div>
+                    <span style="color: #94A3B8; font-size: 0.9rem;">Indice de Confiance Calculé</span>
+                    <div style="color: #10B981; font-size: 1.8rem; font-weight: 800;">{best_ai_pick['prob']:.1f}%</div>
+                </div>
+                <div style="border-left: 1px solid #334155; padding-left: 20px;">
+                    <span style="color: #94A3B8; font-size: 0.9rem;">Mise Suggérée (Kelly)</span>
+                    <div style="color: #F59E0B; font-size: 1.8rem; font-weight: 800;">{stake_kelly}% du Capital</div>
+                </div>
+            </div>
+            <div class="ai-reason-box">
+                <b>🧠 Synthèse Tactique de l'IA :</b> {best_ai_pick['reason']}
+            </div>
         </div>
         """, unsafe_allow_html=True)
-    st.markdown('</div>', unsafe_allow_html=True)
 
-    # Corners & Cartons
-    st.markdown("### 🚩 & 🟨 Analyse Duale Corners et Cartons (Loi Binomiale Négative)")
-    col_c, col_k = st.columns(2)
-
-    corners_ou = hybrid_out["corners"]["over_under"]
-    cards_ou = hybrid_out["cards"]["over_under"]
-
-    with col_c:
+        # 1N2 & Double Chance
         st.markdown('<div class="pro-card">', unsafe_allow_html=True)
-        st.markdown(f"#### 🚩 Marché Corners *(Total Estimé : {hybrid_out['corners']['exp_total']})*")
-        for line in [8.5, 9.5, 10.5, 11.5]:
-            over_p = corners_ou.get(f"Over_{line}", 0.0) * 100.0
-            under_p = corners_ou.get(f"Under_{line}", 0.0) * 100.0
+        st.markdown("### 📊 Marché Victoires (1N2) & Double Chance (Dixon-Coles)")
+
+        col1, col2, col3 = st.columns(3)
+        col1.metric(f"Victoire {home_team['name']} (1)", f"{prob_home:.1f}%")
+        col2.metric("Match Nul (X)", f"{prob_draw:.1f}%")
+        col3.metric(f"Victoire {away_team['name']} (2)", f"{prob_away:.1f}%")
+
+        st.divider()
+
+        dc1, dc2, dc3 = st.columns(3)
+        dc1.write(f"🛡️ **Double Chance 1X :** `{prob_dc_1x:.1f}%`")
+        dc2.write(f"🛡️ **Double Chance X2 :** `{prob_dc_x2:.1f}%`")
+        dc3.write(f"🛡️ **Double Chance 12 :** `{prob_dc_12:.1f}%`")
+        st.markdown('</div>', unsafe_allow_html=True)
+
+        # Top Scores Exacts
+        matrix_scores = hybrid_out["goals_and_1N2"]["score_matrix"]
+        scores_list = []
+        for h_g in range(matrix_scores.shape[0]):
+            for a_g in range(matrix_scores.shape[1]):
+                scores_list.append((h_g, a_g, matrix_scores[h_g, a_g] * 100.0))
+        scores_list.sort(key=lambda x: x[2], reverse=True)
+        top_3 = scores_list[:3]
+
+        st.markdown('<div class="pro-card">', unsafe_allow_html=True)
+        st.markdown("### 🎲 Top 3 Scores Exacts Probables")
+        sc1, sc2, sc3 = st.columns(3)
+        for idx, (col_sc, sc_item) in enumerate(zip([sc1, sc2, sc3], top_3)):
+            with col_sc:
+                st.markdown(f"""
+                <div class="score-badge">
+                    <div style="font-size: 1.3rem; color: #2563EB;">{sc_item[0]} - {sc_item[1]}</div>
+                    <div style="font-size: 0.85rem; color: #64748B;">Probabilité : {sc_item[2]:.1f}%</div>
+                </div>
+                """, unsafe_allow_html=True)
+        st.markdown('</div>', unsafe_allow_html=True)
+
+        # Offre Total Buts
+        st.markdown('<div class="pro-card">', unsafe_allow_html=True)
+        st.markdown("### ⚽ Marché Total Buts (Dixon-Coles)")
+
+        goals_ou = hybrid_out["goals_and_1N2"]["over_under"]
+        for line in [1.5, 2.5, 3.5, 4.5]:
+            over_p = goals_ou.get(f"Over_{line}", 0.0) * 100.0
+            under_p = goals_ou.get(f"Under_{line}", 0.0) * 100.0
             st.markdown(f"""
             <div class="market-row">
-                <span><b>Ligne {line} Corners</b></span>
-                <span>Plus : <b style="color: #059669;">{over_p:.1f}%</b></span>
-                <span>Moins : <b style="color: #2563EB;">{under_p:.1f}%</b></span>
+                <span><b>Ligne {line} Buts</b></span>
+                <span>Plus de {line} : <b style="color: #059669;">{over_p:.1f}%</b></span>
+                <span>Moins de {line} : <b style="color: #2563EB;">{under_p:.1f}%</b></span>
             </div>
             """, unsafe_allow_html=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
-    with col_k:
-        st.markdown('<div class="pro-card">', unsafe_allow_html=True)
-        st.markdown(f"#### 🟨 Marché Cartons Jaunes *(Total Estimé : {hybrid_out['cards']['exp_total']})*")
-        for line in [3.5, 4.5, 5.5, 6.5]:
-            over_p = cards_ou.get(f"Over_{line}", 0.0) * 100.0
-            under_p = cards_ou.get(f"Under_{line}", 0.0) * 100.0
-            st.markdown(f"""
-            <div class="market-row">
-                <span><b>Ligne {line} Cartons</b></span>
-                <span>Plus : <b style="color: #059669;">{over_p:.1f}%</b></span>
-                <span>Moins : <b style="color: #2563EB;">{under_p:.1f}%</b></span>
-            </div>
-            """, unsafe_allow_html=True)
-        st.markdown('</div>', unsafe_allow_html=True)
+        # Corners & Cartons
+        st.markdown("### 🚩 & 🟨 Analyse Duale Corners et Cartons (Loi Binomiale Négative)")
+        col_c, col_k = st.columns(2)
+
+        corners_ou = hybrid_out["corners"]["over_under"]
+        cards_ou = hybrid_out["cards"]["over_under"]
+
+        with col_c:
+            st.markdown('<div class="pro-card">', unsafe_allow_html=True)
+            st.markdown(f"#### 🚩 Marché Corners *(Total Estimé : {hybrid_out['corners']['exp_total']})*")
+            for line in [8.5, 9.5, 10.5, 11.5]:
+                over_p = corners_ou.get(f"Over_{line}", 0.0) * 100.0
+                under_p = corners_ou.get(f"Under_{line}", 0.0) * 100.0
+                st.markdown(f"""
+                <div class="market-row">
+                    <span><b>Ligne {line} Corners</b></span>
+                    <span>Plus : <b style="color: #059669;">{over_p:.1f}%</b></span>
+                    <span>Moins : <b style="color: #2563EB;">{under_p:.1f}%</b></span>
+                </div>
+                """, unsafe_allow_html=True)
+            st.markdown('</div>', unsafe_allow_html=True)
+
+        with col_k:
+            st.markdown('<div class="pro-card">', unsafe_allow_html=True)
+            st.markdown(f"#### 🟨 Marché Cartons Jaunes *(Total Estimé : {hybrid_out['cards']['exp_total']})*")
+            for line in [3.5, 4.5, 5.5, 6.5]:
+                over_p = cards_ou.get(f"Over_{line}", 0.0) * 100.0
+                under_p = cards_ou.get(f"Under_{line}", 0.0) * 100.0
+                st.markdown(f"""
+                <div class="market-row">
+                    <span><b>Ligne {line} Cartons</b></span>
+                    <span>Plus : <b style="color: #059669;">{over_p:.1f}%</b></span>
+                    <span>Moins : <b style="color: #2563EB;">{under_p:.1f}%</b></span>
+                </div>
+                """, unsafe_allow_html=True)
+            st.markdown('</div>', unsafe_allow_html=True)
+    else:
+        st.info("👆 Choisissez un match ci-dessus puis cliquez sur le bouton **🚀 Lancer l'Analyse du Match** pour afficher la prédiction complète.")
 
 else:
     st.warning("Aucun match disponible immédiatement dans cette compétition.")
