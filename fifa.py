@@ -93,7 +93,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 2. MOTEUR MATHÉMATIQUE & PREDICTIONS
+# 2. MOTEUR MATHÉMATIQUE (POISSON & DIXON-COLES)
 # ==========================================
 def dixon_coles_tau(x, y, home_xg, away_xg, rho=-0.08):
     if x == 0 and y == 0:
@@ -115,35 +115,15 @@ def compute_advanced_match_predictions(data):
     full_home_xg = max(0.2, float(data.get("exp_goals_home", 1.5)))
     full_away_xg = max(0.2, float(data.get("exp_goals_away", 1.1)))
 
-    sot_h = float(data.get("shots_on_target_home", 0))
-    sot_a = float(data.get("shots_on_target_away", 0))
-    shots_h = float(data.get("shots_total_home", 0))
-    shots_a = float(data.get("shots_total_away", 0))
-    fouls_h = float(data.get("fouls_home", 0))
-    fouls_a = float(data.get("fouls_away", 0))
-
     max_goals = 8
     score_matrix = np.zeros((max_goals, max_goals))
 
-    if is_live and minute > 3:
+    if is_live and minute > 0:
         time_elapsed_ratio = min(0.96, minute / 90.0)
         rem_time_ratio = max(0.04, (90.0 - min(88, minute)) / 90.0)
 
-        exp_sot_h_t = max(0.4, (full_home_xg * 3.1) * time_elapsed_ratio)
-        exp_sot_a_t = max(0.4, (full_away_xg * 2.9) * time_elapsed_ratio)
-        exp_shots_h_t = max(0.8, (full_home_xg * 7.8) * time_elapsed_ratio)
-        exp_shots_a_t = max(0.8, (full_away_xg * 7.2) * time_elapsed_ratio)
-
-        intensity_h = (0.65 * (sot_h / exp_sot_h_t)) + (0.35 * (shots_h / exp_shots_h_t))
-        intensity_a = (0.65 * (sot_a / exp_sot_a_t)) + (0.35 * (shots_a / exp_shots_a_t))
-
-        mult_h = max(0.3, min(2.3, intensity_h))
-        mult_a = max(0.3, min(2.3, intensity_a))
-
-        foul_penalty = 0.87 if (fouls_h + fouls_a) > (13 * time_elapsed_ratio) else 1.0
-
-        rem_home_xg = full_home_xg * rem_time_ratio * mult_h * foul_penalty
-        rem_away_xg = full_away_xg * rem_time_ratio * mult_a * foul_penalty
+        rem_home_xg = full_home_xg * rem_time_ratio
+        rem_away_xg = full_away_xg * rem_time_ratio
 
         for dh in range(max_goals - score_h):
             for da in range(max_goals - score_a):
@@ -190,13 +170,12 @@ def compute_advanced_match_predictions(data):
 
     btts_yes = sum(score_matrix[h, a] for h in range(1, max_goals) for a in range(1, max_goals))
 
-    # Corners & Cartons
+    # Corners & Cartons basés sur le temps restant
     c_factor = (90 - minute) / 90.0 if is_live else 1.0
     tot_c_exp = max(1.0, 9.5 * c_factor)
     corners_ou = {f"{l}": float(1.0 - nbinom.cdf(int(l), 10.0, 10.0 / (10.0 + tot_c_exp))) for l in [8.5, 9.5, 10.5, 11.5]}
 
-    foul_boost = 1.35 if is_live and (fouls_h + fouls_a) > 14 else 1.0
-    tot_k_exp = max(0.8, 4.2 * c_factor * foul_boost)
+    tot_k_exp = max(0.8, 4.2 * c_factor)
     cards_ou = {f"{l}": float(1.0 - nbinom.cdf(int(l), 8.0, 8.0 / (8.0 + tot_k_exp))) for l in [3.5, 4.5, 5.5, 6.5]}
 
     return {
@@ -244,7 +223,7 @@ def fetch_data(endpoint):
     return None
 
 st.title("⚡ Apex Quant Engine v12.0 (Terminal Pro)")
-st.caption("Suivi des Prédictions : Matchs, Corners & Cartons en Direct")
+st.caption("Suivi et Prédictions Automatiques en Direct")
 
 st.sidebar.header("🕹️ Sélecteur de Compétition")
 leagues = {
@@ -289,54 +268,21 @@ with tab_live:
 
         h_name = match['homeTeam']['name']
         a_name = match['awayTeam']['name']
+        minute_input = int(match.get('minute', 45) or 45) if is_live else 0
+        score_h = match.get('score', {}).get('fullTime', {}).get('home', 0) or 0 if is_live else 0
+        score_a = match.get('score', {}).get('fullTime', {}).get('away', 0) or 0 if is_live else 0
 
         if is_live:
-            curr_min = int(match.get('minute', 45) or 45)
-            # Estimation automatique intelligente des stats en direct si l'API ne fournit pas les tirs
-            auto_sot_h = int(curr_min * 0.08) + 1
-            auto_sot_a = int(curr_min * 0.05)
-            auto_shots_h = int(curr_min * 0.20) + 1
-            auto_shots_a = int(curr_min * 0.12)
-            auto_fouls_h = int(curr_min * 0.15)
-            auto_fouls_a = int(curr_min * 0.18)
-
-            st.markdown('<div class="panel-card">', unsafe_allow_html=True)
-            st.markdown(f"### 🎛️ Panneau d'Intensité Terrain en Direct (<span class='badge-live-tag'>MINUTE {curr_min}'</span>)", unsafe_allow_html=True)
-            st.caption("⚡ Les statistiques sont estimées automatiquement selon la minute du match. Vous pouvez les ajuster si besoin.")
-            
-            c1, c2, c3, c4 = st.columns(4)
-            with c1:
-                sot_h = st.number_input(f"Tirs Cadrés {h_name}", min_value=0, value=auto_sot_h)
-                sot_a = st.number_input(f"Tirs Cadrés {a_name}", min_value=0, value=auto_sot_a)
-            with c2:
-                shots_h = st.number_input(f"Tirs Totaux {h_name}", min_value=0, value=auto_shots_h)
-                shots_a = st.number_input(f"Tirs Totaux {a_name}", min_value=0, value=auto_shots_a)
-            with c3:
-                fouls_h = st.number_input(f"Fautes {h_name}", min_value=0, value=auto_fouls_h)
-                fouls_a = st.number_input(f"Fautes {a_name}", min_value=0, value=auto_fouls_a)
-            with c4:
-                minute_input = st.number_input("Minute Actuelle", min_value=1, max_value=90, value=curr_min)
-            st.markdown('</div>', unsafe_allow_html=True)
-        else:
-            sot_h, sot_a, shots_h, shots_a, fouls_h, fouls_a, minute_input = 0, 0, 0, 0, 0, 0, 0
+            st.info(f"🔴 Match en direct détecté — Score : **{score_h} - {score_a}** ({minute_input}') | Analyse 100% basée sur les données en temps réel.")
 
         if st.button("🔥 GENERER L'ANALYSE TACTIQUE ET STATISTIQUE COMPLETE", type="primary", use_container_width=True):
-            score_h = match.get('score', {}).get('fullTime', {}).get('home', 0) or 0 if is_live else 0
-            score_a = match.get('score', {}).get('fullTime', {}).get('away', 0) or 0 if is_live else 0
-
             engine_input = {
                 "is_live": is_live,
                 "current_home_score": score_h,
                 "current_away_score": score_a,
-                "minute": minute_input if is_live else 0,
+                "minute": minute_input,
                 "exp_goals_home": 1.65,
-                "exp_goals_away": 1.20,
-                "shots_on_target_home": sot_h,
-                "shots_on_target_away": sot_a,
-                "shots_total_home": shots_h,
-                "shots_total_away": shots_a,
-                "fouls_home": fouls_h,
-                "fouls_away": fouls_a
+                "exp_goals_away": 1.20
             }
 
             res = compute_advanced_match_predictions(engine_input)
@@ -379,7 +325,7 @@ Match : <b>{h_name}</b> vs <b>{a_name}</b> {f"| Score Actuel : <b style='color:#
 </div>
 <div class="tactical-box">
 <b>🧠 Synthèse Dynamique :</b><br/>
-{f"Basé sur <b>{sot_h + sot_a} tirs cadrés</b> et <b>{fouls_h + fouls_a} fautes</b> à la {minute_input}e minute. xG restants : <b>{res['rem_home_xg']}</b> ({h_name}) vs <b>{res['rem_away_xg']}</b> ({a_name})." if is_live else f"Analyse basée sur la puissance offensive de {h_name} à domicile comparée à la structure défensive de {a_name}."}
+{f"Calcul en direct à la {minute_input}e minute avec un score de {score_h}-{score_a}. Expectative de buts restants : <b>{res['rem_home_xg']}</b> ({h_name}) vs <b>{res['rem_away_xg']}</b> ({a_name})." if is_live else f"Analyse d'avant-match basée sur la puissance offensive et défensive de {h_name} et {a_name}."}
 </div>
 </div>""", unsafe_allow_html=True)
 
@@ -486,13 +432,11 @@ with tab_tracker:
             score_f_h = fm.get("score", {}).get("fullTime", {}).get("home", 0)
             score_f_a = fm.get("score", {}).get("fullTime", {}).get("away", 0)
 
-            # Corners et Cartons réels
             actual_corners = fm.get("stats", {}).get("corners", np.random.randint(8, 12))
             actual_cards = fm.get("stats", {}).get("yellowCards", np.random.randint(2, 5))
 
             res_eval = compute_advanced_match_predictions({"exp_goals_home": 1.6, "exp_goals_away": 1.1})
             
-            # 1. PARI PRINCIPAL
             p_h = res_eval["p_home"] * 100
             p_n = res_eval["p_draw"] * 100
             p_a = res_eval["p_away"] * 100
@@ -513,14 +457,12 @@ with tab_tracker:
 
             status_main = evaluate_main_pred(p_main_code, score_f_h, score_f_a)
 
-            # 2. PARI CORNERS
             corner_line = 8.5
             p_corner_over = res_eval["corners"]["ou"].get("8.5", 0.65)
             pred_corner_type = "OVER" if p_corner_over >= 0.50 else "UNDER"
             pred_corner_lbl = f"Plus de {corner_line} Corners" if pred_corner_type == "OVER" else f"Moins de {corner_line} Corners"
             status_corner = evaluate_ou_pred(pred_corner_type, corner_line, actual_corners)
 
-            # 3. PARI CARTONS
             card_line = 3.5
             p_card_over = res_eval["cards"]["ou"].get("3.5", 0.60)
             pred_card_type = "OVER" if p_card_over >= 0.50 else "UNDER"
@@ -579,7 +521,6 @@ with tab_tracker:
             tag_corner = '<span class="badge-success">VALIDÉ ✅</span>' if item["corner_status"] else '<span class="badge-failed">ÉCHEC ❌</span>'
             tag_card = '<span class="badge-success">VALIDÉ ✅</span>' if item["card_status"] else '<span class="badge-failed">ÉCHEC ❌</span>'
 
-            # CHAINE HTML NON-INDENTÉE POUR EVITER L'AFFICHAGE DU CODE BRUT
             html_content = f"""<div class="tracker-card">
 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; border-bottom:1px solid #1E293B; padding-bottom:8px;">
 <div>
