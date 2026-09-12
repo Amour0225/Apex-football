@@ -30,7 +30,6 @@ st.markdown("""
     .badge-live {
         background-color: #EF4444; color: white; padding: 4px 10px;
         border-radius: 6px; font-weight: 800; font-size: 0.85rem;
-        animation: pulse 2s infinite;
     }
     .exact-score-box {
         background: #182238; border: 1px solid #3B82F6; border-radius: 10px;
@@ -100,11 +99,9 @@ def run_quant_prediction(h_name, a_name, score_h, score_a, team_stats, avg_goals
     h_stat = team_stats.get(h_name, {"gf_pg": 1.4, "ga_pg": 1.1})
     a_stat = team_stats.get(a_name, {"gf_pg": 1.2, "ga_pg": 1.3})
     
-    # xG de base
     full_h_xg = float(np.clip(avg_goals * (h_stat["gf_pg"]/avg_goals) * (a_stat["ga_pg"]/avg_goals) * 1.12, 0.6, 3.1))
     full_a_xg = float(np.clip(avg_goals * (a_stat["gf_pg"]/avg_goals) * (h_stat["ga_pg"]/avg_goals) * 0.88, 0.4, 2.7))
 
-    # Matrice des scores 8x8 (Ajustee selon score actuel si In-Play)
     max_g = 8
     matrix = np.zeros((max_g, max_g))
 
@@ -122,33 +119,28 @@ def run_quant_prediction(h_name, a_name, score_h, score_a, team_stats, avg_goals
     tot_p = np.sum(matrix)
     if tot_p > 0: matrix /= tot_p
 
-    # Top 3 Scores Exacts
     flat_idx = np.argsort(matrix.ravel())[::-1]
     top_3_scores = []
     for idx in flat_idx[:3]:
         gh, ga = np.unravel_index(idx, matrix.shape)
         top_3_scores.append({"score": f"{gh}-{ga}", "home": gh, "away": ga, "prob": round(matrix[gh, ga] * 100, 1)})
 
-    # Probabilites 1N2
     p_h = float(np.sum(np.tril(matrix, -1))) * 100
     p_n = float(np.sum(np.diag(matrix))) * 100
     p_a = float(np.sum(np.triu(matrix, 1))) * 100
 
-    # Corners
     exp_c_h = round(np.clip(4.8 + (full_h_xg - 1.2) * 1.2, 1.0, 9.0), 1)
     exp_c_a = round(np.clip(3.8 + (full_a_xg - 1.0) * 1.1, 1.0, 8.0), 1)
     exp_c_tot = round(exp_c_h + exp_c_a, 1)
 
     prob_c_tot_8_5 = round((1.0 - nbinom.cdf(8, 10, 10 / (10 + exp_c_tot))) * 100, 1)
 
-    # Cartons
     exp_k_h = round(np.clip(2.1 + (full_a_xg * 0.35), 0.5, 5.0), 1)
     exp_k_a = round(np.clip(2.4 + (full_h_xg * 0.35), 0.5, 5.0), 1)
     exp_k_tot = round(exp_k_h + exp_k_a, 1)
 
     prob_k_tot_3_5 = round((1.0 - nbinom.cdf(3, 8, 8 / (8 + exp_k_tot))) * 100, 1)
 
-    # Recommandation Strategique
     if (p_h + p_n) >= 68.0 and p_h >= p_a:
         advice = f"Double Chance : {h_name} ou Nul (1X)"
         conf = round(p_h + p_n, 1)
@@ -187,30 +179,28 @@ raw_matches = fetch_api(f"competitions/{league_code}/matches")
 
 all_matches = raw_matches.get("matches", []) if raw_matches else []
 
-# Separateur de statut des matchs
 live_matches = [m for m in all_matches if m['status'] in ['IN_PLAY', 'LIVE', 'PAUSED']]
 upcoming_matches = [m for m in all_matches if m['status'] in ['SCHEDULED', 'TIMED']]
 finished_matches = [m for m in all_matches if m['status'] == 'FINISHED']
 
 tab_live, tab_calendar, tab_audit, tab_detail = st.tabs([
-    f"🔴 EN DIRECT ({len(live_matches)})", 
-    "📅 Calendrier & Pronostics Futurs", 
-    "📊 Bilan & Audit des Predictions", 
-    "🔎 Analyse Detaille d'un Match"
+    f"EN DIRECT ({len(live_matches)})", 
+    "Calendrier & Pronostics Futurs", 
+    "Bilan & Audit des Predictions", 
+    "Analyse Detaille d'un Match"
 ])
 
 # ------------------------------------------
 # TAB 0 : MATCHS EN DIRECT (LIVE)
 # ------------------------------------------
 with tab_live:
-    st.subheader(f"🔴 Matchs Actuellement en Direct — {selected_comp}")
+    st.subheader(f"Matchs Actuellement en Direct - {selected_comp}")
     
     if live_matches:
         for m in live_matches:
             h_team = m['homeTeam']['name']
             a_team = m['awayTeam']['name']
             
-            # Extraction du score en direct
             score_h = m['score']['fullTime']['home']
             score_a = m['score']['fullTime']['away']
             if score_h is None: score_h = 0
@@ -223,7 +213,7 @@ with tab_live:
             st.markdown(f"""
             <div style="background:#0F172A; border:1.5px solid #EF4444; border-radius:12px; padding:18px; margin-bottom:15px;">
                 <div style="display:flex; justify-content:space-between; align-items:center;">
-                    <span class="badge-live">● {status_txt}</span>
+                    <span class="badge-live">{status_txt}</span>
                     <span style="color:#94A3B8; font-size:0.85rem; font-weight:700;">Score Actuel</span>
                 </div>
                 <div style="display:flex; justify-content:space-between; align-items:center; margin:15px 0;">
@@ -240,13 +230,13 @@ with tab_live:
             </div>
             """, unsafe_allow_html=True)
     else:
-        st.info("Aucun match n'est en direct actuellement dans cette compétition.")
+        st.info("Aucun match n'est en direct actuellement dans cette competition.")
 
 # ------------------------------------------
 # TAB 1 : CALENDRIER DES MATCHS A VENIR
 # ------------------------------------------
 with tab_calendar:
-    st.subheader(f"📅 Calendrier et Pronostics Futurs — {selected_comp}")
+    st.subheader(f"Calendrier et Pronostics Futurs - {selected_comp}")
     
     if upcoming_matches:
         cal_data = []
@@ -277,7 +267,7 @@ with tab_calendar:
 # TAB 2 : AUDIT ET VERIFICATION DES PREDICTIONS
 # ------------------------------------------
 with tab_audit:
-    st.subheader(f"📊 Audit des Matchs Termines — {selected_comp}")
+    st.subheader(f"Audit des Matchs Termines - {selected_comp}")
     st.caption("Comparaison automatique des predictions de l'algorithme avec les resultats reels du terrain.")
     
     if finished_matches:
@@ -334,7 +324,7 @@ with tab_audit:
 # TAB 3 : ANALYSE DETAILLEE D'UN MATCH
 # ------------------------------------------
 with tab_detail:
-    st.subheader("🔎 Analyse Approfondie d'une Rencontre")
+    st.subheader("Analyse Approfondie d'une Rencontre")
     
     match_options = {f"{m['homeTeam']['name']} vs {m['awayTeam']['name']} ({m['utcDate'][:10]})": m for m in all_matches}
     
