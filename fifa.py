@@ -9,7 +9,7 @@ from datetime import datetime, timedelta
 # 1. CONFIGURATION & INTERFACE DESIGN
 # ==========================================
 st.set_page_config(
-    page_title="Apex Quant v18.3 - Live Engine",
+    page_title="Apex Quant v18.4 - Complete Suite",
     page_icon="⚽",
     layout="wide"
 )
@@ -31,7 +31,6 @@ st.markdown("""
     .badge-live {
         background-color: #EF4444; color: white; padding: 4px 10px;
         border-radius: 6px; font-weight: 800; font-size: 0.85rem;
-        animation: pulse 2s infinite;
     }
     .badge-upcoming {
         background-color: #3B82F6; color: white; padding: 4px 10px;
@@ -141,7 +140,7 @@ def get_advanced_league_stats(league_code):
     return stats, avg_goals
 
 # ==========================================
-# 3. MOTEUR QUANTITATIF (AVEC TEMPS REEL)
+# 3. MOTEUR QUANTITATIF (AVEC CORNERS & CARTONS)
 # ==========================================
 def dixon_coles_adjustment(x, y, h_xg, a_xg, rho=-0.08):
     if x == 0 and y == 0: return max(0.01, 1.0 - (h_xg * a_xg * rho))
@@ -171,7 +170,6 @@ def run_quant_prediction_v18(h_name, a_name, score_h=0, score_a=0, elapsed_min=0
     full_h_xg = float(np.clip(raw_h_xg * elo_mult_h * h_stat["form_factor"], 0.5, 3.5))
     full_a_xg = float(np.clip(raw_a_xg * elo_mult_a * a_stat["form_factor"], 0.4, 3.0))
 
-    # AJUSTEMENT EN DIRECT : Calcul du xG restant selon le temps écoulé
     if is_live:
         rem_factor = max(0.05, (90.0 - float(elapsed_min)) / 90.0) if elapsed_min > 0 else 0.50
         rem_h_xg = full_h_xg * rem_factor
@@ -183,7 +181,6 @@ def run_quant_prediction_v18(h_name, a_name, score_h=0, score_a=0, elapsed_min=0
     max_g = 8
     matrix = np.zeros((max_g, max_g))
 
-    # CALCUL DE LA MATRICE PARTANT DU SCORE ACTUEL
     for dh in range(max_g - score_h):
         for da in range(max_g - score_a):
             p_h = poisson.pmf(dh, rem_h_xg)
@@ -198,7 +195,6 @@ def run_quant_prediction_v18(h_name, a_name, score_h=0, score_a=0, elapsed_min=0
     tot_p = np.sum(matrix)
     if tot_p > 0: matrix /= tot_p
 
-    # TOP 3 SCORES PROBABLES DE FIN DE MATCH
     flat_idx = np.argsort(matrix.ravel())[::-1]
     top_3_scores = []
     for idx in flat_idx[:3]:
@@ -220,6 +216,17 @@ def run_quant_prediction_v18(h_name, a_name, score_h=0, score_a=0, elapsed_min=0
     odds_o25 = prob_to_odds(prob_o25)
     odds_btts = prob_to_odds(prob_btts)
 
+    # ESTIMATION DES CORNERS ET CARTONS
+    exp_c_h = round(np.clip(4.8 + (rem_h_xg - 1.2) * 1.3, 1.0, 9.5), 1)
+    exp_c_a = round(np.clip(3.8 + (rem_a_xg - 1.0) * 1.2, 1.0, 8.5), 1)
+    exp_c_tot = round(exp_c_h + exp_c_a, 1)
+    prob_c_8_5 = round((1.0 - nbinom.cdf(8, 10, 10 / (10 + exp_c_tot))) * 100, 1) if exp_c_tot > 0 else 0
+
+    exp_k_h = round(np.clip(2.0 + (rem_a_xg * 0.4), 0.5, 5.0), 1)
+    exp_k_a = round(np.clip(2.3 + (rem_h_xg * 0.4), 0.5, 5.0), 1)
+    exp_k_tot = round(exp_k_h + exp_k_a, 1)
+    prob_k_3_5 = round((1.0 - nbinom.cdf(3, 8, 8 / (8 + exp_k_tot))) * 100, 1) if exp_k_tot > 0 else 0
+
     if (p_h + p_n) >= 70.0 and p_h >= p_a:
         advice = f"Double Chance : {h_name} ou Nul (1X)"
         conf = round(p_h + p_n, 1)
@@ -240,6 +247,8 @@ def run_quant_prediction_v18(h_name, a_name, score_h=0, score_a=0, elapsed_min=0
         "xg_h": round(rem_h_xg, 2), "xg_a": round(rem_a_xg, 2),
         "top_3_scores": top_3_scores,
         "prob_o15": prob_o15, "prob_o25": prob_o25, "prob_btts": prob_btts,
+        "corners": {"h": exp_c_h, "a": exp_c_a, "tot": exp_c_tot, "p_8_5": prob_c_8_5, "odds_8_5": prob_to_odds(prob_c_8_5)},
+        "cards": {"h": exp_k_h, "a": exp_k_a, "tot": exp_k_tot, "p_3_5": prob_k_3_5, "odds_3_5": prob_to_odds(prob_k_3_5)},
         "advice": advice, "conf": conf,
         "h_stat": h_stat, "a_stat": a_stat
     }
@@ -247,7 +256,7 @@ def run_quant_prediction_v18(h_name, a_name, score_h=0, score_a=0, elapsed_min=0
 # ==========================================
 # 4. INTERFACE UTILISATEUR
 # ==========================================
-st.sidebar.title("Navigation Quant V18.3")
+st.sidebar.title("Navigation Quant V18.4")
 selected_comp = st.sidebar.selectbox("Sélectionner la Compétition", list(COMPETITIONS.keys()))
 league_code = COMPETITIONS[selected_comp]
 
@@ -256,7 +265,6 @@ raw_matches = fetch_api(f"competitions/{league_code}/matches")
 
 all_matches = raw_matches.get("matches", []) if raw_matches else []
 
-# TRI PAR CATEGORIES
 live_matches = [m for m in all_matches if m.get('status') in ['IN_PLAY', 'LIVE', 'PAUSED']]
 
 today_dt = datetime.utcnow()
@@ -293,12 +301,10 @@ with tab_live:
             h_name = m['homeTeam']['name']
             a_name = m['awayTeam']['name']
             
-            # Recupération du score live
             score_obj = m.get('score', {}).get('fullTime', {})
             score_h = score_obj.get('home', 0) if score_obj.get('home') is not None else 0
             score_a = score_obj.get('away', 0) if score_obj.get('away') is not None else 0
             
-            # Estimation minute si indisponible
             elapsed = 45 if m.get('status') == 'PAUSED' else 55
             
             res_live = run_quant_prediction_v18(
@@ -318,26 +324,20 @@ with tab_live:
             </div>
             """, unsafe_allow_html=True)
             
-            # BANDEAU DE SCORES FINAUX EN DIRECT
             st.markdown(f"""
             <div class="horizontal-scores-container">
                 <div class="score-card score-card-top">
-                    <div class="metric-lbl" style="color:#38BDF8;">Score Final le + probable</div>
+                    <div class="metric-lbl" style="color:#38BDF8;">Score Final Probable</div>
                     <div style="font-size:1.5rem; color:#38BDF8; font-weight:900;">{res_live['top_3_scores'][0]['score']}</div>
                     <div style="color:#10B981; font-size:0.8rem;">{res_live['top_3_scores'][0]['prob']}% proba</div>
                 </div>
                 <div class="score-card">
-                    <div class="metric-lbl">2e Score probable</div>
-                    <div style="font-size:1.5rem; color:#F1F5F9; font-weight:900;">{res_live['top_3_scores'][1]['score']}</div>
-                    <div style="color:#10B981; font-size:0.8rem;">{res_live['top_3_scores'][1]['prob']}% proba</div>
-                </div>
-                <div class="score-card">
-                    <div class="metric-lbl">Cote Live Victoire H</div>
+                    <div class="metric-lbl">Cote Victoire {h_name}</div>
                     <div class="metric-val">{res_live['p_h']}%</div>
                     <div class="odds-lbl">Cote : {res_live['odds_h']}</div>
                 </div>
                 <div class="score-card">
-                    <div class="metric-lbl">Cote Live Victoire A</div>
+                    <div class="metric-lbl">Cote Victoire {a_name}</div>
                     <div class="metric-val">{res_live['p_a']}%</div>
                     <div class="odds-lbl">Cote : {res_live['odds_a']}</div>
                 </div>
@@ -377,7 +377,7 @@ with tab_calendar:
         st.info("Aucune rencontre programmée dans les 7 prochains jours.")
 
 # ------------------------------------------
-# TAB 3 : ANALYSE DETAILLEE (AVEC OPTION SIMULATEUR EN DIRECT)
+# TAB 3 : ANALYSE DETAILLEE (COMPLÈTE AVEC CORNERS/CARTONS)
 # ------------------------------------------
 with tab_detail:
     st.subheader("Analyse & Simulation de Match")
@@ -396,7 +396,6 @@ with tab_detail:
         h_name = selected_m['homeTeam']['name']
         a_name = selected_m['awayTeam']['name']
         
-        # PARAMETRES EN DIRECT OU SIMULATION
         st.markdown("**Simulateur d'évolution de score (Test en Direct)**")
         sc_col1, sc_col2, sc_col3 = st.columns(3)
         with sc_col1: sim_h = st.number_input(f"Score {h_name}", min_value=0, value=0)
@@ -423,10 +422,9 @@ with tab_detail:
         </div>
         """, unsafe_allow_html=True)
         
-        # TOP 3 SCORES EXACTS (HORIZONTALE)
+        # TOP 3 SCORES EXACTS
         st.markdown('<div class="sub-card">', unsafe_allow_html=True)
-        st.markdown("### Top 3 Scores Exacts les plus Probables à la Fin")
-        
+        st.markdown("### Top 3 Scores Exacts les plus Probables")
         top1, top2, top3 = res["top_3_scores"][0], res["top_3_scores"][1], res["top_3_scores"][2]
         
         st.markdown(f"""
@@ -450,7 +448,7 @@ with tab_detail:
         """, unsafe_allow_html=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
-        # 1N2 & COTES (HORIZONTALE)
+        # 1N2 & COTES
         st.markdown('<div class="sub-card">', unsafe_allow_html=True)
         st.markdown("### Probabilités & Cotes Équitables 1N2")
         st.markdown(f"""
@@ -469,6 +467,35 @@ with tab_detail:
                 <div class="metric-lbl">Victoire {a_name}</div>
                 <div class="metric-val">{res["p_a"]}%</div>
                 <div class="odds-lbl">Cote : {res["odds_a"]}</div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+        st.markdown('</div>', unsafe_allow_html=True)
+
+        # SECTIONS CORNERS & CARTONS (RÉINTÉGRÉES DANS UN BANDEAU HORIZONTAL)
+        st.markdown('<div class="sub-card">', unsafe_allow_html=True)
+        st.markdown("### Prédictions Corners & Cartons (Marchés Annexe)")
+        st.markdown(f"""
+        <div class="horizontal-scores-container">
+            <div class="score-card">
+                <div class="metric-lbl">Corners Attendus (Total)</div>
+                <div class="metric-val" style="color:#F59E0B;">{res["corners"]["tot"]}</div>
+                <div class="odds-lbl">H: {res["corners"]["h"]} | A: {res["corners"]["a"]}</div>
+            </div>
+            <div class="score-card">
+                <div class="metric-lbl">Plus de 8.5 Corners</div>
+                <div class="metric-val" style="color:#F59E0B;">{res["corners"]["p_8_5"]}%</div>
+                <div class="odds-lbl">Cote : {res["corners"]["odds_8_5"]}</div>
+            </div>
+            <div class="score-card">
+                <div class="metric-lbl">Cartons Attendus (Total)</div>
+                <div class="metric-val" style="color:#EF4444;">{res["cards"]["tot"]}</div>
+                <div class="odds-lbl">H: {res["cards"]["h"]} | A: {res["cards"]["a"]}</div>
+            </div>
+            <div class="score-card">
+                <div class="metric-lbl">Plus de 3.5 Cartons</div>
+                <div class="metric-val" style="color:#EF4444;">{res["cards"]["p_3_5"]}%</div>
+                <div class="odds-lbl">Cote : {res["cards"]["odds_3_5"]}</div>
             </div>
         </div>
         """, unsafe_allow_html=True)
