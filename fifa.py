@@ -6,10 +6,10 @@ import pandas as pd
 from datetime import datetime, timedelta
 
 # ==========================================
-# 1. CONFIGURATION & DESIGN INTERFACE
+# 1. CONFIGURATION & INTERFACE DESIGN
 # ==========================================
 st.set_page_config(
-    page_title="Apex Quant Engine v17.0",
+    page_title="Apex Multi-Factor Quant v18.0",
     page_icon="⚽",
     layout="wide"
 )
@@ -42,11 +42,15 @@ st.markdown("""
     }
     .metric-val { font-size: 1.5rem; font-weight: 900; color: #10B981; }
     .metric-lbl { font-size: 0.8rem; color: #94A3B8; font-weight: 600; }
+    .factor-tag {
+        display: inline-block; background: #1E293B; border: 1px solid #334155;
+        border-radius: 6px; padding: 3px 8px; font-size: 0.75rem; color: #38BDF8; margin-right: 5px;
+    }
     </style>
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 2. API FOOTBALL & RECUPERATION DES DONNEES
+# 2. API FOOTBALL & EXTRACTION MULTI-DONNEES
 # ==========================================
 API_KEY = "1e9518e7585349f9abe6d5a29ddb83b1"
 BASE_URL = "https://api.football-data.org/v4/"
@@ -71,27 +75,78 @@ def fetch_api(endpoint):
     return None
 
 @st.cache_data(ttl=1200)
-def get_league_stats(league_code):
+def get_advanced_league_stats(league_code):
+    """
+    Extrait les statistiques avancées : Domicile/Extérieur séparés,
+    Forme récente (Form points) et Élo de puissance relative.
+    """
     data = fetch_api(f"competitions/{league_code}/standings")
     stats = {}
     avg_goals = 1.35
+    
     if data and "standings" in data and len(data["standings"]) > 0:
-        table = data["standings"][0].get("table", [])
+        table_total = data["standings"][0].get("table", [])
+        
+        # Récupération de la table Home/Away si disponible
+        table_home = data["standings"][1].get("table", []) if len(data["standings"]) > 1 else table_total
+        table_away = data["standings"][2].get("table", []) if len(data["standings"]) > 2 else table_total
+        
+        dict_home = {r["team"]["name"]: r for r in table_home}
+        dict_away = {r["team"]["name"]: r for r in table_away}
+        
         total_played, total_gf = 0, 0
-        for row in table:
+        
+        for row in table_total:
             name = row["team"]["name"]
             played = max(1, row.get("playedGames", 1))
+            pts = row.get("points", 0)
             gf = row.get("goalsFor", 0)
             ga = row.get("goalsAgainst", 0)
-            stats[name] = {"gf_pg": gf / played, "ga_pg": ga / played}
+            form = row.get("form", "D,D,D,D,D") # Forme récente ex: W,W,D,L,W
+            
+            # Data Domicile
+            h_row = dict_home.get(name, row)
+            h_played = max(1, h_row.get("playedGames", 1))
+            h_gf = h_row.get("goalsFor", gf / 2)
+            h_ga = h_row.get("goalsAgainst", ga / 2)
+            
+            # Data Extérieur
+            a_row = dict_away.get(name, row)
+            a_played = max(1, a_row.get("playedGames", 1))
+            a_gf = a_row.get("goalsFor", gf / 2)
+            a_ga = a_row.get("goalsAgainst", ga / 2)
+            
+            # Calcul Elo relatif (base 1500 + diff de buts & points)
+            elo_rating = 1500 + (pts * 12) + ((gf - ga) * 4)
+            
+            # Calcul du coefficient de forme
+            form_pts = 0
+            if form:
+                clean_form = str(form).replace(",", "").upper()
+                for char in clean_form[-5:]:
+                    if char == 'W': form_pts += 3
+                    elif char == 'D': form_pts += 1
+            form_factor = np.clip(0.85 + (form_pts / 30.0), 0.75, 1.25)
+            
+            stats[name] = {
+                "gf_pg": gf / played, "ga_pg": ga / played,
+                "home_gf_pg": h_gf / h_played, "home_ga_pg": h_ga / h_played,
+                "away_gf_pg": a_gf / a_played, "away_ga_pg": a_ga / a_played,
+                "elo": elo_rating,
+                "form_factor": form_factor,
+                "form_str": form if form else "N/A"
+            }
+            
             total_played += played
             total_gf += gf
+            
         if total_played > 0:
             avg_goals = max(0.9, total_gf / total_played)
+            
     return stats, avg_goals
 
 # ==========================================
-# 3. ALGORITHME DIXON-COLES V17 AVANCE
+# 3. MOTEUR QUANTITATIF MULTI-FACTEURS V18
 # ==========================================
 def dixon_coles_adjustment(x, y, h_xg, a_xg, rho=-0.08):
     if x == 0 and y == 0: return max(0.01, 1.0 - (h_xg * a_xg * rho))
@@ -100,12 +155,29 @@ def dixon_coles_adjustment(x, y, h_xg, a_xg, rho=-0.08):
     elif x == 1 and y == 1: return max(0.01, 1.0 - rho)
     return 1.0
 
-def run_quant_prediction(h_name, a_name, score_h, score_a, team_stats, avg_goals, is_live=False):
-    h_stat = team_stats.get(h_name, {"gf_pg": 1.45, "ga_pg": 1.10})
-    a_stat = team_stats.get(a_name, {"gf_pg": 1.25, "ga_pg": 1.30})
+def run_quant_prediction_v18(h_name, a_name, score_h, score_a, team_stats, avg_goals, rest_days_h=7, rest_days_a=7, is_live=False):
+    default_stat = {"gf_pg": 1.35, "ga_pg": 1.25, "home_gf_pg": 1.45, "home_ga_pg": 1.10, 
+                    "away_gf_pg": 1.15, "away_ga_pg": 1.35, "elo": 1500, "form_factor": 1.0, "form_str": "N/A"}
     
-    full_h_xg = float(np.clip(avg_goals * (h_stat["gf_pg"]/avg_goals) * (a_stat["ga_pg"]/avg_goals) * 1.14, 0.6, 3.2))
-    full_a_xg = float(np.clip(avg_goals * (a_stat["gf_pg"]/avg_goals) * (h_stat["ga_pg"]/avg_goals) * 0.88, 0.4, 2.8))
+    h_stat = team_stats.get(h_name, default_stat)
+    a_stat = team_stats.get(a_name, default_stat)
+    
+    # FACTEUR 1 : Dom/Ext réel
+    raw_h_xg = avg_goals * (h_stat["home_gf_pg"] / avg_goals) * (a_stat["away_ga_pg"] / avg_goals) * 1.12
+    raw_a_xg = avg_goals * (a_stat["away_gf_pg"] / avg_goals) * (h_stat["home_ga_pg"] / avg_goals) * 0.90
+    
+    # FACTEUR 2 : Modificateur Elo relatif
+    elo_diff = h_stat["elo"] - a_stat["elo"]
+    elo_mult_h = np.clip(1.0 + (elo_diff / 1200.0), 0.70, 1.35)
+    elo_mult_a = np.clip(1.0 - (elo_diff / 1200.0), 0.70, 1.35)
+    
+    # FACTEUR 3 : Fatigue (Jours de repos)
+    fatigue_h = 0.92 if rest_days_h < 4 else 1.0
+    fatigue_a = 0.92 if rest_days_a < 4 else 1.0
+    
+    # COMPUTATION DU xG FINAL INTEGRÉ
+    full_h_xg = float(np.clip(raw_h_xg * elo_mult_h * h_stat["form_factor"] * fatigue_h, 0.5, 3.5))
+    full_a_xg = float(np.clip(raw_a_xg * elo_mult_a * a_stat["form_factor"] * fatigue_a, 0.4, 3.0))
 
     rem_h_xg = full_h_xg * 0.55 if is_live else full_h_xg
     rem_a_xg = full_a_xg * 0.55 if is_live else full_a_xg
@@ -143,13 +215,13 @@ def run_quant_prediction(h_name, a_name, score_h, score_a, team_stats, avg_goals
     prob_btts = round(float(np.sum(matrix[1:, 1:])) * 100, 1)
 
     # Corners & Cartons
-    exp_c_h = round(np.clip(4.9 + (full_h_xg - 1.2) * 1.2, 1.0, 9.0), 1)
-    exp_c_a = round(np.clip(3.9 + (full_a_xg - 1.0) * 1.1, 1.0, 8.0), 1)
+    exp_c_h = round(np.clip(4.8 + (full_h_xg - 1.2) * 1.3, 1.0, 9.5), 1)
+    exp_c_a = round(np.clip(3.8 + (full_a_xg - 1.0) * 1.2, 1.0, 8.5), 1)
     exp_c_tot = round(exp_c_h + exp_c_a, 1)
     prob_c_8_5 = round((1.0 - nbinom.cdf(8, 10, 10 / (10 + exp_c_tot))) * 100, 1)
 
-    exp_k_h = round(np.clip(2.1 + (full_a_xg * 0.35), 0.5, 5.0), 1)
-    exp_k_a = round(np.clip(2.4 + (full_h_xg * 0.35), 0.5, 5.0), 1)
+    exp_k_h = round(np.clip(2.0 + (full_a_xg * 0.4), 0.5, 5.0), 1)
+    exp_k_a = round(np.clip(2.3 + (full_h_xg * 0.4), 0.5, 5.0), 1)
     exp_k_tot = round(exp_k_h + exp_k_a, 1)
     prob_k_3_5 = round((1.0 - nbinom.cdf(3, 8, 8 / (8 + exp_k_tot))) * 100, 1)
 
@@ -171,36 +243,36 @@ def run_quant_prediction(h_name, a_name, score_h, score_a, team_stats, avg_goals
         conf = prob_c_8_5
         code_adv = "C_8.5"
     else:
-        advice = f"Victoire Remportée : {h_name if p_h > p_a else a_name}"
+        advice = f"Victoire : {h_name if p_h > p_a else a_name}"
         conf = round(max(p_h, p_a), 1)
         code_adv = "1" if p_h > p_a else "2"
 
     return {
         "p_h": round(p_h, 1), "p_n": round(p_n, 1), "p_a": round(p_a, 1),
+        "xg_h": round(full_h_xg, 2), "xg_a": round(full_a_xg, 2),
         "top_3_scores": top_3_scores,
         "prob_o15": prob_o15, "prob_o25": prob_o25, "prob_btts": prob_btts,
         "corners": {"h": exp_c_h, "a": exp_c_a, "tot": exp_c_tot, "p_8_5": prob_c_8_5},
         "cards": {"h": exp_k_h, "a": exp_k_a, "tot": exp_k_tot, "p_3_5": prob_k_3_5},
         "advice": advice, "conf": conf, "code_adv": code_adv,
+        "h_stat": h_stat, "a_stat": a_stat,
         "most_probable_score": top_3_scores[0]["score"]
     }
 
 # ==========================================
-# 4. INTERFACE ET NAVIGATION
+# 4. NAVIGATION ET INTERFACE UTILISATEUR
 # ==========================================
-st.sidebar.title("Navigation Quant V17")
+st.sidebar.title("Navigation Quant V18")
 selected_comp = st.sidebar.selectbox("Sélectionner la Compétition", list(COMPETITIONS.keys()))
 league_code = COMPETITIONS[selected_comp]
 
-team_stats, avg_goals = get_league_stats(league_code)
+team_stats, avg_goals = get_advanced_league_stats(league_code)
 raw_matches = fetch_api(f"competitions/{league_code}/matches")
 
 all_matches = raw_matches.get("matches", []) if raw_matches else []
 
-# CLASSIFICATION ET FILTRAGE DES MATCHS
 live_matches = [m for m in all_matches if m.get('status') in ['IN_PLAY', 'LIVE', 'PAUSED']]
 
-# Obtenir la date d'aujourd'hui en UTC
 today_dt = datetime.utcnow()
 next_week_dt = today_dt + timedelta(days=8)
 
@@ -211,7 +283,6 @@ for m in all_matches:
         if utc_str:
             try:
                 m_dt = datetime.strptime(utc_str[:19], "%Y-%m-%dT%H:%M:%S")
-                # On ne garde que les matchs prévus dans les 8 prochains jours
                 if today_dt - timedelta(hours=3) <= m_dt <= next_week_dt:
                     upcoming_matches.append(m)
             except Exception:
@@ -222,12 +293,12 @@ finished_matches = [m for m in all_matches if m.get('status') == 'FINISHED']
 tab_live, tab_calendar, tab_detail, tab_audit = st.tabs([
     f"🔴 EN DIRECT ({len(live_matches)})", 
     f"📅 CALENDRIER 7 JOURS ({len(upcoming_matches)})", 
-    "📊 ANALYSE DETAILLEE D'UN MATCH",
+    "📊 ANALYSE MULTI-FACTEURS D'UN MATCH",
     "📈 BILAN & AUDIT DES PREDICTIONS"
 ])
 
 # ------------------------------------------
-# TAB 0 : MATCHS EN DIRECT
+# TAB 0 : EN DIRECT
 # ------------------------------------------
 with tab_live:
     st.subheader(f"Matchs en Direct - {selected_comp}")
@@ -239,7 +310,7 @@ with tab_live:
             score_a = m['score']['fullTime']['away'] or 0
             status_txt = "EN DIRECT" if m['status'] in ['IN_PLAY', 'LIVE'] else "MI-TEMPS"
             
-            pred = run_quant_prediction(h_team, a_team, score_h, score_a, team_stats, avg_goals, is_live=True)
+            pred = run_quant_prediction_v18(h_team, a_team, score_h, score_a, team_stats, avg_goals, is_live=True)
             
             st.markdown(f"""
             <div style="background:#0F172A; border:1.5px solid #EF4444; border-radius:12px; padding:18px; margin-bottom:15px;">
@@ -253,21 +324,21 @@ with tab_live:
                     <div style="font-size:1.3rem; font-weight:800; text-align:right; width:40%;">{a_team}</div>
                 </div>
                 <div style="background:#182238; border-radius:8px; padding:12px; display:flex; justify-content:space-around; text-align:center;">
-                    <div><span style="color:#94A3B8; font-size:0.75rem;">Score Final Prédit</span><br><b>{pred['most_probable_score']}</b></div>
+                    <div><span style="color:#94A3B8; font-size:0.75rem;">Score Prédit</span><br><b>{pred['most_probable_score']}</b></div>
                     <div><span style="color:#94A3B8; font-size:0.75rem;">Proba 1N2</span><br><b>{pred['p_h']}% | {pred['p_n']}% | {pred['p_a']}%</b></div>
-                    <div><span style="color:#94A3B8; font-size:0.75rem;">Les 2 Marquent</span><br><b>{pred['prob_btts']}%</b></div>
+                    <div><span style="color:#94A3B8; font-size:0.75rem;">xG Restant</span><br><b>{pred['xg_h']} - {pred['xg_a']}</b></div>
                     <div><span style="color:#94A3B8; font-size:0.75rem;">Conseil Stratégique</span><br><b style="color:#10B981;">{pred['advice']} ({pred['conf']}%)</b></div>
                 </div>
             </div>
             """, unsafe_allow_html=True)
     else:
-        st.info("Aucun match n'est en direct actuellement dans cette compétition. Consultez l'onglet Calendrier pour voir les rencontres réelles à venir cette semaine.")
+        st.info("Aucun match en direct en ce moment dans cette compétition.")
 
 # ------------------------------------------
 # TAB 1 : CALENDRIER DES 7 PROCHAINS JOURS
 # ------------------------------------------
 with tab_calendar:
-    st.subheader(f"Matchs Programmés les 7 Prochains Jours - {selected_comp}")
+    st.subheader(f"Matchs des 7 Prochains Jours - {selected_comp}")
     if upcoming_matches:
         cal_data = []
         for m in upcoming_matches:
@@ -275,38 +346,37 @@ with tab_calendar:
             h_team = m['homeTeam']['name']
             a_team = m['awayTeam']['name']
             
-            pred = run_quant_prediction(h_team, a_team, 0, 0, team_stats, avg_goals, is_live=False)
+            pred = run_quant_prediction_v18(h_team, a_team, 0, 0, team_stats, avg_goals, is_live=False)
             
             cal_data.append({
-                "Date & Heure Exacte": date_str,
+                "Date & Heure": date_str,
                 "Match Réel": f"{h_team} vs {a_team}",
+                "xG Attendu": f"{pred['xg_h']} - {pred['xg_a']}",
                 "Score Prédit": pred["most_probable_score"],
                 "Proba 1N2 (1 / N / 2)": f"{pred['p_h']}% | {pred['p_n']}% | {pred['p_a']}%",
-                "Plus 1.5 Buts": f"{pred['prob_o15']}%",
                 "Les 2 Marquent": f"{pred['prob_btts']}%",
-                "Conseil Recommandé": f"{pred['advice']} ({pred['conf']}%)"
+                "Conseil Optimal V18": f"{pred['advice']} ({pred['conf']}%)"
             })
             
         df_cal = pd.DataFrame(cal_data)
         st.dataframe(df_cal, use_container_width=True, hide_index=True)
     else:
-        st.info("Aucun match n'est programmé dans les 7 prochains jours pour cette ligue (Trêve internationale ou pause de fin de semaine).")
+        st.info("Aucune rencontre programmée dans les 7 prochains jours.")
 
 # ------------------------------------------
-# TAB 2 : ANALYSE DETAILLEE D'UN MATCH (OPTIMISEE)
+# TAB 2 : ANALYSE MULTI-FACTEURS D'UN MATCH
 # ------------------------------------------
 with tab_detail:
-    st.subheader("Analyse Approfondie & Prédiction Quantitativiste")
+    st.subheader("Analyse Multi-Facteurs Approfondie")
     
-    # Choix du filtre de matchs
     filter_choice = st.radio(
-        "Filtrer les matchs à analyser :",
-        ["Matchs de la semaine (A venir / Réels)", "Matchs en Direct (Live)", "Tous les matchs de la saison"],
+        "Sélectionnez le filtre de matchs :",
+        ["Matchs de la semaine (Réels à venir)", "Matchs en Direct (Live)", "Tous les matchs"],
         horizontal=True
     )
     
     selected_pool = []
-    if filter_choice == "Matchs de la semaine (A venir / Réels)":
+    if filter_choice == "Matchs de la semaine (Réels à venir)":
         selected_pool = upcoming_matches if upcoming_matches else all_matches[:10]
     elif filter_choice == "Matchs en Direct (Live)":
         selected_pool = live_matches
@@ -314,14 +384,13 @@ with tab_detail:
         selected_pool = all_matches
 
     if selected_pool:
-        # Formatage explicite du libellé avec date et heure
         match_options = {}
         for m in selected_pool:
             date_formatted = m['utcDate'][:10] + " [" + m['utcDate'][11:16] + "]"
             label = f"{date_formatted} : {m['homeTeam']['name']} vs {m['awayTeam']['name']}"
             match_options[label] = m
         
-        selected_label = st.selectbox("Sélectionnez la rencontre exacte à analyser :", list(match_options.keys()))
+        selected_label = st.selectbox("Choisissez la rencontre exacte à évaluer :", list(match_options.keys()))
         selected_m = match_options[selected_label]
         
         h_name = selected_m['homeTeam']['name']
@@ -332,19 +401,26 @@ with tab_detail:
         score_a = selected_m['score']['fullTime']['away'] or 0
         is_live_flag = match_status in ['IN_PLAY', 'LIVE', 'PAUSED']
         
-        res = run_quant_prediction(h_name, a_name, score_h, score_a, team_stats, avg_goals, is_live=is_live_flag)
+        res = run_quant_prediction_v18(h_name, a_name, score_h, score_a, team_stats, avg_goals, is_live=is_live_flag)
         
         st.markdown(f"""
         <div class="oracle-card">
             <div style="display:flex; justify-content:space-between; align-items:center;">
                 <div>
-                    <span class="badge-upcoming">MATCH PROGRAMME LE {selected_m['utcDate'][:10]} A {selected_m['utcDate'][11:16]} UTC</span>
-                    <h2 style="color:#38BDF8; margin:12px 0 5px 0; font-weight:900;">PRONOSTIC : {res['advice']}</h2>
-                    <p style="color:#CBD5E1; margin:0;">Calcul de matrice de Poisson Dixon-Coles V17 basé sur l'efficacité offensive/défensive.</p>
+                    <span class="badge-upcoming">RENCONTRE PROGRAMMEE LE {selected_m['utcDate'][:10]} A {selected_m['utcDate'][11:16]} UTC</span>
+                    <h2 style="color:#38BDF8; margin:10px 0 5px 0; font-weight:900;">PRONOSTIC : {res['advice']}</h2>
+                    <p style="color:#CBD5E1; margin:0;">
+                        Modèle Quant V18 (Elo + Dom/Ext + Forme Récente + xG Ajusté).
+                    </p>
+                    <div style="margin-top:10px;">
+                        <span class="factor-tag">Forme {h_name}: {res['h_stat']['form_str']}</span>
+                        <span class="factor-tag">Forme {a_name}: {res['a_stat']['form_str']}</span>
+                        <span class="factor-tag">Rating Elo: {int(res['h_stat']['elo'])} vs {int(res['a_stat']['elo'])}</span>
+                    </div>
                 </div>
                 <div style="text-align:right;">
                     <div style="font-size:2.8rem; font-weight:900; color:#10B981; line-height:1;">{res['conf']}%</div>
-                    <span style="color:#64748B; font-size:0.8rem; font-weight:700;">CONFIANCE STATISTIQUE</span>
+                    <span style="color:#64748B; font-size:0.8rem; font-weight:700;">CONFIANCE APEX</span>
                 </div>
             </div>
         </div>
@@ -354,7 +430,7 @@ with tab_detail:
         
         with c1:
             st.markdown('<div class="sub-card">', unsafe_allow_html=True)
-            st.markdown("### Top 3 Scores Exacts les plus Probables")
+            st.markdown("### Top 3 Scores Exacts Probables")
             sc_a, sc_b, sc_c = st.columns(3)
             for col, item in zip([sc_a, sc_b, sc_c], res["top_3_scores"]):
                 with col:
@@ -367,16 +443,19 @@ with tab_detail:
             st.markdown('</div>', unsafe_allow_html=True)
 
             st.markdown('<div class="sub-card">', unsafe_allow_html=True)
-            st.markdown("### Distribution des Probabilités 1N2")
+            st.markdown("### Distribution 1N2 & Expected Goals (xG)")
             p1, pN, p2 = st.columns(3)
             with p1: st.markdown(f'<div class="metric-val">{res["p_h"]}%</div><div class="metric-lbl">Victoire {h_name}</div>', unsafe_allow_html=True)
             with pN: st.markdown(f'<div class="metric-val">{res["p_n"]}%</div><div class="metric-lbl">Match Nul (N)</div>', unsafe_allow_html=True)
             with p2: st.markdown(f'<div class="metric-val">{res["p_a"]}%</div><div class="metric-lbl">Victoire {a_name}</div>', unsafe_allow_html=True)
+            
+            st.divider()
+            st.write(f"📊 **Expected Goals calculés (xG)** : {h_name} (**{res['xg_h']}**) vs {a_name} (**{res['xg_a']}**)")
             st.markdown('</div>', unsafe_allow_html=True)
 
         with c2:
             st.markdown('<div class="sub-card">', unsafe_allow_html=True)
-            st.markdown("### Marchés Buts & Les Deux Équipes Marquent")
+            st.markdown("### Marchés Buts & BTTS")
             b1, b2, b3 = st.columns(3)
             with b1: st.markdown(f'<div class="metric-val" style="color:#38BDF8;">{res["prob_o15"]}%</div><div class="metric-lbl">Plus de 1.5 Buts</div>', unsafe_allow_html=True)
             with b2: st.markdown(f'<div class="metric-val" style="color:#38BDF8;">{res["prob_o25"]}%</div><div class="metric-lbl">Plus de 2.5 Buts</div>', unsafe_allow_html=True)
@@ -394,13 +473,13 @@ with tab_detail:
                 st.write(f"Proba > 3.5 Cartons : **{res['cards']['p_3_5']}%**")
             st.markdown('</div>', unsafe_allow_html=True)
     else:
-        st.warning("Aucun match disponible pour la catégorie sélectionnée.")
+        st.warning("Aucun match disponible pour ce filtre.")
 
 # ------------------------------------------
-# TAB 3 : BILAN ET AUDIT DES PREDICTIONS
+# TAB 3 : BILAN ET AUDIT
 # ------------------------------------------
 with tab_audit:
-    st.subheader(f"Bilan & Audit des Matchs Terminés - {selected_comp}")
+    st.subheader(f"Bilan & Audit des Pronostics - {selected_comp}")
     
     if finished_matches:
         wins, total_evaluated = 0, 0
@@ -414,7 +493,7 @@ with tab_audit:
             
             if real_h_g is not None and real_a_g is not None:
                 total_evaluated += 1
-                pred = run_quant_prediction(h_team, a_team, 0, 0, team_stats, avg_goals, is_live=False)
+                pred = run_quant_prediction_v18(h_team, a_team, 0, 0, team_stats, avg_goals, is_live=False)
                 
                 if real_h_g > real_a_g: real_res = "1"
                 elif real_h_g < real_a_g: real_res = "2"
@@ -434,20 +513,20 @@ with tab_audit:
                     "Match": f"{h_team} vs {a_team}",
                     "Score Réel": f"{real_h_g} - {real_a_g}",
                     "Score Prédit": pred["most_probable_score"],
-                    "Conseil Proposé": pred["advice"],
-                    "Résultat": "SUCCESS" if is_success else "ÉCHEC"
+                    "Conseil V18": pred["advice"],
+                    "Statut": "RÉUSSI" if is_success else "ÉCHEC"
                 })
         
         success_rate = round((wins / total_evaluated) * 100, 1) if total_evaluated > 0 else 0
         
         st.markdown(f"""
         <div style="background:#0F172A; padding:15px; border-radius:10px; border-left:5px solid #10B981; margin-bottom:20px;">
-            <span style="font-size:1.2rem; font-weight:800;">Taux de Réussite Global : <span style="color:#10B981;">{success_rate}%</span></span> 
-            ({wins} Réussites sur {total_evaluated} matchs récents évalués)
+            <span style="font-size:1.2rem; font-weight:800;">Taux de Réussite Global V18 : <span style="color:#10B981;">{success_rate}%</span></span> 
+            ({wins} Réussites sur {total_evaluated} matchs récents)
         </div>
         """, unsafe_allow_html=True)
         
         df_audit = pd.DataFrame(audit_list)
         st.dataframe(df_audit, use_container_width=True, hide_index=True)
     else:
-        st.info("Aucun match terminé récent n'a été trouvé.")
+        st.info("Pas assez de données de matchs récents terminés.")
