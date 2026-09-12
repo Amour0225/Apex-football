@@ -6,14 +6,15 @@ import pandas as pd
 from datetime import datetime, timedelta
 
 # ==========================================
-# 1. CONFIGURATION ET DESIGN
+# 1. CONFIGURATION ET DESIGN AMÉLIORÉ
 # ==========================================
 st.set_page_config(
-    page_title="Apex Quant v21.0",
+    page_title="Apex Quant v22.0",
     page_icon="⚽",
     layout="wide"
 )
 
+# CSS Personnalisé pour Gros Caractères et Cartes Hautes Visibilités
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap');
@@ -22,24 +23,65 @@ st.markdown("""
     
     .oracle-card {
         background: linear-gradient(135deg, #0F172A 0%, #1E1B4B 50%, #032B45 100%);
-        border: 1.5px solid #38BDF8; border-radius: 14px; padding: 20px; margin-bottom: 20px;
+        border: 2px solid #38BDF8; border-radius: 16px; padding: 22px; margin-bottom: 22px;
     }
     .sub-card {
-        background-color: #0F172A; border: 1px solid #1E293B;
-        border-radius: 12px; padding: 16px; margin-bottom: 15px;
+        background-color: #0F172A; border: 1.5px solid #1E293B;
+        border-radius: 14px; padding: 18px; margin-bottom: 18px;
     }
     .badge-live {
-        background-color: #EF4444; color: white; padding: 4px 10px;
-        border-radius: 6px; font-weight: 800; font-size: 0.85rem;
+        background-color: #EF4444; color: white; padding: 6px 12px;
+        border-radius: 8px; font-weight: 900; font-size: 0.95rem; letter-spacing: 0.5px;
     }
     .badge-upcoming {
-        background-color: #3B82F6; color: white; padding: 4px 10px;
-        border-radius: 6px; font-weight: 800; font-size: 0.85rem;
+        background-color: #3B82F6; color: white; padding: 6px 12px;
+        border-radius: 8px; font-weight: 900; font-size: 0.95rem;
     }
-    .text-summary {
-        background-color: #1E293B; border-left: 4px solid #38BDF8;
-        padding: 10px 14px; border-radius: 4px; font-size: 0.95rem; font-weight: 600;
-        color: #F1F5F9; margin-bottom: 12px;
+    
+    /* STYLE GROS SCORES EXACTS */
+    .big-score-box {
+        background: #1E293B;
+        border: 2px solid #38BDF8;
+        border-radius: 12px;
+        padding: 15px;
+        text-align: center;
+        margin: 8px 0;
+    }
+    .big-score-val {
+        font-size: 2.3rem;
+        font-weight: 900;
+        color: #38BDF8;
+        line-height: 1.1;
+    }
+    .big-score-prob {
+        font-size: 1.1rem;
+        font-weight: 700;
+        color: #10B981;
+        margin-top: 4px;
+    }
+
+    /* CARTE DU MEILLEUR CHOIX DE GAIN */
+    .value-pick-card {
+        background: linear-gradient(135deg, #064E3B 0%, #047857 100%);
+        border: 2px solid #10B981;
+        border-radius: 14px;
+        padding: 16px;
+        color: #FFFFFF;
+        text-align: center;
+        margin-bottom: 20px;
+    }
+    .value-pick-title { font-size: 0.9rem; font-weight: 800; text-transform: uppercase; color: #A7F3D0; }
+    .value-pick-main { font-size: 1.6rem; font-weight: 900; color: #FFFFFF; margin: 4px 0; }
+
+    /* STYLE DE PRÉDICTION EN DIRECT EN GROS */
+    .live-trend-box {
+        background-color: #0F172A;
+        border-left: 5px solid #F59E0B;
+        padding: 12px 16px;
+        border-radius: 8px;
+        margin-top: 10px;
+        font-size: 1.05rem;
+        font-weight: 700;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -113,7 +155,6 @@ def get_advanced_league_stats(league_code):
                     elif char == 'D': form_pts += 1
             form_factor = np.clip(0.85 + (form_pts / 30.0), 0.75, 1.25)
             
-            # Profils tactiques spécifiques (Cartons, Fautes, Corners, Milieu)
             seed_val = sum(ord(c) for c in name)
             card_rate = float(np.clip(1.8 + (seed_val % 12) * 0.18 + (ga / played) * 0.25, 1.5, 4.2))
             corner_rate = float(np.clip(4.2 + (seed_val % 15) * 0.20 + (gf / played) * 0.45, 3.8, 7.5))
@@ -136,7 +177,7 @@ def get_advanced_league_stats(league_code):
     return stats, avg_goals
 
 # ==========================================
-# 3. MOTEUR MATHÉMATIQUE AVANCÉ
+# 3. MOTEUR MATHÉMATIQUE V22.0
 # ==========================================
 def dixon_coles_adjustment(x, y, h_xg, a_xg, rho=-0.08):
     if x == 0 and y == 0: return max(0.01, 1.0 - (h_xg * a_xg * rho))
@@ -149,7 +190,7 @@ def prob_to_odds(p):
     if p <= 0: return 99.00
     return round(100.0 / p, 2)
 
-def run_quant_prediction_v21(h_name, a_name, score_h=0, score_a=0, elapsed_min=0, team_stats={}, avg_goals=1.35, is_live=False):
+def run_quant_prediction_v22(h_name, a_name, score_h=0, score_a=0, elapsed_min=0, team_stats={}, avg_goals=1.35, is_live=False):
     default_stat = {
         "gf_pg": 1.35, "ga_pg": 1.25, "home_gf_pg": 1.45, "home_ga_pg": 1.10, 
         "away_gf_pg": 1.15, "away_ga_pg": 1.35, "elo": 1500, "form_factor": 1.0,
@@ -178,7 +219,7 @@ def run_quant_prediction_v21(h_name, a_name, score_h=0, score_a=0, elapsed_min=0
         rem_h_xg = full_h_xg
         rem_a_xg = full_a_xg
 
-    # MODELISATION SCORES & PROBABILITES
+    # MATRIX CALCULATIONS
     max_g = 8
     matrix = np.zeros((max_g, max_g))
 
@@ -196,6 +237,7 @@ def run_quant_prediction_v21(h_name, a_name, score_h=0, score_a=0, elapsed_min=0
     tot_p = np.sum(matrix)
     if tot_p > 0: matrix /= tot_p
 
+    # TOP 3 SCORES EXACTS
     flat_idx = np.argsort(matrix.ravel())[::-1]
     top_3_scores = []
     for idx in flat_idx[:3]:
@@ -210,79 +252,91 @@ def run_quant_prediction_v21(h_name, a_name, score_h=0, score_a=0, elapsed_min=0
     prob_o25 = round((1.0 - np.sum([matrix[i,j] for i in range(3) for j in range(3) if i+j <= 2])) * 100, 1)
     prob_btts = round(float(np.sum(matrix[1:, 1:])) * 100, 1)
 
-    # MODELISATION DYNAMIQUE DES CORNERS (ATTAQUE / AILES / MILIEU)
+    # CORNERS
     attack_drive = (full_h_xg + full_a_xg) / 2.5
-    exp_c_tot = round(np.clip(((h_stat["corner_rate"] + a_stat["corner_rate"]) * attack_drive * 0.95) * rem_factor, 3.5, 14.0), 1)
+    exp_c_tot = round(np.clip(((h_stat["corner_rate"] + a_stat["corner_rate"]) * attack_drive * 0.95) * rem_factor, 1.5, 14.0), 1)
     
     prob_c_4_5 = round((1.0 - poisson.cdf(4, exp_c_tot)) * 100, 1) if exp_c_tot > 0 else 0
     prob_c_6_5 = round((1.0 - poisson.cdf(6, exp_c_tot)) * 100, 1) if exp_c_tot > 0 else 0
     prob_c_8_5 = round((1.0 - poisson.cdf(8, exp_c_tot)) * 100, 1) if exp_c_tot > 0 else 0
     prob_c_10_5 = round((1.0 - poisson.cdf(10, exp_c_tot)) * 100, 1) if exp_c_tot > 0 else 0
 
-    likely_c = max(5, int(round(exp_c_tot)))
-    corner_summary = f"Sur ce match, la dynamique attaque/milieu indique qu'il est probable d'atteindre entre {max(4, likely_c - 1)} et {likely_c + 1} corners."
-
-    # MODELISATION DISCIPLINAIRE (ARBITRE / FAUTES / MILIEU / DERBY)
+    # CARTONS
     referee_strictness = round(0.88 + ((sum(ord(c) for c in h_name + a_name) % 35) * 0.01), 2)
     midfield_clash = (h_stat["midfield"] + a_stat["midfield"]) / 2.0
     intensity_mult = 1.15 if abs(h_stat["elo"] - a_stat["elo"]) < 80 else 1.0
     
     base_cards = (h_stat["card_rate"] + a_stat["card_rate"]) / 2.0
-    exp_k_tot = round(np.clip((base_cards * referee_strictness * midfield_clash * intensity_mult) * rem_factor, 1.2, 8.5), 1)
+    exp_k_tot = round(np.clip((base_cards * referee_strictness * midfield_clash * intensity_mult) * rem_factor, 0.8, 8.5), 1)
     
     prob_k_1_5 = round((1.0 - poisson.cdf(1, exp_k_tot)) * 100, 1) if exp_k_tot > 0 else 0
     prob_k_2_5 = round((1.0 - poisson.cdf(2, exp_k_tot)) * 100, 1) if exp_k_tot > 0 else 0
     prob_k_3_5 = round((1.0 - poisson.cdf(3, exp_k_tot)) * 100, 1) if exp_k_tot > 0 else 0
     prob_k_4_5 = round((1.0 - poisson.cdf(4, exp_k_tot)) * 100, 1) if exp_k_tot > 0 else 0
-    prob_k_5_5 = round((1.0 - poisson.cdf(5, exp_k_tot)) * 100, 1) if exp_k_tot > 0 else 0
 
-    likely_k = max(2, int(round(exp_k_tot)))
-    card_summary = f"Selon le style de l'arbitre (indice {referee_strictness}x) et l'intensité au milieu, il est probable d'avoir jusqu'à {likely_k} ou {likely_k + 1} cartons."
+    # SPECIFIQUE EN DIRECT : ALGORITHME D'ÉVOLUTION FIN DE MATCH
+    rem_xg_tot = rem_h_xg + rem_a_xg
+    prob_more_goals = round((1.0 - poisson.pmf(0, rem_xg_tot)) * 100, 1)
+    prob_more_corners_2plus = round((1.0 - poisson.cdf(1, exp_c_tot)) * 100, 1)
+    prob_more_cards_1plus = round((1.0 - poisson.cdf(0, exp_k_tot)) * 100, 1)
 
-    # CONSEIL ET CONFIANCE
-    if (p_h + p_n) >= 70.0 and p_h >= p_a:
-        advice = f"Double Chance : {h_name} ou Nul (1X)"
-        conf = round(p_h + p_n, 1)
-    elif (p_a + p_n) >= 70.0 and p_a > p_h:
-        advice = f"Double Chance : Nul ou {a_name} (X2)"
-        conf = round(p_a + p_n, 1)
-    elif prob_o15 >= 78.0:
-        advice = "Plus de 1.5 Buts au Total"
-        conf = prob_o15
+    # ALGORITHME DE VALEUR OPTIMALE DE GAIN (BEST PICK)
+    best_pick = ""
+    best_prob = 0.0
+    
+    if is_live:
+        if prob_more_goals >= 65.0:
+            best_pick = "⚡ En Direct : Au moins 1 BUT supplémentaire à venir"
+            best_prob = prob_more_goals
+        elif prob_more_corners_2plus >= 70.0:
+            best_pick = "⛳ En Direct : Au moins 2 CORNERS supplémentaires"
+            best_prob = prob_more_corners_2plus
+        else:
+            best_pick = f"🔒 En Direct : Le score actuel {score_h}-{score_a} a de fortes chances de tenir"
+            best_prob = round(100.0 - prob_more_goals, 1)
     else:
-        advice = f"Victoire : {h_name if p_h > p_a else a_name}"
-        conf = round(max(p_h, p_a), 1)
+        if (p_h + p_n) >= 72.0:
+            best_pick = f"🛡️ Double Chance : {h_name} ou Nul (1X)"
+            best_prob = round(p_h + p_n, 1)
+        elif (p_a + p_n) >= 72.0:
+            best_pick = f"🛡️ Double Chance : Nul ou {a_name} (X2)"
+            best_prob = round(p_a + p_n, 1)
+        elif prob_o15 >= 75.0:
+            best_pick = "⚽ Plus de 1.5 Buts au Total dans le match"
+            best_prob = prob_o15
+        else:
+            best_pick = f"🔥 Victoire Directe : {h_name if p_h > p_a else a_name}"
+            best_prob = round(max(p_h, p_a), 1)
 
     return {
         "p_h": round(p_h, 1), "p_n": round(p_n, 1), "p_a": round(p_a, 1),
         "odds_h": prob_to_odds(p_h), "odds_n": prob_to_odds(p_n), "odds_a": prob_to_odds(p_a),
-        "odds_o15": prob_to_odds(prob_o15), "odds_o25": prob_to_odds(prob_o25), "odds_btts": prob_to_odds(prob_btts),
-        "xg_h": round(rem_h_xg, 2), "xg_a": round(rem_a_xg, 2),
+        "odds_o15": prob_to_odds(prob_o15), "odds_o25": prob_to_odds(prob_o25),
         "top_3_scores": top_3_scores,
-        "prob_o15": prob_o15, "prob_o25": prob_o25, "prob_btts": prob_btts,
-        "referee_strictness": referee_strictness,
+        "prob_o15": prob_o15, "prob_o25": prob_o25,
         "corners": {
-            "tot": exp_c_tot, "summary": corner_summary,
-            "p_4_5": prob_c_4_5, "odds_4_5": prob_to_odds(prob_c_4_5),
-            "p_6_5": prob_c_6_5, "odds_6_5": prob_to_odds(prob_c_6_5),
-            "p_8_5": prob_c_8_5, "odds_8_5": prob_to_odds(prob_c_8_5),
-            "p_10_5": prob_c_10_5, "odds_10_5": prob_to_odds(prob_c_10_5)
+            "tot": exp_c_tot, "p_4_5": prob_c_4_5, "p_6_5": prob_c_6_5, 
+            "p_8_5": prob_c_8_5, "p_10_5": prob_c_10_5,
+            "odds_4_5": prob_to_odds(prob_c_4_5), "odds_6_5": prob_to_odds(prob_c_6_5)
         },
         "cards": {
-            "tot": exp_k_tot, "summary": card_summary,
-            "p_1_5": prob_k_1_5, "odds_1_5": prob_to_odds(prob_k_1_5),
-            "p_2_5": prob_k_2_5, "odds_2_5": prob_to_odds(prob_k_2_5),
-            "p_3_5": prob_k_3_5, "odds_3_5": prob_to_odds(prob_k_3_5),
-            "p_4_5": prob_k_4_5, "odds_4_5": prob_to_odds(prob_k_4_5),
-            "p_5_5": prob_k_5_5, "odds_5_5": prob_to_odds(prob_k_5_5)
+            "tot": exp_k_tot, "p_1_5": prob_k_1_5, "p_2_5": prob_k_2_5, 
+            "p_3_5": prob_k_3_5, "p_4_5": prob_k_4_5,
+            "odds_1_5": prob_to_odds(prob_k_1_5), "odds_2_5": prob_to_odds(prob_k_2_5)
         },
-        "advice": advice, "conf": conf
+        "live_trends": {
+            "prob_more_goals": prob_more_goals,
+            "prob_more_corners": prob_more_corners_2plus,
+            "prob_more_cards": prob_more_cards_1plus
+        },
+        "best_pick": best_pick,
+        "best_prob": best_prob
     }
 
 # ==========================================
-# 4. INTERFACE APPLICATIVE
+# 4. INTERFACE APPLICATIVE V22.0
 # ==========================================
-st.sidebar.title("Apex Quant v21.0")
+st.sidebar.title("Apex Quant v22.0")
 selected_comp = st.sidebar.selectbox("Sélectionner la Compétition", list(COMPETITIONS.keys()))
 league_code = COMPETITIONS[selected_comp]
 
@@ -333,39 +387,88 @@ with tab_live:
             
             elapsed = 45 if m.get('status') == 'PAUSED' else 55
             
-            res_live = run_quant_prediction_v21(
+            res_live = run_quant_prediction_v22(
                 h_name, a_name, score_h=score_h, score_a=score_a, 
                 elapsed_min=elapsed, team_stats=team_stats, avg_goals=avg_goals, is_live=True
             )
             
             st.markdown(f"""
             <div class="oracle-card">
-                <span class="badge-live">EN DIRECT ({elapsed}') — SCORE : {score_h} - {score_a}</span>
-                <h3 style="color:#38BDF8; margin:8px 0 4px 0;">{h_name} vs {a_name}</h3>
-                <p style="color:#10B981; font-size:1.1rem; font-weight:800; margin:0;">Pronostic Live : {res_live['advice']} ({res_live['conf']}%)</p>
+                <span class="badge-live">EN DIRECT ({elapsed}') — SCORE ACTUEL : {score_h} - {score_a}</span>
+                <h2 style="color:#38BDF8; margin:10px 0 5px 0; font-weight:900;">{h_name} vs {a_name}</h2>
+            </div>
+            """, unsafe_allow_html=True)
+
+            # CARTE DE GAIN OPTIMISE LIVE
+            st.markdown(f"""
+            <div class="value-pick-card">
+                <div class="value-pick-title">🎯 ALGORITHME DE GAIN OPTIMISÉ (MEILLEURE OPPORTUNITÉ)</div>
+                <div class="value-pick-main">{res_live['best_pick']}</div>
+                <div style="font-size:1.1rem; font-weight:800;">Probabilité estimée : {res_live['best_prob']}%</div>
             </div>
             """, unsafe_allow_html=True)
             
-            # TOP 3 SCORES EXACTS EN DIRECT
-            st.markdown("**Top 3 Scores Exacts Probables à la fin du match :**")
+            # AFFICHAGE GÉANT DES 3 SCORES EXACTS PROBABLES
+            st.markdown("### 🎯 LES 3 SCORES EXACTS LES PLUS PROBABLES (FIN DU MATCH)")
             sc1, sc2, sc3 = st.columns(3)
             with sc1:
-                st.metric("1er Score Probable", res_live['top_3_scores'][0]['score'], f"{res_live['top_3_scores'][0]['prob']}% de probabilité")
+                st.markdown(f"""
+                <div class="big-score-box">
+                    <div style="color:#94A3B8; font-weight:800;">1er SCORE PROBABLE</div>
+                    <div class="big-score-val">{res_live['top_3_scores'][0]['score']}</div>
+                    <div class="big-score-prob">{res_live['top_3_scores'][0]['prob']}% de chance</div>
+                </div>
+                """, unsafe_allow_html=True)
             with sc2:
-                st.metric("2ème Score Probable", res_live['top_3_scores'][1]['score'], f"{res_live['top_3_scores'][1]['prob']}% de probabilité")
+                st.markdown(f"""
+                <div class="big-score-box">
+                    <div style="color:#94A3B8; font-weight:800;">2ème SCORE PROBABLE</div>
+                    <div class="big-score-val">{res_live['top_3_scores'][1]['score']}</div>
+                    <div class="big-score-prob">{res_live['top_3_scores'][1]['prob']}% de chance</div>
+                </div>
+                """, unsafe_allow_html=True)
             with sc3:
-                st.metric("3ème Score Probable", res_live['top_3_scores'][2]['score'], f"{res_live['top_3_scores'][2]['prob']}% de probabilité")
+                st.markdown(f"""
+                <div class="big-score-box">
+                    <div style="color:#94A3B8; font-weight:800;">3ème SCORE PROBABLE</div>
+                    <div class="big-score-val">{res_live['top_3_scores'][2]['score']}</div>
+                    <div class="big-score-prob">{res_live['top_3_scores'][2]['prob']}% de chance</div>
+                </div>
+                """, unsafe_allow_html=True)
 
-            st.markdown("**Projections Live Corners & Cartons Restants :**")
-            c1, c2, c3, c4 = st.columns(4)
-            with c1:
-                st.metric("Cote Live Victoire 1", res_live['odds_h'], f"Probabilité : {res_live['p_h']}%")
-            with c2:
-                st.metric("Cote Live Victoire 2", res_live['odds_a'], f"Probabilité : {res_live['p_a']}%")
-            with c3:
-                st.metric("Corners Restants Estimés", f"{res_live['corners']['tot']} corners", f"Plus de 4.5 : {res_live['corners']['p_4_5']}%")
-            with c4:
-                st.metric("Cartons Restants Estimés", f"{res_live['cards']['tot']} cartons", f"Plus de 1.5 : {res_live['cards']['p_1_5']}%")
+            # PRÉDICTIONS DE SUITE DE MATCH (BUTS, CORNERS, CARTONS RESTANTS)
+            st.markdown("### 🔮 PROJECTIONS RESTANTES POUR CE MATCH EN DIRECT")
+            lt = res_live['live_trends']
+            
+            goal_msg = "🔥 Fort risque de BUT(S) supplémentaire(s) !" if lt['prob_more_goals'] >= 55.0 else "🔒 Probable que le score RESTANT fige ou bouge très peu."
+            corner_msg = f"⛳ Environ +{res_live['corners']['tot']} corners encore attendus d'ici la fin."
+            card_msg = f"🟨 Environ +{res_live['cards']['tot']} cartons encore attendus d'ici la fin."
+
+            col_l1, col_l2, col_l3 = st.columns(3)
+            with col_l1:
+                st.markdown(f"""
+                <div class="sub-card">
+                    <h4 style="color:#F59E0B; margin:0;">⚽ ÉVOLUTION DES BUTS</h4>
+                    <p style="font-size:1.1rem; font-weight:800; margin:8px 0;">{goal_msg}</p>
+                    <span style="color:#10B981; font-weight:700;">Chances d'au moins 1 autre goal : {lt['prob_more_goals']}%</span>
+                </div>
+                """, unsafe_allow_html=True)
+            with col_l2:
+                st.markdown(f"""
+                <div class="sub-card">
+                    <h4 style="color:#38BDF8; margin:0;">⛳ CORNERS RESTANTS</h4>
+                    <p style="font-size:1.1rem; font-weight:800; margin:8px 0;">{corner_msg}</p>
+                    <span style="color:#10B981; font-weight:700;">Chances d'au moins 2 corners + : {lt['prob_more_corners']}%</span>
+                </div>
+                """, unsafe_allow_html=True)
+            with col_l3:
+                st.markdown(f"""
+                <div class="sub-card">
+                    <h4 style="color:#EF4444; margin:0;">🟨 CARTONS RESTANTS</h4>
+                    <p style="font-size:1.1rem; font-weight:800; margin:8px 0;">{card_msg}</p>
+                    <span style="color:#10B981; font-weight:700;">Chances d'au moins 1 carton + : {lt['prob_more_cards']}%</span>
+                </div>
+                """, unsafe_allow_html=True)
             st.divider()
     else:
         st.info("Aucune rencontre en direct actuellement dans cette compétition.")
@@ -382,7 +485,7 @@ with tab_calendar:
             h_team = m['homeTeam']['name']
             a_team = m['awayTeam']['name']
             
-            pred = run_quant_prediction_v21(h_team, a_team, 0, 0, 0, team_stats, avg_goals, is_live=False)
+            pred = run_quant_prediction_v22(h_team, a_team, 0, 0, 0, team_stats, avg_goals, is_live=False)
             
             cal_data.append({
                 "Date & Heure": date_str,
@@ -390,8 +493,8 @@ with tab_calendar:
                 "Cote 1": pred["odds_h"],
                 "Cote N": pred["odds_n"],
                 "Cote 2": pred["odds_a"],
-                "Cote > 1.5": pred["odds_o15"],
-                "Conseil Optimal": f"{pred['advice']} ({pred['conf']}%)"
+                "Score 1er Probable": pred['top_3_scores'][0]['score'],
+                "Conseil Optimal": f"{pred['best_pick']} ({pred['best_prob']}%)"
             })
             
         st.dataframe(pd.DataFrame(cal_data), use_container_width=True, hide_index=True)
@@ -418,66 +521,76 @@ with tab_detail:
         h_name = selected_m['homeTeam']['name']
         a_name = selected_m['awayTeam']['name']
         
-        res = run_quant_prediction_v21(h_name, a_name, 0, 0, 0, team_stats, avg_goals, is_live=False)
+        res = run_quant_prediction_v22(h_name, a_name, 0, 0, 0, team_stats, avg_goals, is_live=False)
         
         st.markdown(f"""
         <div class="oracle-card">
-            <span class="badge-upcoming">PROGRAMMÉ LE {selected_m['utcDate'][:10]} À {selected_m['utcDate'][11:16]} UTC</span>
-            <h2 style="color:#38BDF8; margin:10px 0 5px 0; font-weight:900;">PRONOSTIC : {res['advice']}</h2>
-            <p style="color:#CBD5E1; margin:0;">Indice de Confiance : <b style="color:#10B981; font-size:1.2rem;">{res['conf']}%</b></p>
+            <span class="badge-upcoming">MATCH PROGRAMMÉ LE {selected_m['utcDate'][:10]} À {selected_m['utcDate'][11:16]} UTC</span>
+            <h1 style="color:#38BDF8; margin:10px 0 5px 0; font-weight:900;">{h_name} vs {a_name}</h1>
+        </div>
+        """, unsafe_allow_html=True)
+
+        # CARTE DU MEILLEUR CHOIX DE GAIN
+        st.markdown(f"""
+        <div class="value-pick-card">
+            <div class="value-pick-title">💎 CONSEIL DE GAIN OPTIMISÉ (MEILLEURE OPPORTUNITÉ DU MATCH)</div>
+            <div class="value-pick-main">{res['best_pick']}</div>
+            <div style="font-size:1.1rem; font-weight:800;">Indice de Confiance / Probabilité : {res['best_prob']}%</div>
         </div>
         """, unsafe_allow_html=True)
         
-        # SCORES & 1N2
-        c1, c2 = st.columns(2)
-        with c1:
+        # AFFICHAGE EN GRAND CARACTÈRE DES 3 SCORES EXACTS PROBABLES
+        st.markdown("### 🏆 TOP 3 SCORES EXACTS LES PLUS PROBABLES")
+        sc1, sc2, sc3 = st.columns(3)
+        with sc1:
+            st.markdown(f"""
+            <div class="big-score-box">
+                <div style="color:#94A3B8; font-weight:800;">1er SCORE PROBABLE</div>
+                <div class="big-score-val">{res['top_3_scores'][0]['score']}</div>
+                <div class="big-score-prob">{res['top_3_scores'][0]['prob']}% de probabilité</div>
+            </div>
+            """, unsafe_allow_html=True)
+        with sc2:
+            st.markdown(f"""
+            <div class="big-score-box">
+                <div style="color:#94A3B8; font-weight:800;">2ème SCORE PROBABLE</div>
+                <div class="big-score-val">{res['top_3_scores'][1]['score']}</div>
+                <div class="big-score-prob">{res['top_3_scores'][1]['prob']}% de probabilité</div>
+            </div>
+            """, unsafe_allow_html=True)
+        with sc3:
+            st.markdown(f"""
+            <div class="big-score-box">
+                <div style="color:#94A3B8; font-weight:800;">3ème SCORE PROBABLE</div>
+                <div class="big-score-val">{res['top_3_scores'][2]['score']}</div>
+                <div class="big-score-prob">{res['top_3_scores'][2]['prob']}% de probabilité</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+        st.divider()
+
+        # MARCHÉ CORNERS & CARTONS LISIBLES EN GROS
+        c_cor, c_car = st.columns(2)
+        
+        with c_cor:
             st.markdown('<div class="sub-card">', unsafe_allow_html=True)
-            st.markdown("### Top 3 Scores Exacts Probables")
-            for i, sc in enumerate(res['top_3_scores'], 1):
-                st.write(f"**{i}er score :** `{sc['score']}` — Proba : **{sc['prob']}%**")
+            st.markdown("### ⛳ PRÉDICTIONS CORNERS (Taille globale)")
+            st.write(f"**Total estimé :** Approx. **{res['corners']['tot']} corners**")
+            st.write(f"• Plus de 4.5 Corners : **{res['corners']['p_4_5']}%** (Cote {res['corners']['odds_4_5']})")
+            st.write(f"• Plus de 6.5 Corners : **{res['corners']['p_6_5']}%** (Cote {res['corners']['odds_6_5']})")
+            st.write(f"• Plus de 8.5 Corners : **{res['corners']['p_8_5']}%**")
+            st.write(f"• Plus de 10.5 Corners : **{res['corners']['p_10_5']}%**")
             st.markdown('</div>', unsafe_allow_html=True)
             
-        with c2:
+        with c_car:
             st.markdown('<div class="sub-card">', unsafe_allow_html=True)
-            st.markdown("### Probabilités & Cotes Équitables 1N2")
-            st.write(f"**Victoire {h_name} (1) :** {res['p_h']}% | Cote : **{res['odds_h']}**")
-            st.write(f"**Match Nul (N) :** {res['p_n']}% | Cote : **{res['odds_n']}**")
-            st.write(f"**Victoire {a_name} (2) :** {res['p_a']}% | Cote : **{res['odds_a']}**")
+            st.markdown("### 🟨 PRÉDICTIONS CARTONS (Arbitre + Agressivité)")
+            st.write(f"**Total estimé :** Approx. **{res['cards']['tot']} cartons**")
+            st.write(f"• Plus de 1.5 Cartons : **{res['cards']['p_1_5']}%** (Cote {res['cards']['odds_1_5']})")
+            st.write(f"• Plus de 2.5 Cartons : **{res['cards']['p_2_5']}%** (Cote {res['cards']['odds_2_5']})")
+            st.write(f"• Plus de 3.5 Cartons : **{res['cards']['p_3_5']}%**")
+            st.write(f"• Plus de 4.5 Cartons : **{res['cards']['p_4_5']}%**")
             st.markdown('</div>', unsafe_allow_html=True)
-
-        # MARCHÉ DES CORNERS (DÉBUTE À +4.5)
-        st.markdown('<div class="sub-card">', unsafe_allow_html=True)
-        st.markdown("### Marché des Corners")
-        st.markdown(f'<div class="text-summary">💡 {res["corners"]["summary"]}</div>', unsafe_allow_html=True)
-        
-        col_c1, col_c2, col_c3, col_c4 = st.columns(4)
-        with col_c1:
-            st.metric("Plus de 4.5 Corners", f"{res['corners']['p_4_5']}%", f"Cote : {res['corners']['odds_4_5']}")
-        with col_c2:
-            st.metric("Plus de 6.5 Corners", f"{res['corners']['p_6_5']}%", f"Cote : {res['corners']['odds_6_5']}")
-        with col_c3:
-            st.metric("Plus de 8.5 Corners", f"{res['corners']['p_8_5']}%", f"Cote : {res['corners']['odds_8_5']}")
-        with col_c4:
-            st.metric("Plus de 10.5 Corners", f"{res['corners']['p_10_5']}%", f"Cote : {res['corners']['odds_10_5']}")
-        st.markdown('</div>', unsafe_allow_html=True)
-
-        # MARCHÉ DES CARTONS (DÉBUTE À +1.5 / +2.5 EN ALLANT)
-        st.markdown('<div class="sub-card">', unsafe_allow_html=True)
-        st.markdown("### Marché des Cartons Jaunes / Rouges")
-        st.markdown(f'<div class="text-summary">💡 {res["cards"]["summary"]}</div>', unsafe_allow_html=True)
-        
-        col_k1, col_k2, col_k3, col_k4, col_k5 = st.columns(5)
-        with col_k1:
-            st.metric("Plus de 1.5 Cartons", f"{res['cards']['p_1_5']}%", f"Cote : {res['cards']['odds_1_5']}")
-        with col_k2:
-            st.metric("Plus de 2.5 Cartons", f"{res['cards']['p_2_5']}%", f"Cote : {res['cards']['odds_2_5']}")
-        with col_k3:
-            st.metric("Plus de 3.5 Cartons", f"{res['cards']['p_3_5']}%", f"Cote : {res['cards']['odds_3_5']}")
-        with col_k4:
-            st.metric("Plus de 4.5 Cartons", f"{res['cards']['p_4_5']}%", f"Cote : {res['cards']['odds_4_5']}")
-        with col_k5:
-            st.metric("Plus de 5.5 Cartons", f"{res['cards']['p_5_5']}%", f"Cote : {res['cards']['odds_5_5']}")
-        st.markdown('</div>', unsafe_allow_html=True)
 
 # ------------------------------------------
 # ONGLET 4 : AUDIT
@@ -492,11 +605,11 @@ with tab_audit:
             real_h_g = m['score']['fullTime']['home']
             real_a_g = m['score']['fullTime']['away']
             if real_h_g is not None and real_a_g is not None:
-                pred = run_quant_prediction_v21(h_team, a_team, 0, 0, 0, team_stats, avg_goals, is_live=False)
+                pred = run_quant_prediction_v22(h_team, a_team, 0, 0, 0, team_stats, avg_goals, is_live=False)
                 audit_list.append({
                     "Date": m['utcDate'][:10],
                     "Match": f"{h_team} vs {a_team}",
                     "Score Réel": f"{real_h_g} - {real_a_g}",
-                    "Conseil V21": pred["advice"]
+                    "Meilleur Choix Proposé": pred["best_pick"]
                 })
         st.dataframe(pd.DataFrame(audit_list), use_container_width=True, hide_index=True)
