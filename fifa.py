@@ -6,15 +6,14 @@ import pandas as pd
 from datetime import datetime, timedelta
 
 # ==========================================
-# 1. CONFIGURATION ET DESIGN V23.0
+# 1. CONFIGURATION ET DESIGN V25.0
 # ==========================================
 st.set_page_config(
-    page_title="Apex Quant v23.0",
+    page_title="Apex Quant v25.0",
     page_icon="⚽",
     layout="wide"
 )
 
-# CSS Personnalisé pour Gros Caractères, Cartes et Badges de Réussite/Échec
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap');
@@ -37,8 +36,11 @@ st.markdown("""
         background-color: #3B82F6; color: white; padding: 6px 12px;
         border-radius: 8px; font-weight: 900; font-size: 0.95rem;
     }
+    .badge-league {
+        background-color: #8B5CF6; color: white; padding: 4px 10px;
+        border-radius: 6px; font-weight: 800; font-size: 0.85rem; margin-right: 8px;
+    }
     
-    /* STYLE GROS SCORES EXACTS */
     .big-score-box {
         background: #1E293B;
         border: 2px solid #38BDF8;
@@ -60,7 +62,6 @@ st.markdown("""
         margin-top: 4px;
     }
 
-    /* CARTE DU MEILLEUR CHOIX DE GAIN */
     .value-pick-card {
         background: linear-gradient(135deg, #064E3B 0%, #047857 100%);
         border: 2px solid #10B981;
@@ -73,13 +74,29 @@ st.markdown("""
     .value-pick-title { font-size: 0.9rem; font-weight: 800; text-transform: uppercase; color: #A7F3D0; }
     .value-pick-main { font-size: 1.6rem; font-weight: 900; color: #FFFFFF; margin: 4px 0; }
 
-    /* AUDIT KPI CARDS */
     .audit-stat-box {
         background-color: #1E293B;
         border: 2px solid #3B82F6;
         border-radius: 12px;
         padding: 15px;
         text-align: center;
+    }
+
+    /* CARTE STYLISÉE POUR LE COUPON MULTI-CHAMPIONNATS */
+    .coupon-card {
+        background: linear-gradient(135deg, #1E1B4B 0%, #0F172A 100%);
+        border: 2px solid #8B5CF6;
+        border-radius: 14px;
+        padding: 16px;
+        margin-bottom: 12px;
+    }
+    .coupon-header {
+        background: linear-gradient(135deg, #4C1D95 0%, #6D28D9 100%);
+        border: 2px solid #A855F7;
+        border-radius: 16px;
+        padding: 20px;
+        text-align: center;
+        margin-bottom: 25px;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -174,8 +191,43 @@ def get_advanced_league_stats(league_code):
             
     return stats, avg_goals
 
+# CHARGEMENT MULTI-CHAMPIONNATS POUR LE GENERATEUR GLOBAL
+@st.cache_data(ttl=300)
+def get_all_competitions_upcoming():
+    all_upcoming = []
+    league_stats_dict = {}
+    league_avg_dict = {}
+    
+    today_dt = datetime.utcnow()
+    next_week_dt = today_dt + timedelta(days=8)
+    
+    for comp_name, comp_code in COMPETITIONS.items():
+        stats, avg_g = get_advanced_league_stats(comp_code)
+        league_stats_dict[comp_name] = stats
+        league_avg_dict[comp_name] = avg_g
+        
+        raw = fetch_api(f"competitions/{comp_code}/matches")
+        matches = raw.get("matches", []) if raw else []
+        
+        for m in matches:
+            if m.get('status') in ['SCHEDULED', 'TIMED']:
+                utc_str = m.get('utcDate', '')
+                if utc_str:
+                    try:
+                        m_dt = datetime.strptime(utc_str[:19], "%Y-%m-%dT%H:%M:%S")
+                        if today_dt - timedelta(hours=3) <= m_dt <= next_week_dt:
+                            m_entry = dict(m)
+                            m_entry['league_name'] = comp_name
+                            all_upcoming.append(m_entry)
+                    except Exception:
+                        m_entry = dict(m)
+                        m_entry['league_name'] = comp_name
+                        all_upcoming.append(m_entry)
+                        
+    return all_upcoming, league_stats_dict, league_avg_dict
+
 # ==========================================
-# 3. MOTEUR MATHÉMATIQUE V23.0
+# 3. MOTEUR MATHÉMATIQUE V25.0
 # ==========================================
 def dixon_coles_adjustment(x, y, h_xg, a_xg, rho=-0.08):
     if x == 0 and y == 0: return max(0.01, 1.0 - (h_xg * a_xg * rho))
@@ -217,7 +269,6 @@ def run_quant_prediction_v23(h_name, a_name, score_h=0, score_a=0, elapsed_min=0
         rem_h_xg = full_h_xg
         rem_a_xg = full_a_xg
 
-    # CALCUL MATRIX
     max_g = 8
     matrix = np.zeros((max_g, max_g))
 
@@ -235,7 +286,6 @@ def run_quant_prediction_v23(h_name, a_name, score_h=0, score_a=0, elapsed_min=0
     tot_p = np.sum(matrix)
     if tot_p > 0: matrix /= tot_p
 
-    # TOP 3 SCORES EXACTS
     flat_idx = np.argsort(matrix.ravel())[::-1]
     top_3_scores = []
     for idx in flat_idx[:3]:
@@ -249,7 +299,6 @@ def run_quant_prediction_v23(h_name, a_name, score_h=0, score_a=0, elapsed_min=0
     prob_o15 = round((1.0 - (matrix[0,0] + matrix[1,0] + matrix[0,1])) * 100, 1)
     prob_o25 = round((1.0 - np.sum([matrix[i,j] for i in range(3) for j in range(3) if i+j <= 2])) * 100, 1)
 
-    # CORNERS
     attack_drive = (full_h_xg + full_a_xg) / 2.5
     exp_c_tot = round(np.clip(((h_stat["corner_rate"] + a_stat["corner_rate"]) * attack_drive * 0.95) * rem_factor, 1.5, 14.0), 1)
     
@@ -258,7 +307,6 @@ def run_quant_prediction_v23(h_name, a_name, score_h=0, score_a=0, elapsed_min=0
     prob_c_8_5 = round((1.0 - poisson.cdf(8, exp_c_tot)) * 100, 1) if exp_c_tot > 0 else 0
     prob_c_10_5 = round((1.0 - poisson.cdf(10, exp_c_tot)) * 100, 1) if exp_c_tot > 0 else 0
 
-    # CARTONS
     referee_strictness = round(0.88 + ((sum(ord(c) for c in h_name + a_name) % 35) * 0.01), 2)
     midfield_clash = (h_stat["midfield"] + a_stat["midfield"]) / 2.0
     intensity_mult = 1.15 if abs(h_stat["elo"] - a_stat["elo"]) < 80 else 1.0
@@ -271,48 +319,54 @@ def run_quant_prediction_v23(h_name, a_name, score_h=0, score_a=0, elapsed_min=0
     prob_k_3_5 = round((1.0 - poisson.cdf(3, exp_k_tot)) * 100, 1) if exp_k_tot > 0 else 0
     prob_k_4_5 = round((1.0 - poisson.cdf(4, exp_k_tot)) * 100, 1) if exp_k_tot > 0 else 0
 
-    # DYNAMIQUE LIVE
     rem_xg_tot = rem_h_xg + rem_a_xg
     prob_more_goals = round((1.0 - poisson.pmf(0, rem_xg_tot)) * 100, 1)
     prob_more_corners_2plus = round((1.0 - poisson.cdf(1, exp_c_tot)) * 100, 1)
     prob_more_cards_1plus = round((1.0 - poisson.cdf(0, exp_k_tot)) * 100, 1)
 
-    # ALGORITHME BEST PICK
     best_pick = ""
     best_prob = 0.0
     pick_type = ""
+    selected_odds = 1.20
     
     if is_live:
         if prob_more_goals >= 65.0:
             best_pick = "⚡ En Direct : Au moins 1 BUT supplémentaire"
             best_prob = prob_more_goals
             pick_type = "LIVE_GOAL"
+            selected_odds = prob_to_odds(prob_more_goals)
         elif prob_more_corners_2plus >= 70.0:
             best_pick = "⛳ En Direct : Au moins 2 CORNERS supplémentaires"
             best_prob = prob_more_corners_2plus
             pick_type = "LIVE_CORNER"
+            selected_odds = prob_to_odds(prob_more_corners_2plus)
         else:
             best_pick = f"🔒 En Direct : Score {score_h}-{score_a} conserve"
             best_prob = round(100.0 - prob_more_goals, 1)
             pick_type = "LIVE_STABLE"
+            selected_odds = prob_to_odds(best_prob)
     else:
         if (p_h + p_n) >= 72.0:
             best_pick = f"🛡️ Double Chance : {h_name} ou Nul (1X)"
             best_prob = round(p_h + p_n, 1)
             pick_type = "1X"
+            selected_odds = prob_to_odds(best_prob)
         elif (p_a + p_n) >= 72.0:
             best_pick = f"🛡️ Double Chance : Nul ou {a_name} (X2)"
             best_prob = round(p_a + p_n, 1)
             pick_type = "X2"
+            selected_odds = prob_to_odds(best_prob)
         elif prob_o15 >= 75.0:
             best_pick = "⚽ Plus de 1.5 Buts au Total"
             best_prob = prob_o15
             pick_type = "O15"
+            selected_odds = prob_to_odds(prob_o15)
         else:
             fav = h_name if p_h > p_a else a_name
             best_pick = f"🔥 Victoire Directe : {fav}"
             best_prob = round(max(p_h, p_a), 1)
             pick_type = "HOME_WIN" if p_h > p_a else "AWAY_WIN"
+            selected_odds = prob_to_odds(best_prob)
 
     return {
         "p_h": round(p_h, 1), "p_n": round(p_n, 1), "p_a": round(p_a, 1),
@@ -337,14 +391,15 @@ def run_quant_prediction_v23(h_name, a_name, score_h=0, score_a=0, elapsed_min=0
         },
         "best_pick": best_pick,
         "best_prob": best_prob,
-        "pick_type": pick_type
+        "pick_type": pick_type,
+        "selected_odds": selected_odds
     }
 
 # ==========================================
-# 4. INTERFACE APPLICATIVE V23.0
+# 4. INTERFACE APPLICATIVE V25.0
 # ==========================================
-st.sidebar.title("Apex Quant v23.0")
-selected_comp = st.sidebar.selectbox("Sélectionner la Compétition", list(COMPETITIONS.keys()))
+st.sidebar.title("Apex Quant v25.0")
+selected_comp = st.sidebar.selectbox("Sélectionner la Compétition principale", list(COMPETITIONS.keys()))
 league_code = COMPETITIONS[selected_comp]
 
 team_stats, avg_goals = get_advanced_league_stats(league_code)
@@ -371,11 +426,13 @@ for m in all_matches:
 
 finished_matches = [m for m in all_matches if m.get('status') == 'FINISHED']
 
-tab_live, tab_calendar, tab_detail, tab_audit = st.tabs([
+# ONGLET DU GENERATEUR MULTI-CHAMPIONNATS
+tab_live, tab_calendar, tab_detail, tab_audit, tab_coupon = st.tabs([
     f"🔴 EN DIRECT ({len(live_matches)})",
     f"📅 CALENDRIER ({len(upcoming_matches)})", 
     "📊 ANALYSE DETAILLEE",
-    f"📈 AUDIT & VÉRIFICATION ({len(finished_matches)})"
+    f"📈 AUDIT & VÉRIFICATION ({len(finished_matches)})",
+    "🎟️ COUPON MULTI-CHAMPIONNATS (5 MATCHS)"
 ])
 
 # ------------------------------------------
@@ -406,7 +463,6 @@ with tab_live:
             </div>
             """, unsafe_allow_html=True)
 
-            # CARTE DE GAIN OPTIMISE LIVE
             st.markdown(f"""
             <div class="value-pick-card">
                 <div class="value-pick-title">🎯 ALGORITHME DE GAIN OPTIMISÉ (MEILLEURE OPPORTUNITÉ)</div>
@@ -415,7 +471,6 @@ with tab_live:
             </div>
             """, unsafe_allow_html=True)
             
-            # AFFICHAGE GÉANT DES 3 SCORES EXACTS PROBABLES
             st.markdown("### 🎯 LES 3 SCORES EXACTS LES PLUS PROBABLES (FIN DU MATCH)")
             sc1, sc2, sc3 = st.columns(3)
             with sc1:
@@ -443,7 +498,6 @@ with tab_live:
                 </div>
                 """, unsafe_allow_html=True)
 
-            # PRÉDICTIONS EN DIRECT (BUTS, CORNERS, CARTONS RESTANTS)
             st.markdown("### 🔮 PROJECTIONS RESTANTES POUR CE MATCH EN DIRECT")
             lt = res_live['live_trends']
             
@@ -537,7 +591,6 @@ with tab_detail:
         </div>
         """, unsafe_allow_html=True)
 
-        # CARTE DU MEILLEUR CHOIX DE GAIN
         st.markdown(f"""
         <div class="value-pick-card">
             <div class="value-pick-title">💎 CONSEIL DE GAIN OPTIMISÉ (MEILLEURE OPPORTUNITÉ DU MATCH)</div>
@@ -546,7 +599,6 @@ with tab_detail:
         </div>
         """, unsafe_allow_html=True)
         
-        # AFFICHAGE EN GRAND CARACTÈRE DES 3 SCORES EXACTS PROBABLES
         st.markdown("### 🏆 TOP 3 SCORES EXACTS LES PLUS PROBABLES")
         sc1, sc2, sc3 = st.columns(3)
         with sc1:
@@ -576,7 +628,6 @@ with tab_detail:
 
         st.divider()
 
-        # MARCHÉ CORNERS & CARTONS LISIBLES EN GROS
         c_cor, c_car = st.columns(2)
         
         with c_cor:
@@ -600,7 +651,7 @@ with tab_detail:
             st.markdown('</div>', unsafe_allow_html=True)
 
 # ------------------------------------------
-# ONGLET 4 : AUDIT & VÉRIFICATION AUTOMATIQUE (NOUVEAU MODULE v23.0)
+# ONGLET 4 : AUDIT & VÉRIFICATION AUTOMATIQUE
 # ------------------------------------------
 with tab_audit:
     st.subheader(f"📊 Évaluation des Prédictions vs Résultats Réels - {selected_comp}")
@@ -622,20 +673,17 @@ with tab_audit:
                 real_score_str = f"{real_h}-{real_a}"
                 real_tot_goals = real_h + real_a
                 
-                # Calcul de la prédiction faite AVANT le match
                 pred = run_quant_prediction_v23(h_team, a_team, 0, 0, 0, team_stats, avg_goals, is_live=False)
                 
                 top_scores = [s['score'] for s in pred['top_3_scores']]
                 top_3_str = ", ".join(top_scores)
                 
-                # 1. ÉVALUATION SCORE EXACT (Réussite si le score réel est dans le Top 3)
                 if real_score_str in top_scores:
                     eval_score = "✅ RÉUSSITE (Dans Top 3)"
                     success_score_count += 1
                 else:
                     eval_score = "❌ ÉCHEC"
                 
-                # 2. ÉVALUATION CONSEIL DE GAIN (BEST PICK)
                 ptype = pred['pick_type']
                 pick_success = False
                 
@@ -651,7 +699,6 @@ with tab_audit:
                 else:
                     eval_pick = "❌ ÉCHEC"
                 
-                # 3. ÉVALUATION MARCHE DES BUTS (+1.5 Buts)
                 eval_o15 = "✅ RÉUSSITE (+1.5 Valide)" if real_tot_goals > 1 else "❌ ÉCHEC (Moins de 1.5)"
                 
                 total_eval += 1
@@ -669,7 +716,6 @@ with tab_audit:
                     "Cartons Estimés": f"~{pred['cards']['tot']}"
                 })
         
-        # INDICATEURS CLÉS EN HAUT DE L'AUDIT
         if total_eval > 0:
             rate_pick = round((success_pick_count / total_eval) * 100, 1)
             rate_score = round((success_score_count / total_eval) * 100, 1)
@@ -704,3 +750,137 @@ with tab_audit:
             st.info("Aucun match terminé récent avec des scores validés à évaluer.")
     else:
         st.info("Aucun match terminé disponible pour l'instant dans cette compétition.")
+
+# ------------------------------------------
+# ONGLET 5 : GENERATEUR MULTI-CHAMPIONNATS (NOUVEAU V25.0)
+# ------------------------------------------
+with tab_coupon:
+    st.subheader("🎟️ Coupon Multi-Championnats (Minimum 5 Matchs)")
+    
+    with st.spinner("Analyse et scan en cours de tous les grands championnats..."):
+        all_multi_matches, multi_stats, multi_avg = get_all_competitions_upcoming()
+    
+    if len(all_multi_matches) < 5:
+        st.warning("Il n'y a pas assez de matchs programmés dans l'ensemble des grands championnats pour former un coupon complet de 5 matchs.")
+    else:
+        # Groupement des matchs par date à travers tous les championnats
+        dates_dict = {}
+        for m in all_multi_matches:
+            d = m['utcDate'][:10]
+            dates_dict.setdefault(d, []).append(m)
+        
+        available_dates = sorted(list(dates_dict.keys()))
+        selected_date = st.selectbox("Sélectionner la date du coupon :", available_dates)
+        
+        day_matches = dates_dict.get(selected_date, [])
+        
+        if len(day_matches) < 5:
+            st.info(f"Seulement {len(day_matches)} match(s) au total le {selected_date}. Élargissement de la recherche aux matchs les plus proches...")
+            pool_matches = all_multi_matches
+        else:
+            pool_matches = day_matches
+        
+        # ANALYSE QUANTITATIVE DE CHAQUE RENCONTRE
+        analyzed_list = []
+        for m in pool_matches:
+            league = m['league_name']
+            h_team = m['homeTeam']['name']
+            a_team = m['awayTeam']['name']
+            match_time = m['utcDate'][11:16]
+            
+            # Utilisation des stats spécifiques au championnat de la rencontre
+            league_team_stats = multi_stats.get(league, {})
+            league_avg_goals = multi_avg.get(league, 1.35)
+            
+            pred = run_quant_prediction_v23(
+                h_team, a_team, 0, 0, 0, 
+                team_stats=league_team_stats, 
+                avg_goals=league_avg_goals, 
+                is_live=False
+            )
+            
+            analyzed_list.append({
+                "league": league,
+                "match": f"{h_team} vs {a_team}",
+                "time": match_time,
+                "pick": pred["best_pick"],
+                "prob": pred["best_prob"],
+                "type": pred["pick_type"],
+                "odds": pred["selected_odds"],
+                "top_score": pred['top_3_scores'][0]['score']
+            })
+        
+        # TRI PAR PROBABILITÉ DÉCROISSANTE
+        analyzed_list.sort(key=lambda x: x["prob"], reverse=True)
+        
+        # SÉLECTION DES 5 MEILLEURS ÉVÉNEMENTS (RÉPARTIS SUR LES CHAMPIONNATS)
+        selected_coupon = []
+        league_counts = {}
+        type_counts = {}
+        
+        # Pass 1: Sélection équilibrée multi-championnats
+        for item in analyzed_list:
+            lg = item["league"]
+            tp = item["type"]
+            
+            # Règle : Max 2 matchs du même championnat & Max 2 types de paris identiques
+            if league_counts.get(lg, 0) < 2 and type_counts.get(tp, 0) < 2:
+                selected_coupon.append(item)
+                league_counts[lg] = league_counts.get(lg, 0) + 1
+                type_counts[tp] = type_counts.get(tp, 0) + 1
+            
+            if len(selected_coupon) == 5:
+                break
+        
+        # Pass 2: Compléter si le filtre strict n'a pas atteint 5
+        if len(selected_coupon) < 5:
+            for item in analyzed_list:
+                if item not in selected_coupon:
+                    selected_coupon.append(item)
+                if len(selected_coupon) == 5:
+                    break
+        
+        # CALCUL DES INDICATEURS CLÉS
+        total_odds = 1.0
+        sum_prob = 0.0
+        for leg in selected_coupon:
+            total_odds *= leg["odds"]
+            sum_prob += leg["prob"]
+            
+        avg_confidence = round(sum_prob / len(selected_coupon), 1)
+        total_odds_formatted = round(total_odds, 2)
+        
+        # EN-TÊTE DU COUPON
+        st.markdown(f"""
+        <div class="coupon-header">
+            <h2 style="margin:0; color:#F59E0B; font-weight:900;">🔥 COUPON DU JOUR MULTI-CHAMPIONNATS (V25.0)</h2>
+            <div style="font-size:1.4rem; font-weight:800; margin-top:10px; color:#FFFFFF;">
+                Côte Totale Cumulée : <span style="color:#38BDF8; font-size:2rem; font-weight:900;">{total_odds_formatted}</span>
+            </div>
+            <div style="font-size:1.1rem; font-weight:700; color:#10B981; margin-top:5px;">
+                Indice de Sécurité Moyen du Coupon : {avg_confidence}%
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        st.markdown("### 📋 DÉTAIL DES 5 SÉLECTIONS DU COMBINÉ")
+        
+        for idx, leg in enumerate(selected_coupon, 1):
+            st.markdown(f"""
+            <div class="coupon-card">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <div>
+                        <span class="badge-league">{leg['league']}</span>
+                        <span style="color:#A855F7; font-weight:900; font-size:1.05rem;">ÉVÉNEMENT #{idx} — [{leg['time']} UTC]</span>
+                    </div>
+                    <span style="background-color:#10B981; color:white; padding:3px 10px; border-radius:6px; font-weight:800;">Fiabilité : {leg['prob']}%</span>
+                </div>
+                <h3 style="color:#38BDF8; margin:8px 0; font-weight:900;">{leg['match']}</h3>
+                <div style="font-size:1.2rem; font-weight:800; color:#FFFFFF;">
+                    🎯 Prédiction Sûre : <span style="color:#F59E0B;">{leg['pick']}</span>
+                </div>
+                <div style="font-size:1rem; color:#94A3B8; margin-top:4px;">
+                    Cote estimée : <b>{leg['odds']}</b> | Score le plus probable : <b>{leg['top_score']}</b>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
