@@ -9,7 +9,7 @@ from datetime import datetime, timedelta
 # 1. CONFIGURATION & INTERFACE DESIGN
 # ==========================================
 st.set_page_config(
-    page_title="Apex Quant v18.2 - Horizontal UI",
+    page_title="Apex Quant v18.3 - Live Engine",
     page_icon="⚽",
     layout="wide"
 )
@@ -27,6 +27,11 @@ st.markdown("""
     .sub-card {
         background-color: #0F172A; border: 1px solid #1E293B;
         border-radius: 12px; padding: 18px; margin-bottom: 15px;
+    }
+    .badge-live {
+        background-color: #EF4444; color: white; padding: 4px 10px;
+        border-radius: 6px; font-weight: 800; font-size: 0.85rem;
+        animation: pulse 2s infinite;
     }
     .badge-upcoming {
         background-color: #3B82F6; color: white; padding: 4px 10px;
@@ -64,7 +69,7 @@ COMPETITIONS = {
     "Ligue des Champions": "CL"
 }
 
-@st.cache_data(ttl=60)
+@st.cache_data(ttl=30)
 def fetch_api(endpoint):
     try:
         res = requests.get(f"{BASE_URL}{endpoint}", headers={"X-Auth-Token": API_KEY}, timeout=8)
@@ -136,7 +141,7 @@ def get_advanced_league_stats(league_code):
     return stats, avg_goals
 
 # ==========================================
-# 3. MOTEUR QUANTITATIF & CALCULS
+# 3. MOTEUR QUANTITATIF (AVEC TEMPS REEL)
 # ==========================================
 def dixon_coles_adjustment(x, y, h_xg, a_xg, rho=-0.08):
     if x == 0 and y == 0: return max(0.01, 1.0 - (h_xg * a_xg * rho))
@@ -149,7 +154,7 @@ def prob_to_odds(p):
     if p <= 0: return 99.00
     return round(100.0 / p, 2)
 
-def run_quant_prediction_v18(h_name, a_name, score_h, score_a, team_stats, avg_goals, is_live=False):
+def run_quant_prediction_v18(h_name, a_name, score_h=0, score_a=0, elapsed_min=0, team_stats={}, avg_goals=1.35, is_live=False):
     default_stat = {"gf_pg": 1.35, "ga_pg": 1.25, "home_gf_pg": 1.45, "home_ga_pg": 1.10, 
                     "away_gf_pg": 1.15, "away_ga_pg": 1.35, "elo": 1500, "form_factor": 1.0, "form_str": "N/A"}
     
@@ -166,12 +171,19 @@ def run_quant_prediction_v18(h_name, a_name, score_h, score_a, team_stats, avg_g
     full_h_xg = float(np.clip(raw_h_xg * elo_mult_h * h_stat["form_factor"], 0.5, 3.5))
     full_a_xg = float(np.clip(raw_a_xg * elo_mult_a * a_stat["form_factor"], 0.4, 3.0))
 
-    rem_h_xg = full_h_xg * 0.55 if is_live else full_h_xg
-    rem_a_xg = full_a_xg * 0.55 if is_live else full_a_xg
+    # AJUSTEMENT EN DIRECT : Calcul du xG restant selon le temps écoulé
+    if is_live:
+        rem_factor = max(0.05, (90.0 - float(elapsed_min)) / 90.0) if elapsed_min > 0 else 0.50
+        rem_h_xg = full_h_xg * rem_factor
+        rem_a_xg = full_a_xg * rem_factor
+    else:
+        rem_h_xg = full_h_xg
+        rem_a_xg = full_a_xg
 
     max_g = 8
     matrix = np.zeros((max_g, max_g))
 
+    # CALCUL DE LA MATRICE PARTANT DU SCORE ACTUEL
     for dh in range(max_g - score_h):
         for da in range(max_g - score_a):
             p_h = poisson.pmf(dh, rem_h_xg)
@@ -186,6 +198,7 @@ def run_quant_prediction_v18(h_name, a_name, score_h, score_a, team_stats, avg_g
     tot_p = np.sum(matrix)
     if tot_p > 0: matrix /= tot_p
 
+    # TOP 3 SCORES PROBABLES DE FIN DE MATCH
     flat_idx = np.argsort(matrix.ravel())[::-1]
     top_3_scores = []
     for idx in flat_idx[:3]:
@@ -207,16 +220,6 @@ def run_quant_prediction_v18(h_name, a_name, score_h, score_a, team_stats, avg_g
     odds_o25 = prob_to_odds(prob_o25)
     odds_btts = prob_to_odds(prob_btts)
 
-    exp_c_h = round(np.clip(4.8 + (full_h_xg - 1.2) * 1.3, 1.0, 9.5), 1)
-    exp_c_a = round(np.clip(3.8 + (full_a_xg - 1.0) * 1.2, 1.0, 8.5), 1)
-    exp_c_tot = round(exp_c_h + exp_c_a, 1)
-    prob_c_8_5 = round((1.0 - nbinom.cdf(8, 10, 10 / (10 + exp_c_tot))) * 100, 1)
-
-    exp_k_h = round(np.clip(2.0 + (full_a_xg * 0.4), 0.5, 5.0), 1)
-    exp_k_a = round(np.clip(2.3 + (full_h_xg * 0.4), 0.5, 5.0), 1)
-    exp_k_tot = round(exp_k_h + exp_k_a, 1)
-    prob_k_3_5 = round((1.0 - nbinom.cdf(3, 8, 8 / (8 + exp_k_tot))) * 100, 1)
-
     if (p_h + p_n) >= 70.0 and p_h >= p_a:
         advice = f"Double Chance : {h_name} ou Nul (1X)"
         conf = round(p_h + p_n, 1)
@@ -224,7 +227,7 @@ def run_quant_prediction_v18(h_name, a_name, score_h, score_a, team_stats, avg_g
         advice = f"Double Chance : Nul ou {a_name} (X2)"
         conf = round(p_a + p_n, 1)
     elif prob_o15 >= 78.0:
-        advice = "Plus de 1.5 Buts dans le Match"
+        advice = "Plus de 1.5 Buts au Total"
         conf = prob_o15
     else:
         advice = f"Victoire : {h_name if p_h > p_a else a_name}"
@@ -234,20 +237,17 @@ def run_quant_prediction_v18(h_name, a_name, score_h, score_a, team_stats, avg_g
         "p_h": round(p_h, 1), "p_n": round(p_n, 1), "p_a": round(p_a, 1),
         "odds_h": odds_h, "odds_n": odds_n, "odds_a": odds_a,
         "odds_o15": odds_o15, "odds_o25": odds_o25, "odds_btts": odds_btts,
-        "xg_h": round(full_h_xg, 2), "xg_a": round(full_a_xg, 2),
+        "xg_h": round(rem_h_xg, 2), "xg_a": round(rem_a_xg, 2),
         "top_3_scores": top_3_scores,
         "prob_o15": prob_o15, "prob_o25": prob_o25, "prob_btts": prob_btts,
-        "corners": {"h": exp_c_h, "a": exp_c_a, "tot": exp_c_tot, "p_8_5": prob_c_8_5},
-        "cards": {"h": exp_k_h, "a": exp_k_a, "tot": exp_k_tot, "p_3_5": prob_k_3_5},
         "advice": advice, "conf": conf,
-        "h_stat": h_stat, "a_stat": a_stat,
-        "most_probable_score": top_3_scores[0]["score"]
+        "h_stat": h_stat, "a_stat": a_stat
     }
 
 # ==========================================
 # 4. INTERFACE UTILISATEUR
 # ==========================================
-st.sidebar.title("Navigation Quant V18.2")
+st.sidebar.title("Navigation Quant V18.3")
 selected_comp = st.sidebar.selectbox("Sélectionner la Compétition", list(COMPETITIONS.keys()))
 league_code = COMPETITIONS[selected_comp]
 
@@ -255,6 +255,9 @@ team_stats, avg_goals = get_advanced_league_stats(league_code)
 raw_matches = fetch_api(f"competitions/{league_code}/matches")
 
 all_matches = raw_matches.get("matches", []) if raw_matches else []
+
+# TRI PAR CATEGORIES
+live_matches = [m for m in all_matches if m.get('status') in ['IN_PLAY', 'LIVE', 'PAUSED']]
 
 today_dt = datetime.utcnow()
 next_week_dt = today_dt + timedelta(days=8)
@@ -273,14 +276,79 @@ for m in all_matches:
 
 finished_matches = [m for m in all_matches if m.get('status') == 'FINISHED']
 
-tab_calendar, tab_detail, tab_audit = st.tabs([
+tab_live, tab_calendar, tab_detail, tab_audit = st.tabs([
+    f"🔴 EN DIRECT ({len(live_matches)})",
     f"📅 CALENDRIER ({len(upcoming_matches)})", 
-    "📊 ANALYSE DETAILLEE ET COTES",
-    "📈 AUDIT DES PREDICTIONS"
+    "📊 ANALYSE DETAILLEE",
+    "📈 AUDIT"
 ])
 
 # ------------------------------------------
-# TAB 1 : CALENDRIER DES MATCHS
+# TAB 1 : MATCHS EN DIRECT
+# ------------------------------------------
+with tab_live:
+    st.subheader(f"Matchs en Direct - {selected_comp}")
+    if live_matches:
+        for m in live_matches:
+            h_name = m['homeTeam']['name']
+            a_name = m['awayTeam']['name']
+            
+            # Recupération du score live
+            score_obj = m.get('score', {}).get('fullTime', {})
+            score_h = score_obj.get('home', 0) if score_obj.get('home') is not None else 0
+            score_a = score_obj.get('away', 0) if score_obj.get('away') is not None else 0
+            
+            # Estimation minute si indisponible
+            elapsed = 45 if m.get('status') == 'PAUSED' else 55
+            
+            res_live = run_quant_prediction_v18(
+                h_name, a_name, score_h=score_h, score_a=score_a, 
+                elapsed_min=elapsed, team_stats=team_stats, avg_goals=avg_goals, is_live=True
+            )
+            
+            st.markdown(f"""
+            <div class="oracle-card">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <div>
+                        <span class="badge-live">EN DIRECT ({elapsed}') — SCORE : {score_h} - {score_a}</span>
+                        <h3 style="color:#38BDF8; margin:10px 0 5px 0;">{h_name} vs {a_name}</h3>
+                        <p style="color:#CBD5E1; margin:0;">Conseil Live : <b>{res_live['advice']}</b> ({res_live['conf']}%)</p>
+                    </div>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            # BANDEAU DE SCORES FINAUX EN DIRECT
+            st.markdown(f"""
+            <div class="horizontal-scores-container">
+                <div class="score-card score-card-top">
+                    <div class="metric-lbl" style="color:#38BDF8;">Score Final le + probable</div>
+                    <div style="font-size:1.5rem; color:#38BDF8; font-weight:900;">{res_live['top_3_scores'][0]['score']}</div>
+                    <div style="color:#10B981; font-size:0.8rem;">{res_live['top_3_scores'][0]['prob']}% proba</div>
+                </div>
+                <div class="score-card">
+                    <div class="metric-lbl">2e Score probable</div>
+                    <div style="font-size:1.5rem; color:#F1F5F9; font-weight:900;">{res_live['top_3_scores'][1]['score']}</div>
+                    <div style="color:#10B981; font-size:0.8rem;">{res_live['top_3_scores'][1]['prob']}% proba</div>
+                </div>
+                <div class="score-card">
+                    <div class="metric-lbl">Cote Live Victoire H</div>
+                    <div class="metric-val">{res_live['p_h']}%</div>
+                    <div class="odds-lbl">Cote : {res_live['odds_h']}</div>
+                </div>
+                <div class="score-card">
+                    <div class="metric-lbl">Cote Live Victoire A</div>
+                    <div class="metric-val">{res_live['p_a']}%</div>
+                    <div class="odds-lbl">Cote : {res_live['odds_a']}</div>
+                </div>
+            </div>
+            <br>
+            """, unsafe_allow_html=True)
+    else:
+        st.info("Aucune rencontre en direct actuellement dans cette compétition.")
+
+# ------------------------------------------
+# TAB 2 : CALENDRIER DES MATCHS
 # ------------------------------------------
 with tab_calendar:
     st.subheader(f"Matchs des 7 Prochains Jours - {selected_comp}")
@@ -291,7 +359,7 @@ with tab_calendar:
             h_team = m['homeTeam']['name']
             a_team = m['awayTeam']['name']
             
-            pred = run_quant_prediction_v18(h_team, a_team, 0, 0, team_stats, avg_goals, is_live=False)
+            pred = run_quant_prediction_v18(h_team, a_team, 0, 0, 0, team_stats, avg_goals, is_live=False)
             
             cal_data.append({
                 "Date & Heure": date_str,
@@ -309,10 +377,10 @@ with tab_calendar:
         st.info("Aucune rencontre programmée dans les 7 prochains jours.")
 
 # ------------------------------------------
-# TAB 2 : ANALYSE DETAILLEE (BANDEAU HORIZONTAL)
+# TAB 3 : ANALYSE DETAILLEE (AVEC OPTION SIMULATEUR EN DIRECT)
 # ------------------------------------------
 with tab_detail:
-    st.subheader("Analyse Détaillée d'une Rencontre")
+    st.subheader("Analyse & Simulation de Match")
     
     if upcoming_matches or all_matches:
         match_options = {}
@@ -328,28 +396,36 @@ with tab_detail:
         h_name = selected_m['homeTeam']['name']
         a_name = selected_m['awayTeam']['name']
         
-        res = run_quant_prediction_v18(h_name, a_name, 0, 0, team_stats, avg_goals, is_live=False)
+        # PARAMETRES EN DIRECT OU SIMULATION
+        st.markdown("**Simulateur d'évolution de score (Test en Direct)**")
+        sc_col1, sc_col2, sc_col3 = st.columns(3)
+        with sc_col1: sim_h = st.number_input(f"Score {h_name}", min_value=0, value=0)
+        with sc_col2: sim_a = st.number_input(f"Score {a_name}", min_value=0, value=0)
+        with sc_col3: sim_min = st.slider("Minute du match", 0, 90, 0)
         
-        # BANDEAU DE PRONOSTIC PRINCIPAL
+        is_sim_live = sim_min > 0 or sim_h > 0 or sim_a > 0
+        
+        res = run_quant_prediction_v18(h_name, a_name, sim_h, sim_a, sim_min, team_stats, avg_goals, is_live=is_sim_live)
+        
         st.markdown(f"""
         <div class="oracle-card">
             <div style="display:flex; justify-content:space-between; align-items:center;">
                 <div>
-                    <span class="badge-upcoming">PROGRAMME LE {selected_m['utcDate'][:10]} A {selected_m['utcDate'][11:16]} UTC</span>
+                    <span class="badge-upcoming">PRONOSTIC MATRICIEL ET COTES</span>
                     <h2 style="color:#38BDF8; margin:10px 0 5px 0; font-weight:900;">PRONOSTIC : {res['advice']}</h2>
-                    <p style="color:#CBD5E1; margin:0;">Modèle Quant V18.2 (Strictement Horizontale).</p>
+                    <p style="color:#CBD5E1; margin:0;">xG Restant : {h_name} ({res['xg_h']}) | {a_name} ({res['xg_a']})</p>
                 </div>
                 <div style="text-align:right;">
                     <div style="font-size:2.8rem; font-weight:900; color:#10B981; line-height:1;">{res['conf']}%</div>
-                    <span style="color:#64748B; font-size:0.8rem; font-weight:700;">CONFIANCE</span>
+                    <span style="color:#64748B; font-size:0.8rem; font-weight:700;">CONFIANCE APEX</span>
                 </div>
             </div>
         </div>
         """, unsafe_allow_html=True)
         
-        # SECTION TOP 3 SCORES PROBABLES (ALIGNEMENT HORIZONTAL EN FLEXBOX)
+        # TOP 3 SCORES EXACTS (HORIZONTALE)
         st.markdown('<div class="sub-card">', unsafe_allow_html=True)
-        st.markdown("### Top 3 Scores Exacts Probables")
+        st.markdown("### Top 3 Scores Exacts les plus Probables à la Fin")
         
         top1, top2, top3 = res["top_3_scores"][0], res["top_3_scores"][1], res["top_3_scores"][2]
         
@@ -374,7 +450,7 @@ with tab_detail:
         """, unsafe_allow_html=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
-        # SECTION PROBABILITÉS 1N2 (ALIGNEMENT HORIZONTAL)
+        # 1N2 & COTES (HORIZONTALE)
         st.markdown('<div class="sub-card">', unsafe_allow_html=True)
         st.markdown("### Probabilités & Cotes Équitables 1N2")
         st.markdown(f"""
@@ -398,32 +474,8 @@ with tab_detail:
         """, unsafe_allow_html=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
-        # SECTION MARCHES BUTS (ALIGNEMENT HORIZONTAL)
-        st.markdown('<div class="sub-card">', unsafe_allow_html=True)
-        st.markdown("### Marchés Buts & Cotes Associées")
-        st.markdown(f"""
-        <div class="horizontal-scores-container">
-            <div class="score-card">
-                <div class="metric-lbl">Plus de 1.5 Buts</div>
-                <div class="metric-val" style="color:#38BDF8;">{res["prob_o15"]}%</div>
-                <div class="odds-lbl">Cote : {res["odds_o15"]}</div>
-            </div>
-            <div class="score-card">
-                <div class="metric-lbl">Plus de 2.5 Buts</div>
-                <div class="metric-val" style="color:#38BDF8;">{res["prob_o25"]}%</div>
-                <div class="odds-lbl">Cote : {res["odds_o25"]}</div>
-            </div>
-            <div class="score-card">
-                <div class="metric-lbl">Les 2 Équipes Marquent</div>
-                <div class="metric-val" style="color:#38BDF8;">{res["prob_btts"]}%</div>
-                <div class="odds-lbl">Cote : {res["odds_btts"]}</div>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-        st.markdown('</div>', unsafe_allow_html=True)
-
 # ------------------------------------------
-# TAB 3 : AUDIT
+# TAB 4 : AUDIT
 # ------------------------------------------
 with tab_audit:
     st.subheader(f"Audit des Matchs Terminés - {selected_comp}")
@@ -435,7 +487,7 @@ with tab_audit:
             real_h_g = m['score']['fullTime']['home']
             real_a_g = m['score']['fullTime']['away']
             if real_h_g is not None and real_a_g is not None:
-                pred = run_quant_prediction_v18(h_team, a_team, 0, 0, team_stats, avg_goals, is_live=False)
+                pred = run_quant_prediction_v18(h_team, a_team, 0, 0, 0, team_stats, avg_goals, is_live=False)
                 audit_list.append({
                     "Date": m['utcDate'][:10],
                     "Match": f"{h_team} vs {a_team}",
