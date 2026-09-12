@@ -6,15 +6,15 @@ import pandas as pd
 from datetime import datetime, timedelta
 
 # ==========================================
-# 1. CONFIGURATION ET DESIGN AMÉLIORÉ
+# 1. CONFIGURATION ET DESIGN V23.0
 # ==========================================
 st.set_page_config(
-    page_title="Apex Quant v22.0",
+    page_title="Apex Quant v23.0",
     page_icon="⚽",
     layout="wide"
 )
 
-# CSS Personnalisé pour Gros Caractères et Cartes Hautes Visibilités
+# CSS Personnalisé pour Gros Caractères, Cartes et Badges de Réussite/Échec
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap');
@@ -73,15 +73,13 @@ st.markdown("""
     .value-pick-title { font-size: 0.9rem; font-weight: 800; text-transform: uppercase; color: #A7F3D0; }
     .value-pick-main { font-size: 1.6rem; font-weight: 900; color: #FFFFFF; margin: 4px 0; }
 
-    /* STYLE DE PRÉDICTION EN DIRECT EN GROS */
-    .live-trend-box {
-        background-color: #0F172A;
-        border-left: 5px solid #F59E0B;
-        padding: 12px 16px;
-        border-radius: 8px;
-        margin-top: 10px;
-        font-size: 1.05rem;
-        font-weight: 700;
+    /* AUDIT KPI CARDS */
+    .audit-stat-box {
+        background-color: #1E293B;
+        border: 2px solid #3B82F6;
+        border-radius: 12px;
+        padding: 15px;
+        text-align: center;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -177,7 +175,7 @@ def get_advanced_league_stats(league_code):
     return stats, avg_goals
 
 # ==========================================
-# 3. MOTEUR MATHÉMATIQUE V22.0
+# 3. MOTEUR MATHÉMATIQUE V23.0
 # ==========================================
 def dixon_coles_adjustment(x, y, h_xg, a_xg, rho=-0.08):
     if x == 0 and y == 0: return max(0.01, 1.0 - (h_xg * a_xg * rho))
@@ -190,7 +188,7 @@ def prob_to_odds(p):
     if p <= 0: return 99.00
     return round(100.0 / p, 2)
 
-def run_quant_prediction_v22(h_name, a_name, score_h=0, score_a=0, elapsed_min=0, team_stats={}, avg_goals=1.35, is_live=False):
+def run_quant_prediction_v23(h_name, a_name, score_h=0, score_a=0, elapsed_min=0, team_stats={}, avg_goals=1.35, is_live=False):
     default_stat = {
         "gf_pg": 1.35, "ga_pg": 1.25, "home_gf_pg": 1.45, "home_ga_pg": 1.10, 
         "away_gf_pg": 1.15, "away_ga_pg": 1.35, "elo": 1500, "form_factor": 1.0,
@@ -219,7 +217,7 @@ def run_quant_prediction_v22(h_name, a_name, score_h=0, score_a=0, elapsed_min=0
         rem_h_xg = full_h_xg
         rem_a_xg = full_a_xg
 
-    # MATRIX CALCULATIONS
+    # CALCUL MATRIX
     max_g = 8
     matrix = np.zeros((max_g, max_g))
 
@@ -250,7 +248,6 @@ def run_quant_prediction_v22(h_name, a_name, score_h=0, score_a=0, elapsed_min=0
 
     prob_o15 = round((1.0 - (matrix[0,0] + matrix[1,0] + matrix[0,1])) * 100, 1)
     prob_o25 = round((1.0 - np.sum([matrix[i,j] for i in range(3) for j in range(3) if i+j <= 2])) * 100, 1)
-    prob_btts = round(float(np.sum(matrix[1:, 1:])) * 100, 1)
 
     # CORNERS
     attack_drive = (full_h_xg + full_a_xg) / 2.5
@@ -274,39 +271,48 @@ def run_quant_prediction_v22(h_name, a_name, score_h=0, score_a=0, elapsed_min=0
     prob_k_3_5 = round((1.0 - poisson.cdf(3, exp_k_tot)) * 100, 1) if exp_k_tot > 0 else 0
     prob_k_4_5 = round((1.0 - poisson.cdf(4, exp_k_tot)) * 100, 1) if exp_k_tot > 0 else 0
 
-    # SPECIFIQUE EN DIRECT : ALGORITHME D'ÉVOLUTION FIN DE MATCH
+    # DYNAMIQUE LIVE
     rem_xg_tot = rem_h_xg + rem_a_xg
     prob_more_goals = round((1.0 - poisson.pmf(0, rem_xg_tot)) * 100, 1)
     prob_more_corners_2plus = round((1.0 - poisson.cdf(1, exp_c_tot)) * 100, 1)
     prob_more_cards_1plus = round((1.0 - poisson.cdf(0, exp_k_tot)) * 100, 1)
 
-    # ALGORITHME DE VALEUR OPTIMALE DE GAIN (BEST PICK)
+    # ALGORITHME BEST PICK
     best_pick = ""
     best_prob = 0.0
+    pick_type = ""
     
     if is_live:
         if prob_more_goals >= 65.0:
-            best_pick = "⚡ En Direct : Au moins 1 BUT supplémentaire à venir"
+            best_pick = "⚡ En Direct : Au moins 1 BUT supplémentaire"
             best_prob = prob_more_goals
+            pick_type = "LIVE_GOAL"
         elif prob_more_corners_2plus >= 70.0:
             best_pick = "⛳ En Direct : Au moins 2 CORNERS supplémentaires"
             best_prob = prob_more_corners_2plus
+            pick_type = "LIVE_CORNER"
         else:
-            best_pick = f"🔒 En Direct : Le score actuel {score_h}-{score_a} a de fortes chances de tenir"
+            best_pick = f"🔒 En Direct : Score {score_h}-{score_a} conserve"
             best_prob = round(100.0 - prob_more_goals, 1)
+            pick_type = "LIVE_STABLE"
     else:
         if (p_h + p_n) >= 72.0:
             best_pick = f"🛡️ Double Chance : {h_name} ou Nul (1X)"
             best_prob = round(p_h + p_n, 1)
+            pick_type = "1X"
         elif (p_a + p_n) >= 72.0:
             best_pick = f"🛡️ Double Chance : Nul ou {a_name} (X2)"
             best_prob = round(p_a + p_n, 1)
+            pick_type = "X2"
         elif prob_o15 >= 75.0:
-            best_pick = "⚽ Plus de 1.5 Buts au Total dans le match"
+            best_pick = "⚽ Plus de 1.5 Buts au Total"
             best_prob = prob_o15
+            pick_type = "O15"
         else:
-            best_pick = f"🔥 Victoire Directe : {h_name if p_h > p_a else a_name}"
+            fav = h_name if p_h > p_a else a_name
+            best_pick = f"🔥 Victoire Directe : {fav}"
             best_prob = round(max(p_h, p_a), 1)
+            pick_type = "HOME_WIN" if p_h > p_a else "AWAY_WIN"
 
     return {
         "p_h": round(p_h, 1), "p_n": round(p_n, 1), "p_a": round(p_a, 1),
@@ -330,13 +336,14 @@ def run_quant_prediction_v22(h_name, a_name, score_h=0, score_a=0, elapsed_min=0
             "prob_more_cards": prob_more_cards_1plus
         },
         "best_pick": best_pick,
-        "best_prob": best_prob
+        "best_prob": best_prob,
+        "pick_type": pick_type
     }
 
 # ==========================================
-# 4. INTERFACE APPLICATIVE V22.0
+# 4. INTERFACE APPLICATIVE V23.0
 # ==========================================
-st.sidebar.title("Apex Quant v22.0")
+st.sidebar.title("Apex Quant v23.0")
 selected_comp = st.sidebar.selectbox("Sélectionner la Compétition", list(COMPETITIONS.keys()))
 league_code = COMPETITIONS[selected_comp]
 
@@ -368,7 +375,7 @@ tab_live, tab_calendar, tab_detail, tab_audit = st.tabs([
     f"🔴 EN DIRECT ({len(live_matches)})",
     f"📅 CALENDRIER ({len(upcoming_matches)})", 
     "📊 ANALYSE DETAILLEE",
-    "📈 AUDIT"
+    f"📈 AUDIT & VÉRIFICATION ({len(finished_matches)})"
 ])
 
 # ------------------------------------------
@@ -387,7 +394,7 @@ with tab_live:
             
             elapsed = 45 if m.get('status') == 'PAUSED' else 55
             
-            res_live = run_quant_prediction_v22(
+            res_live = run_quant_prediction_v23(
                 h_name, a_name, score_h=score_h, score_a=score_a, 
                 elapsed_min=elapsed, team_stats=team_stats, avg_goals=avg_goals, is_live=True
             )
@@ -436,7 +443,7 @@ with tab_live:
                 </div>
                 """, unsafe_allow_html=True)
 
-            # PRÉDICTIONS DE SUITE DE MATCH (BUTS, CORNERS, CARTONS RESTANTS)
+            # PRÉDICTIONS EN DIRECT (BUTS, CORNERS, CARTONS RESTANTS)
             st.markdown("### 🔮 PROJECTIONS RESTANTES POUR CE MATCH EN DIRECT")
             lt = res_live['live_trends']
             
@@ -485,7 +492,7 @@ with tab_calendar:
             h_team = m['homeTeam']['name']
             a_team = m['awayTeam']['name']
             
-            pred = run_quant_prediction_v22(h_team, a_team, 0, 0, 0, team_stats, avg_goals, is_live=False)
+            pred = run_quant_prediction_v23(h_team, a_team, 0, 0, 0, team_stats, avg_goals, is_live=False)
             
             cal_data.append({
                 "Date & Heure": date_str,
@@ -521,7 +528,7 @@ with tab_detail:
         h_name = selected_m['homeTeam']['name']
         a_name = selected_m['awayTeam']['name']
         
-        res = run_quant_prediction_v22(h_name, a_name, 0, 0, 0, team_stats, avg_goals, is_live=False)
+        res = run_quant_prediction_v23(h_name, a_name, 0, 0, 0, team_stats, avg_goals, is_live=False)
         
         st.markdown(f"""
         <div class="oracle-card">
@@ -593,23 +600,107 @@ with tab_detail:
             st.markdown('</div>', unsafe_allow_html=True)
 
 # ------------------------------------------
-# ONGLET 4 : AUDIT
+# ONGLET 4 : AUDIT & VÉRIFICATION AUTOMATIQUE (NOUVEAU MODULE v23.0)
 # ------------------------------------------
 with tab_audit:
-    st.subheader(f"Audit des Matchs Terminés - {selected_comp}")
+    st.subheader(f"📊 Évaluation des Prédictions vs Résultats Réels - {selected_comp}")
+    
     if finished_matches:
-        audit_list = []
-        for m in finished_matches[-10:]:
+        audit_rows = []
+        total_eval = 0
+        success_pick_count = 0
+        success_score_count = 0
+        
+        for m in finished_matches:
             h_team = m['homeTeam']['name']
             a_team = m['awayTeam']['name']
-            real_h_g = m['score']['fullTime']['home']
-            real_a_g = m['score']['fullTime']['away']
-            if real_h_g is not None and real_a_g is not None:
-                pred = run_quant_prediction_v22(h_team, a_team, 0, 0, 0, team_stats, avg_goals, is_live=False)
-                audit_list.append({
+            
+            real_h = m['score']['fullTime']['home']
+            real_a = m['score']['fullTime']['away']
+            
+            if real_h is not None and real_a is not None:
+                real_score_str = f"{real_h}-{real_a}"
+                real_tot_goals = real_h + real_a
+                
+                # Calcul de la prédiction faite AVANT le match
+                pred = run_quant_prediction_v23(h_team, a_team, 0, 0, 0, team_stats, avg_goals, is_live=False)
+                
+                top_scores = [s['score'] for s in pred['top_3_scores']]
+                top_3_str = ", ".join(top_scores)
+                
+                # 1. ÉVALUATION SCORE EXACT (Réussite si le score réel est dans le Top 3)
+                if real_score_str in top_scores:
+                    eval_score = "✅ RÉUSSITE (Dans Top 3)"
+                    success_score_count += 1
+                else:
+                    eval_score = "❌ ÉCHEC"
+                
+                # 2. ÉVALUATION CONSEIL DE GAIN (BEST PICK)
+                ptype = pred['pick_type']
+                pick_success = False
+                
+                if ptype == "1X" and real_h >= real_a: pick_success = True
+                elif ptype == "X2" and real_a >= real_h: pick_success = True
+                elif ptype == "O15" and real_tot_goals > 1: pick_success = True
+                elif ptype == "HOME_WIN" and real_h > real_a: pick_success = True
+                elif ptype == "AWAY_WIN" and real_a > real_h: pick_success = True
+                
+                if pick_success:
+                    eval_pick = "✅ RÉUSSITE"
+                    success_pick_count += 1
+                else:
+                    eval_pick = "❌ ÉCHEC"
+                
+                # 3. ÉVALUATION MARCHE DES BUTS (+1.5 Buts)
+                eval_o15 = "✅ RÉUSSITE (+1.5 Valide)" if real_tot_goals > 1 else "❌ ÉCHEC (Moins de 1.5)"
+                
+                total_eval += 1
+                
+                audit_rows.append({
                     "Date": m['utcDate'][:10],
-                    "Match": f"{h_team} vs {a_team}",
-                    "Score Réel": f"{real_h_g} - {real_a_g}",
-                    "Meilleur Choix Proposé": pred["best_pick"]
+                    "Rencontre": f"{h_team} vs {a_team}",
+                    "Score Réel": real_score_str,
+                    "Top 3 Scores Prédits": top_3_str,
+                    "Éval. Score Exact": eval_score,
+                    "Conseil de Gain Proposé": pred['best_pick'],
+                    "Éval. Conseil (Pick)": eval_pick,
+                    "Éval. Buts (+1.5)": eval_o15,
+                    "Corners Estimés": f"~{pred['corners']['tot']}",
+                    "Cartons Estimés": f"~{pred['cards']['tot']}"
                 })
-        st.dataframe(pd.DataFrame(audit_list), use_container_width=True, hide_index=True)
+        
+        # INDICATEURS CLÉS EN HAUT DE L'AUDIT
+        if total_eval > 0:
+            rate_pick = round((success_pick_count / total_eval) * 100, 1)
+            rate_score = round((success_score_count / total_eval) * 100, 1)
+            
+            kpi1, kpi2, kpi3 = st.columns(3)
+            with kpi1:
+                st.markdown(f"""
+                <div class="audit-stat-box">
+                    <div style="color:#94A3B8; font-weight:800; font-size:0.9rem;">MATCHS AUDITÉS</div>
+                    <div style="font-size:2rem; font-weight:900; color:#38BDF8;">{total_eval}</div>
+                </div>
+                """, unsafe_allow_html=True)
+            with kpi2:
+                st.markdown(f"""
+                <div class="audit-stat-box">
+                    <div style="color:#94A3B8; font-weight:800; font-size:0.9rem;">TAUX RÉUSSITE CONSEIL (BEST PICK)</div>
+                    <div style="font-size:2rem; font-weight:900; color:#10B981;">{rate_pick}%</div>
+                </div>
+                """, unsafe_allow_html=True)
+            with kpi3:
+                st.markdown(f"""
+                <div class="audit-stat-box">
+                    <div style="color:#94A3B8; font-weight:800; font-size:0.9rem;">TOP 3 SCORES EXACTS TOUCHÉS</div>
+                    <div style="font-size:2rem; font-weight:900; color:#F59E0B;">{rate_score}%</div>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            st.write(" ")
+            st.markdown("### 📋 TABLEAU COMPARATIF DÉTAILLÉ (PRÉDICTIONS VS RÉALITÉ)")
+            st.dataframe(pd.DataFrame(audit_rows), use_container_width=True, hide_index=True)
+        else:
+            st.info("Aucun match terminé récent avec des scores validés à évaluer.")
+    else:
+        st.info("Aucun match terminé disponible pour l'instant dans cette compétition.")
