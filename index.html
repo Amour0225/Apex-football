@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gestionnaire de Coupon Multi-Championnats</title>
+  <style>
+    /* 1. STYLES CSS */
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #f4f6f9;
+      padding: 20px;
+      display: flex;
+      justify-content: center;
+    }
+
+    .coupon-card {
+      border: 1px solid #cbd5e1;
+      border-radius: 10px;
+      padding: 20px;
+      background-color: #ffffff;
+      width: 100%;
+      max-width: 550px;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    }
+
+    .coupon-header {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 16px;
+      padding-bottom: 12px;
+      border-bottom: 2px solid #f1f5f9;
+    }
+
+    .coupon-header h3 {
+      margin: 0;
+      font-size: 1.2rem;
+      color: #0f172a;
+    }
+
+    .coupon-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .btn {
+      padding: 8px 12px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      border-radius: 6px;
+      cursor: pointer;
+      border: none;
+      transition: background-color 0.2s;
+    }
+
+    .btn-primary { background-color: #2563eb; color: white; }
+    .btn-primary:hover { background-color: #1d4ed8; }
+
+    .btn-outline { background-color: #f8fafc; border: 1px solid #cbd5e1; color: #334155; }
+    .btn-outline:hover { background-color: #e2e8f0; }
+
+    .btn.success { background-color: #22c55e !important; color: white !important; border-color: #22c55e !important; }
+
+    /* Badges de statut */
+    .coupon-status {
+      font-weight: bold;
+      padding: 4px 10px;
+      border-radius: 12px;
+      font-size: 0.85rem;
+    }
+    .status-won { background-color: #dcfce7; color: #15803d; border: 1px solid #86efac; }
+    .status-lost { background-color: #fee2e2; color: #b91c1c; border: 1px solid #fca5a5; }
+    .status-pending { background-color: #fef3c7; color: #b45309; border: 1px solid #fde68a; }
+
+    /* Liste des matchs */
+    .match-list { list-style: none; padding: 0; margin: 0; }
+    .match-item { border-bottom: 1px solid #f1f5f9; padding: 12px 0; }
+    .match-item:last-child { border-bottom: none; }
+    .match-league { font-size: 0.75rem; font-weight: bold; color: #64748b; text-transform: uppercase; }
+    .match-teams { font-weight: 600; font-size: 1rem; color: #1e293b; margin: 4px 0; }
+    .match-details { display: flex; justify-content: space-between; font-size: 0.9rem; color: #334155; }
+  </style>
+</head>
+<body>
+
+  <!-- 2. STRUCTURE HTML -->
+  <div class="coupon-card">
+    <div class="coupon-header">
+      <h3>⚽ Coupon Du Jour</h3>
+      <div id="coupon-status" class="coupon-status status-pending">⏳ EN COURS</div>
+      
+      <div class="coupon-actions">
+        <button id="btn-paste-coupon" class="btn btn-outline" onclick="handlePasteCoupon()">📋 Coller</button>
+        <button id="btn-copy-coupon" class="btn btn-outline" onclick="handleCopyCoupon()">📤 Copier</button>
+        <button id="btn-export-coupon" class="btn btn-primary" onclick="handleExportCoupon()">📥 Exporter (.txt)</button>
+      </div>
+    </div>
+
+    <div id="coupon-content" class="coupon-content">
+      <!-- Rempli dynamiquement par JS -->
+    </div>
+  </div>
+
+  <!-- 3. LOGIQUE JAVASCRIPT -->
+  <script>
+    // Données initiales
+    let couponData = {
+      date: new Date().toLocaleDateString("fr-FR"),
+      selections: [
+        { league: "Ligue 1", match: "PSG vs Marseille", pick: "Victoire PSG (1)", odds: 1.55, status: "GAGNÉ" },
+        { league: "Premier League", match: "Arsenal vs Chelsea", pick: "Les 2 équipes marquent", odds: 1.70, status: "GAGNÉ" },
+        { league: "La Liga", match: "Real Madrid vs Barça", pick: "+2.5 buts", odds: 1.65, status: "PERDU" }
+      ]
+    };
+
+    // Déterminer si le coupon est Gagné, Perdu ou En Cours
+    function getCouponStatus(selections) {
+      if (selections.some(item => item.status === "PERDU")) return { text: "❌ PERDU", code: "lost" };
+      if (selections.every(item => item.status === "GAGNÉ")) return { text: "✅ GAGNÉ", code: "won" };
+      return { text: "⏳ EN COURS", code: "pending" };
+    }
+
+    // Affichage dans le DOM
+    function renderCouponUI(data) {
+      const container = document.getElementById("coupon-content");
+      const statusBadge = document.getElementById("coupon-status");
+      
+      const statusInfo = getCouponStatus(data.selections);
+      statusBadge.textContent = statusInfo.text;
+      statusBadge.className = `coupon-status status-${statusInfo.code}`;
+
+      let html = `<ul class="match-list">`;
+      data.selections.forEach((item, index) => {
+        const icon = item.status === "GAGNÉ" ? "✅" : item.status === "PERDU" ? "❌" : "⏳";
+        html += `
+          <li class="match-item">
+            <div class="match-league">${index + 1}. [${item.league}]</div>
+            <div class="match-teams">⚔️ ${item.match}</div>
+            <div class="match-details">
+              <span>🎯 Prono : <strong>${item.pick}</strong></span>
+              <span>📊 Cote : <strong>${item.odds.toFixed(2)}</strong></span>
+            </div>
+            <div style="font-size:0.85rem; margin-top:4px; color:#475569;">
+              Statut : <strong>${icon} ${item.status}</strong>
+            </div>
+          </li>`;
+      });
+      html += `</ul>`;
+      container.innerHTML = html;
+    }
+
+    // Générateur de texte brut pour copie/exportation
+    function generateCouponPlainText(data) {
+      const statusInfo = getCouponStatus(data.selections);
+      let totalOdds = 1;
+      let text = `==============================\n🎯 COUPON MULTI-CHAMPIONNATS\n📅 Date : ${data.date}\nRÉSULTAT : ${statusInfo.text}\n==============================\n\n`;
+
+      data.selections.forEach((item, index) => {
+        totalOdds *= item.odds;
+        const icon = item.status === "GAGNÉ" ? "✅" : item.status === "PERDU" ? "❌" : "⏳";
+        text += `${index + 1}. [${item.league.toUpperCase()}]\n   ⚔️ ${item.match}\n   🎯 Prono  : ${item.pick}\n   📊 Cote   : ${item.odds.toFixed(2)}\n   📌 Statut : ${icon} ${item.status}\n------------------------------\n`;
+      });
+
+      text += `\n🔥 COTE TOTALE : ${totalOdds.toFixed(2)}\n==============================`;
+      return text;
+    }
+
+    // Action : Copier
+    async function handleCopyCoupon() {
+      const btn = document.getElementById("btn-copy-coupon");
+      try {
+        await navigator.clipboard.writeText(generateCouponPlainText(couponData));
+        btn.innerHTML = "✅ Copié !";
+        btn.classList.add("success");
+        setTimeout(() => { btn.innerHTML = "📤 Copier"; btn.classList.remove("success"); }, 2000);
+      } catch (err) { alert("Erreur lors de la copie."); }
+    }
+
+    // Action : Exporter TXT
+    function handleExportCoupon() {
+      const blob = new Blob([generateCouponPlainText(couponData)], { type: "text/plain;charset=utf-8" });
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = `coupon_${Date.now()}.txt`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+
+    // Analyseur (Parser) de texte collé
+    function parseCouponText(text) {
+      try {
+        const dateMatch = text.match(/📅 Date\s*:\s*([^\n]+)/i);
+        const date = dateMatch ? dateMatch[1].trim() : new Date().toLocaleDateString("fr-FR");
+        const blocks = text.split(/------------------------------|\n(?=\d+\.\s*\[)/);
+        const selections = [];
+
+        blocks.forEach(block => {
+          const leagueMatch = block.match(/\[(.*?)\]/);
+          const matchMatch = block.match(/⚔️\s*(.+)/);
+          const pickMatch = block.match(/🎯 Prono\s*:\s*(.+)/);
+          const oddsMatch = block.match(/📊 Cote\s*:\s*([\d\.,]+)/);
+          const statusMatch = block.match(/📌 Statut\s*:\s*(?:✅|❌|⏳)?\s*(.+)/);
+
+          if (leagueMatch && matchMatch && pickMatch) {
+            const rawStatus = statusMatch ? statusMatch[1].trim().toUpperCase() : "EN_COURS";
+            let status = "EN_COURS";
+            if (rawStatus.includes("GAGNÉ") || rawStatus.includes("GAGNE")) status = "GAGNÉ";
+            if (rawStatus.includes("PERDU")) status = "PERDU";
+
+            selections.push({
+              league: leagueMatch[1].trim(),
+              match: matchMatch[1].trim(),
+              pick: pickMatch[1].trim(),
+              odds: oddsMatch ? parseFloat(oddsMatch[1].replace(',', '.')) : 1.00,
+              status: status
+            });
+          }
+        });
+
+        return selections.length > 0 ? { date, selections } : null;
+      } catch (e) { return null; }
+    }
+
+    // Action : Coller
+    async function handlePasteCoupon() {
+      const btn = document.getElementById("btn-paste-coupon");
+      try {
+        const pastedText = await navigator.clipboard.readText();
+        const parsed = parseCouponText(pastedText);
+        if (!parsed) { alert("Format du texte non reconnu."); return; }
+        
+        couponData = parsed;
+        renderCouponUI(couponData);
+
+        btn.innerHTML = "✅ Collé !";
+        btn.classList.add("success");
+        setTimeout(() => { btn.innerHTML = "📋 Coller"; btn.classList.remove("success"); }, 2000);
+      } catch (err) { alert("Impossible de lire le presse-papier."); }
+    }
+
+    // Initialisation au chargement de la page
+    document.addEventListener("DOMContentLoaded", () => {
+      renderCouponUI(couponData);
+    });
+  </script>
+</body>
+</html>
