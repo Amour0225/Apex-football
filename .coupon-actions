@@ -1,0 +1,7 @@
+<div class="coupon-actions">
+  <button id="btn-paste-coupon" class="btn btn-outline" onclick="handlePasteCoupon()">📋 Coller</button>
+  <button id="btn-copy-coupon" class="btn btn-outline" onclick="handleCopyCoupon()">📤 Copier</button>
+  <button id="btn-export-coupon" class="btn btn-primary" onclick="handleExportCoupon()">📥 Exporter (.txt)</button>
+  <!-- Nouveau : Bouton pour effacer le LocalStorage -->
+  <button id="btn-reset-coupon" class="btn btn-danger" onclick="handleResetCoupon()">🗑️ Effacer</button>
+</div>
