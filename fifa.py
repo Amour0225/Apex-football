@@ -6,10 +6,10 @@ import pandas as pd
 from datetime import datetime, timedelta
 
 # ==========================================
-# 1. CONFIGURATION ET DESIGN V25.0
+# 1. CONFIGURATION ET DESIGN V25.1
 # ==========================================
 st.set_page_config(
-    page_title="Apex Quant v25.0",
+    page_title="Apex Quant v25.1",
     page_icon="⚽",
     layout="wide"
 )
@@ -102,18 +102,23 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 2. DONNÉES & API FOOTBALL
+# 2. DONNÉES & API FOOTBALL V25.1
 # ==========================================
 API_KEY = "1e9518e7585349f9abe6d5a29ddb83b1"
 BASE_URL = "https://api.football-data.org/v4/"
 
+# Mises à jour des compétitions V25.1 :
+# Inclusions : Premier League, Championship, EFL Cup (Coupe de la Ligue), Europa League, etc.
 COMPETITIONS = {
     "Premier League": "PL",
+    "Championship (Angleterre)": "ELC",
+    "Coupe de la Ligue (EFL Cup)": "EFL",
+    "UEFA Europa League": "EL",
+    "Ligue des Champions": "CL",
     "La Liga": "PD",
     "Ligue 1": "FL1",
     "Serie A": "SA",
-    "Bundesliga": "BL1",
-    "Ligue des Champions": "CL"
+    "Bundesliga": "BL1"
 }
 
 @st.cache_data(ttl=30)
@@ -133,16 +138,25 @@ def get_advanced_league_stats(league_code):
     avg_goals = 1.35
     
     if data and "standings" in data and len(data["standings"]) > 0:
-        table_total = data["standings"][0].get("table", [])
-        table_home = data["standings"][1].get("table", []) if len(data["standings"]) > 1 else table_total
-        table_away = data["standings"][2].get("table", []) if len(data["standings"]) > 2 else table_total
+        table_total = []
+        for group in data["standings"]:
+            table_total.extend(group.get("table", []))
+            
+        dict_home = {}
+        dict_away = {}
         
-        dict_home = {r["team"]["name"]: r for r in table_home}
-        dict_away = {r["team"]["name"]: r for r in table_away}
+        if len(data["standings"]) > 1:
+            for r in data["standings"][1].get("table", []):
+                if "team" in r: dict_home[r["team"]["name"]] = r
+        if len(data["standings"]) > 2:
+            for r in data["standings"][2].get("table", []):
+                if "team" in r: dict_away[r["team"]["name"]] = r
         
         total_played, total_gf = 0, 0
         
         for row in table_total:
+            if "team" not in row:
+                continue
             name = row["team"]["name"]
             played = max(1, row.get("playedGames", 1))
             pts = row.get("points", 0)
@@ -226,7 +240,7 @@ def get_all_competitions_upcoming():
     return all_upcoming, league_stats_dict, league_avg_dict
 
 # ==========================================
-# 3. MOTEUR MATHÉMATIQUE V25.0
+# 3. MOTEUR MATHÉMATIQUE ULTRA-PRÉCIS V25.1
 # ==========================================
 def dixon_coles_adjustment(x, y, h_xg, a_xg, rho=-0.08):
     if x == 0 and y == 0: return max(0.01, 1.0 - (h_xg * a_xg * rho))
@@ -239,7 +253,7 @@ def prob_to_odds(p):
     if p <= 0: return 99.00
     return round(100.0 / p, 2)
 
-def run_quant_prediction_v23(h_name, a_name, score_h=0, score_a=0, elapsed_min=0, team_stats={}, avg_goals=1.35, is_live=False):
+def run_quant_prediction_v25_1(h_name, a_name, score_h=0, score_a=0, elapsed_min=0, team_stats={}, avg_goals=1.35, is_live=False):
     default_stat = {
         "gf_pg": 1.35, "ga_pg": 1.25, "home_gf_pg": 1.45, "home_ga_pg": 1.10, 
         "away_gf_pg": 1.15, "away_ga_pg": 1.35, "elo": 1500, "form_factor": 1.0,
@@ -323,6 +337,7 @@ def run_quant_prediction_v23(h_name, a_name, score_h=0, score_a=0, elapsed_min=0
     prob_more_corners_2plus = round((1.0 - poisson.cdf(1, exp_c_tot)) * 100, 1)
     prob_more_cards_1plus = round((1.0 - poisson.cdf(0, exp_k_tot)) * 100, 1)
 
+    # Optimisation algorithmique V25.1 des paires sécurité / cotes
     best_pick = ""
     best_prob = 0.0
     pick_type = ""
@@ -345,12 +360,12 @@ def run_quant_prediction_v23(h_name, a_name, score_h=0, score_a=0, elapsed_min=0
             pick_type = "LIVE_STABLE"
             selected_odds = prob_to_odds(best_prob)
     else:
-        if (p_h + p_n) >= 72.0:
+        if (p_h + p_n) >= 70.0:
             best_pick = f"🛡️ Double Chance : {h_name} ou Nul (1X)"
             best_prob = round(p_h + p_n, 1)
             pick_type = "1X"
             selected_odds = prob_to_odds(best_prob)
-        elif (p_a + p_n) >= 72.0:
+        elif (p_a + p_n) >= 70.0:
             best_pick = f"🛡️ Double Chance : Nul ou {a_name} (X2)"
             best_prob = round(p_a + p_n, 1)
             pick_type = "X2"
@@ -395,9 +410,9 @@ def run_quant_prediction_v23(h_name, a_name, score_h=0, score_a=0, elapsed_min=0
     }
 
 # ==========================================
-# 4. INTERFACE APPLICATIVE V25.0
+# 4. INTERFACE APPLICATIVE V25.1
 # ==========================================
-st.sidebar.title("Apex Quant v25.0")
+st.sidebar.title("Apex Quant v25.1")
 selected_comp = st.sidebar.selectbox("Sélectionner la Compétition principale", list(COMPETITIONS.keys()))
 league_code = COMPETITIONS[selected_comp]
 
@@ -448,7 +463,7 @@ with tab_live:
             
             elapsed = 45 if m.get('status') == 'PAUSED' else 55
             
-            res_live = run_quant_prediction_v23(
+            res_live = run_quant_prediction_v25_1(
                 h_name, a_name, score_h=score_h, score_a=score_a, 
                 elapsed_min=elapsed, team_stats=team_stats, avg_goals=avg_goals, is_live=True
             )
@@ -543,7 +558,7 @@ with tab_calendar:
             h_team = m['homeTeam']['name']
             a_team = m['awayTeam']['name']
             
-            pred = run_quant_prediction_v23(h_team, a_team, 0, 0, 0, team_stats, avg_goals, is_live=False)
+            pred = run_quant_prediction_v25_1(h_team, a_team, 0, 0, 0, team_stats, avg_goals, is_live=False)
             
             cal_data.append({
                 "Date & Heure": date_str,
@@ -579,7 +594,7 @@ with tab_detail:
         h_name = selected_m['homeTeam']['name']
         a_name = selected_m['awayTeam']['name']
         
-        res = run_quant_prediction_v23(h_name, a_name, 0, 0, 0, team_stats, avg_goals, is_live=False)
+        res = run_quant_prediction_v25_1(h_name, a_name, 0, 0, 0, team_stats, avg_goals, is_live=False)
         
         st.markdown(f"""
         <div class="oracle-card">
@@ -670,7 +685,7 @@ with tab_audit:
                 real_score_str = f"{real_h}-{real_a}"
                 real_tot_goals = real_h + real_a
                 
-                pred = run_quant_prediction_v23(h_team, a_team, 0, 0, 0, team_stats, avg_goals, is_live=False)
+                pred = run_quant_prediction_v25_1(h_team, a_team, 0, 0, 0, team_stats, avg_goals, is_live=False)
                 
                 top_scores = [s['score'] for s in pred['top_3_scores']]
                 top_3_str = ", ".join(top_scores)
@@ -749,16 +764,16 @@ with tab_audit:
         st.info("Aucun match terminé disponible pour l'instant dans cette compétition.")
 
 # ------------------------------------------
-# ONGLET 5 : GENERATEUR MULTI-CHAMPIONNATS (V25.0)
+# ONGLET 5 : GENERATEUR MULTI-CHAMPIONNATS (V25.1)
 # ------------------------------------------
 with tab_coupon:
     st.subheader("🎟️ Coupon Multi-Championnats (Minimum 5 Matchs)")
     
-    with st.spinner("Analyse et scan en cours de tous les grands championnats..."):
+    with st.spinner("Analyse et scan en cours de tous les grands championnats et coupes..."):
         all_multi_matches, multi_stats, multi_avg = get_all_competitions_upcoming()
     
     if len(all_multi_matches) < 5:
-        st.warning("Il n'y a pas assez de matchs programmés dans l'ensemble des grands championnats pour former un coupon complet de 5 matchs.")
+        st.warning("Il n'y a pas assez de matchs programmés dans l'ensemble des compétitions pour former un coupon complet de 5 matchs.")
     else:
         dates_dict = {}
         for m in all_multi_matches:
@@ -786,7 +801,7 @@ with tab_coupon:
             league_team_stats = multi_stats.get(league, {})
             league_avg_goals = multi_avg.get(league, 1.35)
             
-            pred = run_quant_prediction_v23(
+            pred = run_quant_prediction_v25_1(
                 h_team, a_team, 0, 0, 0, 
                 team_stats=league_team_stats, 
                 avg_goals=league_avg_goals, 
@@ -840,7 +855,7 @@ with tab_coupon:
         
         st.markdown(f"""
         <div class="coupon-header">
-            <h2 style="margin:0; color:#F59E0B; font-weight:900;">🔥 COUPON DU JOUR MULTI-CHAMPIONNATS (V25.0)</h2>
+            <h2 style="margin:0; color:#F59E0B; font-weight:900;">🔥 COUPON DU JOUR MULTI-CHAMPIONNATS (V25.1)</h2>
             <div style="font-size:1.4rem; font-weight:800; margin-top:10px; color:#FFFFFF;">
                 Côte Totale Cumulée : <span style="color:#38BDF8; font-size:2rem; font-weight:900;">{total_odds_formatted}</span>
             </div>
