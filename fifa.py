@@ -80,15 +80,15 @@ API_KEY = "1e9518e7585349f9abe6d5a29ddb83b1"
 BASE_URL = "https://api.football-data.org/v4/"
 
 COMPETITIONS = {
-    "🏆 Ligue des Champions": "CL",
-    "🇪🇺 UEFA Europa League": "EL",
-    "🏴󠁧󠁢󠁥ⁿ󠁧󠁢󠁷󠁬󠁳󠁿 Premier League": "PL",
-    "🇪🇸 La Liga": "PD",
-    "🇫🇷 Ligue 1": "FL1",
-    "🇮🇹 Serie A": "SA",
-    "🇩🇪 Bundesliga": "BL1",
-    "🇳🇱 Eredivisie": "DED",
-    "🇵🇹 Primeira Liga": "PPD"
+    "Ligue des Champions": "CL",
+    "UEFA Europa League": "EL",
+    "Premier League": "PL",
+    "La Liga": "PD",
+    "Ligue 1": "FL1",
+    "Serie A": "SA",
+    "Bundesliga": "BL1",
+    "Eredivisie": "DED",
+    "Primeira Liga": "PPD"
 }
 
 @st.cache_data(ttl=600)
@@ -166,7 +166,6 @@ def run_quant_engine_v25_1(h_name, a_name, team_stats, avg_goals):
     h_stat = team_stats.get(h_name, {"gf_pg": 1.4, "ga_pg": 1.1, "ppg": 1.3})
     a_stat = team_stats.get(a_name, {"gf_pg": 1.2, "ga_pg": 1.3, "ppg": 1.1})
     
-    # 1. Ajustement dynamique selon le ratio de forme / points (Form-Weighted xG)
     h_form_mult = np.clip(0.9 + (h_stat.get("ppg", 1.3) / 3.0) * 0.25, 0.85, 1.20)
     a_form_mult = np.clip(0.9 + (a_stat.get("ppg", 1.1) / 3.0) * 0.25, 0.85, 1.20)
     
@@ -176,7 +175,6 @@ def run_quant_engine_v25_1(h_name, a_name, team_stats, avg_goals):
     h_xg = float(np.clip(avg_goals * (h_stat["gf_pg"] / avg_goals) * (a_stat["ga_pg"] / avg_goals) * home_adv * h_form_mult, 0.4, 3.7))
     a_xg = float(np.clip(avg_goals * (a_stat["gf_pg"] / avg_goals) * (h_stat["ga_pg"] / avg_goals) * away_pen * a_form_mult, 0.3, 3.2))
 
-    # 2. Matrice Dixon-Coles 9x9
     max_g = 9
     matrix = np.zeros((max_g, max_g))
 
@@ -189,14 +187,12 @@ def run_quant_engine_v25_1(h_name, a_name, team_stats, avg_goals):
 
     matrix /= np.sum(matrix)
 
-    # Top Scores Exacts
     flat_idx = np.argsort(matrix.ravel())[::-1]
     top_scores = []
     for idx in flat_idx[:3]:
         gh, ga = np.unravel_index(idx, matrix.shape)
         top_scores.append({"score": f"{gh}-{ga}", "prob": round(matrix[gh, ga] * 100, 1)})
 
-    # Probabilités Marchés
     p_h = float(np.sum(np.tril(matrix, -1))) * 100
     p_n = float(np.sum(np.diag(matrix))) * 100
     p_a = float(np.sum(np.triu(matrix, 1))) * 100
@@ -208,34 +204,27 @@ def run_quant_engine_v25_1(h_name, a_name, team_stats, avg_goals):
     p_btts_no = float(np.sum(matrix[0, :]) + np.sum(matrix[:, 0]) - matrix[0, 0]) * 100
     p_btts_yes = round(100.0 - p_btts_no, 1)
 
-    # Simulation Monte Carlo
     mc_res = run_monte_carlo_simulation(h_xg, a_xg)
 
-    # Corners & Cartons
     exp_c_tot = round(np.clip(8.5 + (h_xg + a_xg - 2.5) * 1.3, 6.0, 14.0), 1)
     prob_c_85 = round((1.0 - nbinom.cdf(8, 10, 10 / (10 + exp_c_tot))) * 100, 1)
 
     exp_k_tot = round(np.clip(4.2 + (h_xg * 0.2 + a_xg * 0.2), 2.0, 8.0), 1)
     prob_k_35 = round((1.0 - nbinom.cdf(3, 8, 8 / (8 + exp_k_tot))) * 100, 1)
 
-    # Liste Globale des Marchés
     all_bets = [
-        ("1X (Double Chance)", round(p_h + p_n, 1), "1X", "DC"),
-        ("X2 (Double Chance)", round(p_a + p_n, 1), "X2", "DC"),
-        ("Plus de 1.5 Buts", round(p_o15, 1), "O1.5", "GOALS"),
-        ("Plus de 2.5 Buts", p_o25, "O2.5", "GOALS"),
-        ("Les 2 Équipes Marquent", p_btts_yes, "BTTS_Y", "BTTS"),
-        ("> 8.5 Corners", prob_c_85, "C8.5", "CORNERS")
+        ("1X (Double Chance)", round(p_h + p_n, 1), "1X"),
+        ("X2 (Double Chance)", round(p_a + p_n, 1), "X2"),
+        ("Plus de 1.5 Buts", round(p_o15, 1), "O1.5"),
+        ("Plus de 2.5 Buts", p_o25, "O2.5"),
+        ("Les 2 Équipes Marquent", p_btts_yes, "BTTS_Y"),
+        ("> 8.5 Corners", prob_c_85, "C8.5")
     ]
     
-    # 3. Filtrage Sécurité pour Coupons (Probabilité élevée >= 70%)
     safe_bets = [b for b in all_bets if b[1] >= 70.0]
     best_safe = max(safe_bets, key=lambda x: x[1]) if safe_bets else max(all_bets, key=lambda x: x[1])
-    
-    # Pari Valeur Général
     best_overall = max(all_bets, key=lambda x: x[1])
 
-    # Indice de Stabilité de Variance (IVS)
     variance_score = round(100 - abs(p_h - mc_res['mc_h']) - abs(p_a - mc_res['mc_a']), 1)
 
     return {
@@ -254,7 +243,7 @@ def run_quant_engine_v25_1(h_name, a_name, team_stats, avg_goals):
 # ==========================================
 # 4. STREAMLIT UI CONTROLLER (v25.1)
 # ==========================================
-st.sidebar.markdown("### 💎 Apex Quant v25.1")
+st.sidebar.markdown("### Apex Quant v25.1")
 selected_comp = st.sidebar.selectbox("Ligue / Compétition", list(COMPETITIONS.keys()))
 league_code = COMPETITIONS[selected_comp]
 
@@ -263,17 +252,14 @@ raw_matches = fetch_api(f"competitions/{league_code}/matches")
 all_matches = raw_matches.get("matches", []) if raw_matches else []
 
 t1, t2, t3, t4 = st.tabs([
-    "🎫 Radar & Générateur de Coupons", 
-    "🧮 Value Bet & Critère de Kelly", 
-    "📊 Audit & Backtest Live", 
-    "🔬 Terminal Deep-Dive Match"
+    "Radar & Générateur de Coupons", 
+    "Value Bet & Critère de Kelly", 
+    "Audit & Backtest Live", 
+    "Terminal Deep-Dive Match"
 ])
 
-# ------------------------------------------
-# TAB 1 : RADAR & GENERATEUR DE COUPONS
-# ------------------------------------------
 with t1:
-    st.subheader(f"🎫 Générateur de Coupons & Prédictions v25.1 — {selected_comp}")
+    st.subheader(f"Générateur de Coupons & Prédictions v25.1 — {selected_comp}")
     st.caption("Sélection optimisée par filtrage de probabilité stochastique haute confiance pour l'établissement de coupons/combinés.")
     
     upcoming = [m for m in all_matches if m['status'] in ['SCHEDULED', 'TIMED']]
@@ -289,7 +275,6 @@ with t1:
             
             q = run_quant_engine_v25_1(h_team, a_team, team_stats, avg_goals)
             
-            # Sélection pour Coupon si confiance >= 72%
             if q['best_safe_conf'] >= 72.0:
                 coupon_suggestions.append({
                     "Match": f"{h_team} vs {a_team}",
@@ -308,20 +293,17 @@ with t1:
             })
 
         if coupon_suggestions:
-            st.markdown("### 🌟 Sélection Recommandée pour Coupons (Haute Fiabilité)")
+            st.markdown("### Sélection Recommandée pour Coupons (Haute Fiabilité)")
             st.dataframe(pd.DataFrame(coupon_suggestions), use_container_width=True, hide_index=True)
             st.markdown("---")
             
-        st.markdown("### 📅 Liste Complète des Matchs à Venir")
+        st.markdown("### Liste Complète des Matchs à Venir")
         st.dataframe(pd.DataFrame(grid_data), use_container_width=True, hide_index=True)
     else:
         st.info("Aucun match à venir disponible pour cette compétition.")
 
-# ------------------------------------------
-# TAB 2 : CALCULATEUR VALUE BET & KELLY
-# ------------------------------------------
 with t2:
-    st.subheader("🧮 Calculateur d'Expected Value (EV) & Critère de Kelly")
+    st.subheader("Calculateur d'Expected Value (EV) & Critère de Kelly")
     
     col_k1, col_k2, col_k3 = st.columns(3)
     with col_k1:
@@ -370,11 +352,8 @@ with t2:
         </div>
         """, unsafe_allow_html=True)
 
-# ------------------------------------------
-# TAB 3 : AUDIT ET BACKTESTING LIVE
-# ------------------------------------------
 with t3:
-    st.subheader(f"📊 Audit & Backtest Live — {selected_comp}")
+    st.subheader(f"Audit & Backtest Live — {selected_comp}")
     finished = [m for m in all_matches if m['status'] == 'FINISHED']
     
     if finished:
@@ -425,11 +404,8 @@ with t3:
         
         st.dataframe(pd.DataFrame(audit_rows), use_container_width=True, hide_index=True)
 
-# ------------------------------------------
-# TAB 4 : TERMINAL DEEP-DIVE MATCH
-# ------------------------------------------
 with t4:
-    st.subheader("🔬 Deep-Dive Terminal Match")
+    st.subheader("Terminal Deep-Dive Match")
     options = {f"{m['homeTeam']['name']} vs {m['awayTeam']['name']}": m for m in all_matches}
     
     if options:
@@ -460,13 +436,13 @@ with t4:
         col1, col2 = st.columns(2)
         
         with col1:
-            st.markdown("#### 🎯 Scores Exacts & Stabilité")
+            st.markdown("#### Scores Exacts & Stabilité")
             st.write(f"- Scores probables : **{', '.join([f'{s[\"score\"]} ({s[\"prob\"]}% )' for s in q['top_scores']])}**")
             st.write(f"- Indice de Stabilité de Variance (IVS) : **{q['stability_index']}/100**")
             st.write(f"- Clean Sheet {h_t} : **{q['mc']['cs_h']}%** | Clean Sheet {a_t} : **{q['mc']['cs_a']}%**")
             
         with col2:
-            st.markdown("#### ⚽ Marchés Buts & Spécifiques")
+            st.markdown("#### Marchés Buts & Spécifiques")
             st.write(f"- Plus de 1.5 Buts : **{q['p_o15']}%**")
             st.write(f"- Plus de 2.5 Buts : **{q['p_o25']}%**")
             st.write(f"- Both Teams To Score (BTTS) : **{q['p_btts']}%**")
