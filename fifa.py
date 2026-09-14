@@ -6,10 +6,10 @@ import pandas as pd
 from datetime import datetime, timedelta, timezone
 
 # ==========================================
-# 1. CONFIGURATION & DESIGN INTERFACE
+# 1. CONFIGURATION & STYLES CSS
 # ==========================================
 st.set_page_config(
-    page_title="Apex Quant Engine v25.5 • High-Precision Terminal",
+    page_title="Apex Quant Engine v25.8 • Europa League Edition",
     page_icon="⚡",
     layout="wide"
 )
@@ -23,7 +23,7 @@ st.markdown("""
     .hero-header {
         background: linear-gradient(135deg, rgba(15, 23, 42, 0.9) 0%, rgba(3, 7, 18, 0.95) 100%);
         border: 1px solid rgba(56, 189, 248, 0.2);
-        box-shadow: 0 20px 40px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.1);
+        box-shadow: 0 20px 40px rgba(0,0,0,0.6);
         border-radius: 20px;
         padding: 24px;
         margin-bottom: 25px;
@@ -93,6 +93,14 @@ st.markdown("""
         padding: 12px 16px;
         margin: 10px 0;
     }
+
+    .deep-card {
+        background: #0F172A;
+        border: 1px solid #1E293B;
+        border-radius: 16px;
+        padding: 20px;
+        margin-bottom: 20px;
+    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -102,7 +110,10 @@ st.markdown("""
 API_KEY = "1e9518e7585349f9abe6d5a29ddb83b1"
 BASE_URL = "https://api.football-data.org/v4/"
 
-@st.cache_data(ttl=600, show_spinner=False)
+# Compétitions cibles (inclus Europa League 'EL' et Champions League 'CL')
+TARGET_COMPETITIONS = "PL,CL,EL,FL1,BL1,SA,PD,DED,PPD"
+
+@st.cache_data(ttl=300, show_spinner=False)
 def fetch_api(endpoint):
     try:
         headers = {"X-Auth-Token": API_KEY}
@@ -114,66 +125,68 @@ def fetch_api(endpoint):
     return None
 
 # ==========================================
-# 3. MOTEUR MATHÉMATIQUE DE PRÉDICTION (POISSON MODEL)
+# 3. MOTEUR STATISTIQUE adaptatif (Championnats + Europa League)
 # ==========================================
 @st.cache_data(ttl=3600, show_spinner=False)
 def get_league_standings(competition_code):
-    """Récupère le classement pour calculer les forces réelles des équipes"""
+    """Récupère et fusionne le classement, gère les groupes pour Europa League / Champions League"""
     data = fetch_api(f"competitions/{competition_code}/standings")
     standings = {}
+    
     if data and "standings" in data and len(data["standings"]) > 0:
-        table = data["standings"][0]["table"]
-        total_goals = sum(t["goalsFor"] for t in table)
-        total_played = sum(t["playedGames"] for t in table)
-        avg_league_goals = (total_goals / total_played / 2.0) if total_played > 0 else 1.35
+        all_rows = []
+        # Fusion des groupes si phase de poules/ligue (Europa League / Champions League)
+        for st_group in data["standings"]:
+            if "table" in st_group:
+                all_rows.extend(st_group["table"])
+                
+        total_goals = sum(t["goalsFor"] for t in all_rows)
+        total_played = sum(t["playedGames"] for t in all_rows)
+        avg_league_goals = (total_goals / total_played / 2.0) if total_played > 0 else 1.40
 
-        for row in table:
+        for row in all_rows:
             played = max(1, row["playedGames"])
             standings[row["team"]["name"]] = {
                 "att": (row["goalsFor"] / played) / avg_league_goals,
                 "def": (row["goalsAgainst"] / played) / avg_league_goals
             }
         return standings, avg_league_goals
-    return {}, 1.35
+    return {}, 1.40
 
 def compute_quant_predictions(home_team, away_team, comp_code):
-    """Calcule la matrice de probabilités de Poisson exacte"""
     standings, avg_goals = get_league_standings(comp_code)
     
-    # Récupération des forces réelles (ou valeurs par défaut pondérées)
     h_att = standings.get(home_team, {}).get("att", 1.15)
     h_def = standings.get(home_team, {}).get("def", 0.90)
     a_att = standings.get(away_team, {}).get("att", 1.05)
     a_def = standings.get(away_team, {}).get("def", 1.10)
     
-    # Expected Goals (xG)
-    h_xg = max(0.4, h_att * a_def * avg_goals * 1.10) # Avantage domicile +10%
-    a_xg = max(0.3, a_att * h_def * avg_goals * 0.90)
+    # Avantage domicile ajusté pour l'Europe
+    home_advantage = 1.12 if comp_code in ['EL', 'CL'] else 1.10
+    h_xg = max(0.4, h_att * a_def * avg_goals * home_advantage)
+    a_xg = max(0.3, a_att * h_def * avg_goals * (2.0 - home_advantage))
     
-    # Matrice de Poisson (Scores de 0 à 5)
     max_goals = 6
     p_matrix = np.zeros((max_goals, max_goals))
     for i in range(max_goals):
         for j in range(max_goals):
             p_matrix[i, j] = poisson.pmf(i, h_xg) * poisson.pmf(j, a_xg)
             
-    p_h = np.sum(np.triu(p_matrix, 1).T) * 100  # Victoire Domicile
-    p_n = np.sum(np.diag(p_matrix)) * 100       # Nul
-    p_a = np.sum(np.tril(p_matrix, -1)) * 100   # Victoire Extérieur
+    p_h = np.sum(np.triu(p_matrix, 1).T) * 100
+    p_n = np.sum(np.diag(p_matrix)) * 100
+    p_a = np.sum(np.tril(p_matrix, -1)) * 100
     
     p_1x = p_h + p_n
     p_x2 = p_a + p_n
-    p_12 = p_h + p_a
     
-    # Over / Under / BTTS
     total_goals_grid = np.add.outer(np.arange(max_goals), np.arange(max_goals))
     p_o15 = np.sum(p_matrix[total_goals_grid > 1]) * 100
     p_o25 = np.sum(p_matrix[total_goals_grid > 2]) * 100
-    
-    # BTTS (Both Teams To Score)
     p_btts = np.sum(p_matrix[1:, 1:]) * 100
     
-    # Identification du pari le plus sûr
+    best_score_idx = np.unravel_index(np.argmax(p_matrix), p_matrix.shape)
+    probable_score = f"{best_score_idx[0]} - {best_score_idx[1]}"
+    
     options = [
         ("1X (Double Chance)", round(p_1x, 1)),
         ("X2 (Double Chance)", round(p_x2, 1)),
@@ -184,29 +197,32 @@ def compute_quant_predictions(home_team, away_team, comp_code):
         ("Victoire Extérieur (2)", round(p_a, 1))
     ]
     
-    # Tri par niveau de confiance
-    best_option = max(options, key=lambda x: x[1])
+    sorted_options = sorted(options, key=lambda x: x[1], reverse=True)
+    best_option = sorted_options[0]
+    sec_option = sorted_options[1]
     
     return {
-        "h_xg": round(h_xg, 2),
-        "a_xg": round(a_xg, 2),
-        "p_h": round(p_h, 1),
-        "p_n": round(p_n, 1),
-        "p_a": round(p_a, 1),
-        "advice": best_option[0],
-        "conf": best_option[1]
+        "h_xg": round(h_xg, 2), "a_xg": round(a_xg, 2),
+        "p_h": round(p_h, 1), "p_n": round(p_n, 1), "p_a": round(p_a, 1),
+        "p_1x": round(p_1x, 1), "p_x2": round(p_x2, 1),
+        "p_o15": round(p_o15, 1), "p_o25": round(p_o25, 1),
+        "p_btts": round(p_btts, 1),
+        "probable_score": probable_score,
+        "advice": best_option[0], "conf": best_option[1],
+        "sec_advice": sec_option[0], "sec_conf": sec_option[1]
     }
 
 # ==========================================
-# 4. RÉCUPÉRATION DES MATCHS DU FLUX
+# 4. RÉCUPÉRATION DES MATCHS DU JOUR (INCLUS EUROPA LEAGUE)
 # ==========================================
-@st.cache_data(ttl=300, show_spinner="Analyse statistique avancée des matchs...")
-def get_all_upcoming_matches():
+@st.cache_data(ttl=300, show_spinner="Récupération des matchs (Ligue Europa & Championnats)...")
+def get_today_matches():
     now = datetime.now(timezone.utc)
     date_from = now.strftime("%Y-%m-%d")
-    date_to = (now + timedelta(days=10)).strftime("%Y-%m-%d")
+    date_to = (now + timedelta(days=1)).strftime("%Y-%m-%d")
     
-    endpoint = f"matches?dateFrom={date_from}&dateTo={date_to}"
+    # Appel explicite incluant Europa League (EL) et Champions League (CL)
+    endpoint = f"matches?competitions={TARGET_COMPETITIONS}&dateFrom={date_from}&dateTo={date_to}"
     raw_data = fetch_api(endpoint)
     
     predictions = []
@@ -214,39 +230,82 @@ def get_all_upcoming_matches():
     if raw_data and "matches" in raw_data:
         for m in raw_data["matches"]:
             league_name = m.get("competition", {}).get("name", "Autre Ligue")
-            comp_code = m.get("competition", {}).get("code", "PL")
+            comp_code = m.get("competition", {}).get("code", "EL")
             h_team = m["homeTeam"]["name"]
             a_team = m["awayTeam"]["name"]
             
             raw_utc = m["utcDate"]
             date_raw = raw_utc[:10]
             time_raw = raw_utc[11:16]
-            
-            dt_obj = datetime.strptime(date_raw, "%Y-%m-%d")
-            formatted_date = dt_obj.strftime("%d/%m/%Y")
+            formatted_date = datetime.strptime(date_raw, "%Y-%m-%d").strftime("%d/%m/%Y")
             
             q = compute_quant_predictions(h_team, a_team, comp_code)
             
             predictions.append({
-                "league": league_name,
-                "comp_code": comp_code,
-                "date_raw": date_raw,
-                "date_formatted": formatted_date,
-                "time": time_raw,
+                "league": league_name, "comp_code": comp_code,
+                "home": h_team, "away": a_team,
+                "date_raw": date_raw, "date_formatted": formatted_date, "time": time_raw,
                 "match": f"{h_team} vs {a_team}",
-                "advice": q["advice"],
-                "conf": q["conf"],
+                "advice": q["advice"], "conf": q["conf"],
+                "sec_advice": q["sec_advice"], "sec_conf": q["sec_conf"],
+                "probable_score": q["probable_score"],
                 "xg": f"{q['h_xg']} - {q['a_xg']}",
-                "probs": f"1:{q['p_h']}% | X:{q['p_n']}% | 2:{q['p_a']}%"
+                "p_h": q['p_h'], "p_n": q['p_n'], "p_a": q['p_a'],
+                "p_o15": q['p_o15'], "p_o25": q['p_o25'], "p_btts": q['p_btts']
             })
             
     return sorted(predictions, key=lambda x: x["conf"], reverse=True)
 
-# Charger les données
-all_predictions = get_all_upcoming_matches()
+@st.cache_data(ttl=600, show_spinner="Vérification des résultats récents...")
+def get_finished_history():
+    now = datetime.now(timezone.utc)
+    date_from = (now - timedelta(days=7)).strftime("%Y-%m-%d")
+    date_to = now.strftime("%Y-%m-%d")
+    
+    endpoint = f"matches?status=FINISHED&competitions={TARGET_COMPETITIONS}&dateFrom={date_from}&dateTo={date_to}"
+    raw_data = fetch_api(endpoint)
+    history = []
+    
+    if raw_data and "matches" in raw_data:
+        for m in raw_data["matches"]:
+            h_team = m["homeTeam"]["name"]
+            a_team = m["awayTeam"]["name"]
+            comp_code = m.get("competition", {}).get("code", "EL")
+            league_name = m.get("competition", {}).get("name", "Autre Ligue")
+            
+            h_score = m["score"]["fullTime"]["home"]
+            a_score = m["score"]["fullTime"]["away"]
+            
+            if h_score is not None and a_score is not None:
+                q = compute_quant_predictions(h_team, a_team, comp_code)
+                advice = q["advice"]
+                
+                is_win = False
+                if "1X" in advice and (h_score >= a_score): is_win = True
+                elif "X2" in advice and (a_score >= h_score): is_win = True
+                elif "1.5" in advice and (h_score + a_score > 1): is_win = True
+                elif "2.5" in advice and (h_score + a_score > 2): is_win = True
+                elif "Marquent" in advice and (h_score > 0 and a_score > 0): is_win = True
+                elif "(1)" in advice and (h_score > a_score): is_win = True
+                elif "(2)" in advice and (a_score > h_score): is_win = True
+
+                history.append({
+                    "date": datetime.strptime(m["utcDate"][:10], "%Y-%m-%d").strftime("%d/%m/%Y"),
+                    "league": league_name,
+                    "match": f"{h_team} {h_score} - {a_score} {a_team}",
+                    "advice": advice,
+                    "conf": f"{q['conf']}%",
+                    "status": "✅ GAGNÉ" if is_win else "❌ PERDU",
+                    "is_win": is_win
+                })
+    return history
+
+# Chargement
+all_predictions = get_today_matches()
+history_data = get_finished_history()
 
 # ==========================================
-# 5. SIDEBAR : FILTRE PAR LIGUES
+# 5. SIDEBAR : FILTRE LIGUE & EUROPA LEAGUE
 # ==========================================
 st.sidebar.title("🏆 Choix du Championnat")
 
@@ -260,140 +319,192 @@ selected_league = st.sidebar.selectbox(
 )
 
 st.sidebar.markdown("---")
-if st.sidebar.button("🔄 Actualiser les Prédictions"):
+if st.sidebar.button("🔄 Actualiser les matchs du jour"):
     st.cache_data.clear()
     st.rerun()
 
-# Filtrage par ligue
 if selected_league == "Toutes les ligues (Global)":
     filtered_predictions = all_predictions
 else:
     filtered_predictions = [p for p in all_predictions if p['league'] == selected_league]
 
 # ==========================================
-# 6. AFFICHAGE PRINCIPAL
+# 6. EN-TÊTE ET ONGLETS PRINCIPAUX
 # ==========================================
 st.markdown(f"""
 <div class="hero-header">
     <div style="display:flex; justify-content:space-between; align-items:center;">
         <div>
-            <span class="badge-gold">QUANT ENGINE v25.5 • STATISTIQUES POISSON</span>
+            <span class="badge-gold">QUANT ENGINE v25.8 • INCLUS EUROPA LEAGUE</span>
             <h1 style="color:#FFF; margin:10px 0 0 0; font-weight:800; font-size:1.8rem;">{selected_league}</h1>
-            <p style="color:#94A3B8; margin:5px 0 0 0; font-size:0.9rem;">Calculateur Poisson basé sur les xG et l'historique d'efficacité offensive/défensive.</p>
+            <p style="color:#94A3B8; margin:5px 0 0 0; font-size:0.9rem;">Coupons du jour exclusifs (24h-48h), prédictions de Poisson et suivi complet des résultats.</p>
         </div>
         <div style="text-align:right;">
-            <span class="badge-blue">{len(filtered_predictions)} Matchs Analysés</span>
+            <span class="badge-blue">{len(filtered_predictions)} Matchs du Jour</span>
         </div>
     </div>
 </div>
 """, unsafe_allow_html=True)
 
-t_coupons, t_cal = st.tabs([
-    "🎟️ Coupons à Forte Probabilité Mathématique",
-    "📊 Analyse Détaillée & Matrice Poisson"
+t_coupons, t_deep, t_hist, t_cal = st.tabs([
+    "🎟️ Coupons du Jour",
+    "🔍 Prédiction Détaillée par Match",
+    "📜 Historique Gagné/Perdu (7J)",
+    "📅 Programme des Matchs du Jour"
 ])
 
 # ------------------------------------------
-# TAB 1 : COUPONS HAUTE FIABILITÉ
+# TAB 1 : COUPONS DU JOUR
 # ------------------------------------------
 with t_coupons:
     if filtered_predictions:
-        dates_in_league = sorted(list(set(p['date_raw'] for p in filtered_predictions)))
+        c1, c2 = st.columns(2)
         
-        c_filter, _ = st.columns([1, 2])
-        with c_filter:
-            selected_date = st.selectbox(
-                "Filtrer par date de match :",
-                options=["Toutes les dates"] + [datetime.strptime(d, "%Y-%m-%d").strftime("%d/%m/%Y") for d in dates_in_league]
-            )
-        
-        if selected_date != "Toutes les dates":
-            raw_sel_date = datetime.strptime(selected_date, "%d/%m/%Y").strftime("%Y-%m-%d")
-            coupon_predictions = [p for p in filtered_predictions if p['date_raw'] == raw_sel_date]
-        else:
-            coupon_predictions = filtered_predictions
-
-        if len(coupon_predictions) >= 3:
-            c1, c2 = st.columns(2)
+        with c1:
+            st.markdown("""
+            <div class="coupon-card-v1">
+                <span class="badge-gold">COUPON DU JOUR #1 • HAUTE SÉCURITÉ</span>
+                <hr style="border-color:rgba(16, 185, 129, 0.2); margin:15px 0;">
+            """, unsafe_allow_html=True)
             
-            with c1:
-                st.markdown("""
-                <div class="coupon-card-v1">
-                    <span class="badge-gold">COUPON #1 • MAX PROBABILITÉ (>75%)</span>
-                    <hr style="border-color:rgba(16, 185, 129, 0.2); margin:15px 0;">
-                """, unsafe_allow_html=True)
-                
-                c1_matches = coupon_predictions[:5]
-                conf_c1 = 1.0
-                for idx, item in enumerate(c1_matches, 1):
-                    conf_c1 *= (item['conf'] / 100.0)
-                    st.markdown(f"""
-                    <div class="match-row-item">
-                        <div style="display:flex; justify-content:space-between;">
-                            <div>
-                                <span class="league-pill">{item['league']}</span> • <span style="font-size:0.75rem; color:#94A3B8;">{item['date_formatted']} {item['time']}</span>
-                                <div style="font-weight:700; color:#F8FAFC; margin-top:4px;">{idx}. {item['match']}</div>
-                                <div style="font-size:0.72rem; color:#64748B;">xG prévu : {item['xg']}</div>
-                            </div>
-                            <div style="text-align:right;">
-                                <span style="color:#10B981; font-weight:800;">{item['advice']}</span>
-                                <div style="font-size:0.8rem; color:#F59E0B; font-weight:700;">{item['conf']}%</div>
-                            </div>
+            c1_matches = filtered_predictions[:5]
+            conf_c1 = 1.0
+            for idx, item in enumerate(c1_matches, 1):
+                conf_c1 *= (item['conf'] / 100.0)
+                st.markdown(f"""
+                <div class="match-row-item">
+                    <div style="display:flex; justify-content:space-between;">
+                        <div>
+                            <span class="league-pill">{item['league']}</span> • <span style="font-size:0.75rem; color:#94A3B8;">Aujourd'hui à {item['time']}</span>
+                            <div style="font-weight:700; color:#F8FAFC; margin-top:4px;">{idx}. {item['match']}</div>
+                        </div>
+                        <div style="text-align:right;">
+                            <span style="color:#10B981; font-weight:800;">{item['advice']}</span>
+                            <div style="font-size:0.75rem; color:#F59E0B; font-weight:700;">{item['conf']}%</div>
                         </div>
                     </div>
-                    """, unsafe_allow_html=True)
-                st.markdown(f"<b>Fiabilité Cumulée Théorique : {round(conf_c1*100, 1)}%</b></div>", unsafe_allow_html=True)
+                </div>
+                """, unsafe_allow_html=True)
+            st.markdown(f"<b>Fiabilité Cumulée : {round(conf_c1*100, 1)}%</b></div>", unsafe_allow_html=True)
 
-            with c2:
-                st.markdown("""
-                <div class="coupon-card-v2">
-                    <span class="badge-blue">COUPON #2 • VALEUR ÉQUILIBRÉE</span>
-                    <hr style="border-color:rgba(59, 130, 246, 0.2); margin:15px 0;">
-                """, unsafe_allow_html=True)
-                
-                c2_matches = coupon_predictions[5:10] if len(coupon_predictions) >= 8 else coupon_predictions[:5]
-                conf_c2 = 1.0
-                for idx, item in enumerate(c2_matches, 1):
-                    conf_c2 *= (item['conf'] / 100.0)
-                    st.markdown(f"""
-                    <div class="match-row-item-blue">
-                        <div style="display:flex; justify-content:space-between;">
-                            <div>
-                                <span class="league-pill">{item['league']}</span> • <span style="font-size:0.75rem; color:#94A3B8;">{item['date_formatted']} {item['time']}</span>
-                                <div style="font-weight:700; color:#F8FAFC; margin-top:4px;">{idx}. {item['match']}</div>
-                                <div style="font-size:0.72rem; color:#64748B;">xG prévu : {item['xg']}</div>
-                            </div>
-                            <div style="text-align:right;">
-                                <span style="color:#38BDF8; font-weight:800;">{item['advice']}</span>
-                                <div style="font-size:0.8rem; color:#38BDF8; font-weight:700;">{item['conf']}%</div>
-                            </div>
+        with c2:
+            st.markdown("""
+            <div class="coupon-card-v2">
+                <span class="badge-blue">COUPON DU JOUR #2 • PARIS ALTERNATIFS</span>
+                <hr style="border-color:rgba(59, 130, 246, 0.2); margin:15px 0;">
+            """, unsafe_allow_html=True)
+            
+            c2_matches = filtered_predictions[5:10] if len(filtered_predictions) >= 8 else filtered_predictions[:5]
+            conf_c2 = 1.0
+            for idx, item in enumerate(c2_matches, 1):
+                conf_c2 *= (item['sec_conf'] / 100.0)
+                st.markdown(f"""
+                <div class="match-row-item-blue">
+                    <div style="display:flex; justify-content:space-between;">
+                        <div>
+                            <span class="league-pill">{item['league']}</span> • <span style="font-size:0.75rem; color:#94A3B8;">Aujourd'hui à {item['time']}</span>
+                            <div style="font-weight:700; color:#F8FAFC; margin-top:4px;">{idx}. {item['match']}</div>
+                        </div>
+                        <div style="text-align:right;">
+                            <span style="color:#38BDF8; font-weight:800;">{item['sec_advice']}</span>
+                            <div style="font-size:0.75rem; color:#38BDF8; font-weight:700;">{item['sec_conf']}%</div>
                         </div>
                     </div>
-                    """, unsafe_allow_html=True)
-                st.markdown(f"<b>Fiabilité Cumulée Théorique : {round(conf_c2*100, 1)}%</b></div>", unsafe_allow_html=True)
-        else:
-            st.info(f"Seulement {len(coupon_predictions)} match(s) disponible(s) pour la sélection. Essayez de sélectionner 'Toutes les ligues' à gauche pour générer un coupon combiné.")
-            st.dataframe(pd.DataFrame(coupon_predictions)[['date_formatted', 'time', 'league', 'match', 'advice', 'conf', 'probs']], use_container_width=True)
+                </div>
+                """, unsafe_allow_html=True)
+            st.markdown(f"<b>Fiabilité Cumulée : {round(conf_c2*100, 1)}%</b></div>", unsafe_allow_html=True)
     else:
-        st.warning("Aucun match trouvé pour ce championnat dans les prochains jours.")
+        st.info("Aucun match prévu pour aujourd'hui dans ce championnat. Sélectionnez 'Toutes les ligues' pour inclure la UEFA Europa League et les autres compétitions du jour.")
 
 # ------------------------------------------
-# TAB 2 : CALENDRIER & MATRICE
+# TAB 2 : DEEP-DIVE MATCHS DU JOUR
+# ------------------------------------------
+with t_deep:
+    st.subheader("🔍 Analyse Approfondie (Matchs du Jour)")
+    if filtered_predictions:
+        match_titles = [f"{m['match']} ({m['league']} - {m['time']})" for m in filtered_predictions]
+        sel_match_idx = st.selectbox("Sélectionnez le match :", range(len(match_titles)), format_func=lambda x: match_titles[x])
+        
+        m = filtered_predictions[sel_match_idx]
+        
+        st.markdown(f"""
+        <div class="deep-card">
+            <h2 style="color:#FFF; margin:0; text-align:center;">{m['match']}</h2>
+            <p style="text-align:center; color:#94A3B8; margin-top:5px;">{m['league']} • Match programmé aujourd'hui à {m['time']}</p>
+            <hr style="border-color:#1E293B; margin:15px 0;">
+            
+            <div style="display:flex; justify-content:space-around; text-align:center;">
+                <div>
+                    <span style="color:#94A3B8; font-size:0.85rem;">xG Attendu</span>
+                    <div style="font-size:1.4rem; font-weight:800; color:#38BDF8;">{m['xg']}</div>
+                </div>
+                <div>
+                    <span style="color:#94A3B8; font-size:0.85rem;">Score Probable</span>
+                    <div style="font-size:1.4rem; font-weight:800; color:#F59E0B;">{m['probable_score']}</div>
+                </div>
+                <div>
+                    <span style="color:#94A3B8; font-size:0.85rem;">Conseil Principal</span>
+                    <div style="font-size:1.4rem; font-weight:800; color:#10B981;">{m['advice']} ({m['conf']}%)</div>
+                </div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            st.markdown("### 📊 Issus 1N2")
+            st.write(f"**Victoire Domicile :** {m['p_h']}%")
+            st.progress(int(m['p_h']))
+            st.write(f"**Match Nul :** {m['p_n']}%")
+            st.progress(int(m['p_n']))
+            st.write(f"**Victoire Extérieur :** {m['p_a']}%")
+            st.progress(int(m['p_a']))
+        with c2:
+            st.markdown("### ⚽ Totaux Buts")
+            st.write(f"**Plus de 1.5 Buts :** {m['p_o15']}%")
+            st.progress(int(m['p_o15']))
+            st.write(f"**Plus de 2.5 Buts :** {m['p_o25']}%")
+            st.progress(int(m['p_o25']))
+        with c3:
+            st.markdown("### 💡 Suggérés")
+            st.info(f"**Pari Sécurité :** {m['advice']} ({m['conf']}%)")
+            st.warning(f"**Pari Secours :** {m['sec_advice']} ({m['sec_conf']}%)")
+    else:
+        st.info("Aucun match disponible pour cette sélection.")
+
+# ------------------------------------------
+# TAB 3 : HISTORIQUE RÉSULTATS
+# ------------------------------------------
+with t_hist:
+    st.subheader("📜 Historique Récent des 7 Derniers Jours")
+    if history_data:
+        wins = sum(1 for h in history_data if h['is_win'])
+        total = len(history_data)
+        rate = round((wins / total) * 100, 1) if total > 0 else 0
+        
+        m1, m2, m3 = st.columns(3)
+        m1.metric("Matchs Joués Evalués", total)
+        m2.metric("Paris Gagnés", wins)
+        m3.metric("Taux de Réussite Réel", f"{rate}%")
+        
+        st.markdown("---")
+        df_hist = pd.DataFrame(history_data)[['date', 'league', 'match', 'advice', 'conf', 'status']]
+        df_hist.columns = ['Date', 'Championnat', 'Match & Score', 'Conseil Algo', 'Confiance', 'Résultat']
+        st.dataframe(df_hist, use_container_width=True, hide_index=True)
+    else:
+        st.info("Aucun historique disponible pour les 7 derniers jours.")
+
+# ------------------------------------------
+# TAB 4 : CALENDRIER DU JOUR
 # ------------------------------------------
 with t_cal:
-    st.subheader(f"📅 Tableau Analytique Quantitatif : {selected_league}")
+    st.subheader("📅 Programme des Matchs du Jour")
     if filtered_predictions:
-        grid = []
-        for m in sorted(filtered_predictions, key=lambda x: (x['date_raw'], x['time'])):
-            grid.append({
-                "🗓️ Date & Heure": f"{m['date_formatted']} {m['time']}",
-                "🏆 Championnat": m['league'],
-                "⚔️ Match": m['match'],
-                "⚽ xG Attendu": m['xg'],
-                "📊 Probas (1-X-2)": m['probs'],
-                "💡 Conseil Sécurité": m['advice'],
-                "📈 Indice de Confiance": f"{m['conf']}%"
-            })
+        grid = [{
+            "⏰ Heure": m['time'],
+            "🏆 Ligue": m['league'],
+            "⚔️ Rencontre": m['match'],
+            "💡 Conseil Securité": m['advice'],
+            "📈 Indice de Confiance": f"{m['conf']}%"
+        } for m in filtered_predictions]
         st.dataframe(pd.DataFrame(grid), use_container_width=True, hide_index=True)
-    else:
-        st.info("Aucune rencontre programmée à court terme pour cette sélection.")
