@@ -6,10 +6,10 @@ import pandas as pd
 from datetime import datetime, timedelta
 
 # ==========================================
-# 1. CONFIGURATION ET DESIGN V25.1
+# 1. CONFIGURATION ET DESIGN V25.0
 # ==========================================
 st.set_page_config(
-    page_title="Apex Quant v25.1",
+    page_title="Apex Quant v25.0",
     page_icon="⚽",
     layout="wide"
 )
@@ -82,6 +82,7 @@ st.markdown("""
         text-align: center;
     }
 
+    /* CARTE STYLISÉE POUR LE COUPON MULTI-CHAMPIONNATS */
     .coupon-card {
         background: linear-gradient(135deg, #1E1B4B 0%, #0F172A 100%);
         border: 2px solid #8B5CF6;
@@ -101,91 +102,66 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 2. CONNECTEUR THESPORTSDB (GRATUIT & SANS CLE PAYANTE)
+# 2. DONNÉES & API FOOTBALL
 # ==========================================
-THESPORTSDB_KEY = "3"
-BASE_URL = f"https://www.thesportsdb.com/api/v1/json/{THESPORTSDB_KEY}/"
+API_KEY = "1e9518e7585349f9abe6d5a29ddb83b1"
+BASE_URL = "https://api.football-data.org/v4/"
 
 COMPETITIONS = {
-    "Premier League (Angleterre)": "4328",
-    "UEFA Europa League": "4352",
-    "Coupe de la Ligue (EFL Cup)": "4356",
-    "Ligue des Champions": "4480",
-    "Ligue 1 (France)": "4334",
-    "La Liga (Espagne)": "4335",
-    "Serie A (Italie)": "4332",
-    "Bundesliga (Allemagne)": "4331"
+    "Premier League": "PL",
+    "La Liga": "PD",
+    "Ligue 1": "FL1",
+    "Serie A": "SA",
+    "Bundesliga": "BL1",
+    "Ligue des Champions": "CL"
 }
 
-@st.cache_data(ttl=600)
-def fetch_league_matches(league_id, mode="next"):
-    """
-    Récupère les matchs (futurs ou passés) via TheSportsDB
-    et adapte le format pour Apex Quant.
-    """
-    endpoint = "eventsnextleague.php" if mode == "next" else "eventspastleague.php"
-    url = f"{BASE_URL}{endpoint}?id={league_id}"
+@st.cache_data(ttl=30)
+def fetch_api(endpoint):
     try:
-        res = requests.get(url, timeout=10)
+        res = requests.get(f"{BASE_URL}{endpoint}", headers={"X-Auth-Token": API_KEY}, timeout=8)
         if res.status_code == 200:
-            data = res.json()
-            raw_events = data.get("events") or []
-            matches = []
-            for ev in raw_events:
-                date_str = ev.get("dateEvent", "")
-                time_str = ev.get("strTime", "00:00:00")
-                utc_date = ev.get("strTimestamp") or f"{date_str}T{time_str}"
-                
-                h_score = int(ev["intHomeScore"]) if ev.get("intHomeScore") is not None and str(ev.get("intHomeScore")).isdigit() else None
-                a_score = int(ev["intAwayScore"]) if ev.get("intAwayScore") is not None and str(ev.get("intAwayScore")).isdigit() else None
-                
-                status = "FINISHED" if mode == "past" or h_score is not None else "TIMED"
-                
-                matches.append({
-                    "id": ev.get("idEvent"),
-                    "status": status,
-                    "utcDate": utc_date,
-                    "homeTeam": {"name": ev.get("strHomeTeam", "Équipe A")},
-                    "awayTeam": {"name": ev.get("strAwayTeam", "Équipe B")},
-                    "score": {
-                        "fullTime": {
-                            "home": h_score,
-                            "away": a_score
-                        }
-                    }
-                })
-            return matches
+            return res.json()
     except Exception:
-        return []
-    return []
+        return None
+    return None
 
 @st.cache_data(ttl=1200)
-def get_advanced_league_stats(league_id):
-    """
-    Calcule ou génère les statistiques avancées d'une ligue à partir de son classement.
-    """
-    url = f"{BASE_URL}lookuptable.php?l={league_id}"
+def get_advanced_league_stats(league_code):
+    data = fetch_api(f"competitions/{league_code}/standings")
     stats = {}
     avg_goals = 1.35
     
-    try:
-        res = requests.get(url, timeout=10)
-        data = res.json() if res.status_code == 200 else {}
-        table = data.get("table", [])
-    except Exception:
-        table = []
-
-    if table:
+    if data and "standings" in data and len(data["standings"]) > 0:
+        table_total = data["standings"][0].get("table", [])
+        table_home = data["standings"][1].get("table", []) if len(data["standings"]) > 1 else table_total
+        table_away = data["standings"][2].get("table", []) if len(data["standings"]) > 2 else table_total
+        
+        dict_home = {r["team"]["name"]: r for r in table_home}
+        dict_away = {r["team"]["name"]: r for r in table_away}
+        
         total_played, total_gf = 0, 0
-        for row in table:
-            name = row.get("strTeam", "Équipe")
-            played = max(1, int(row.get("intPlayed", 1)))
-            pts = int(row.get("intPoints", 0))
-            gf = int(row.get("intGoalsFor", 0))
-            ga = int(row.get("intGoalsAgainst", 0))
-            form = row.get("strForm", "DDDDD")
+        
+        for row in table_total:
+            name = row["team"]["name"]
+            played = max(1, row.get("playedGames", 1))
+            pts = row.get("points", 0)
+            gf = row.get("goalsFor", 0)
+            ga = row.get("goalsAgainst", 0)
+            form = row.get("form", "D,D,D,D,D")
+            
+            h_row = dict_home.get(name, row)
+            h_played = max(1, h_row.get("playedGames", 1))
+            h_gf = h_row.get("goalsFor", gf / 2)
+            h_ga = h_row.get("goalsAgainst", ga / 2)
+            
+            a_row = dict_away.get(name, row)
+            a_played = max(1, a_row.get("playedGames", 1))
+            a_gf = a_row.get("goalsFor", gf / 2)
+            a_ga = a_row.get("goalsAgainst", ga / 2)
             
             elo_rating = 1500 + (pts * 12) + ((gf - ga) * 4)
+            
             form_pts = 0
             if form:
                 clean_form = str(form).replace(",", "").upper()
@@ -198,44 +174,59 @@ def get_advanced_league_stats(league_id):
             card_rate = float(np.clip(1.8 + (seed_val % 12) * 0.18 + (ga / played) * 0.25, 1.5, 4.2))
             corner_rate = float(np.clip(4.2 + (seed_val % 15) * 0.20 + (gf / played) * 0.45, 3.8, 7.5))
             midfield_control = float(np.clip(0.85 + (pts / (played * 3.0)) * 0.35, 0.75, 1.30))
-
+            
             stats[name] = {
                 "gf_pg": gf / played, "ga_pg": ga / played,
-                "home_gf_pg": (gf / played) * 1.1, "home_ga_pg": (ga / played) * 0.9,
-                "away_gf_pg": (gf / played) * 0.9, "away_ga_pg": (ga / played) * 1.1,
+                "home_gf_pg": h_gf / h_played, "home_ga_pg": h_ga / h_played,
+                "away_gf_pg": a_gf / a_played, "away_ga_pg": a_ga / a_played,
                 "elo": elo_rating, "form_factor": form_factor,
                 "card_rate": card_rate, "corner_rate": corner_rate,
                 "midfield": midfield_control
             }
             total_played += played
             total_gf += gf
-        
+            
         if total_played > 0:
             avg_goals = max(0.9, total_gf / total_played)
             
     return stats, avg_goals
 
-@st.cache_data(ttl=600)
+@st.cache_data(ttl=300)
 def get_all_competitions_upcoming():
     all_upcoming = []
     league_stats_dict = {}
     league_avg_dict = {}
     
-    for comp_name, comp_id in COMPETITIONS.items():
-        stats, avg_g = get_advanced_league_stats(comp_id)
+    today_dt = datetime.utcnow()
+    next_week_dt = today_dt + timedelta(days=8)
+    
+    for comp_name, comp_code in COMPETITIONS.items():
+        stats, avg_g = get_advanced_league_stats(comp_code)
         league_stats_dict[comp_name] = stats
         league_avg_dict[comp_name] = avg_g
         
-        matches = fetch_league_matches(comp_id, mode="next")
+        raw = fetch_api(f"competitions/{comp_code}/matches")
+        matches = raw.get("matches", []) if raw else []
+        
         for m in matches:
-            m_entry = dict(m)
-            m_entry['league_name'] = comp_name
-            all_upcoming.append(m_entry)
+            if m.get('status') in ['SCHEDULED', 'TIMED']:
+                utc_str = m.get('utcDate', '')
+                if utc_str:
+                    try:
+                        m_dt = datetime.strptime(utc_str[:19], "%Y-%m-%dT%H:%M:%S")
+                        if today_dt - timedelta(hours=3) <= m_dt <= next_week_dt:
+                            m_entry = dict(m)
+                            m_entry['league_name'] = comp_name
+                            all_upcoming.append(m_entry)
+                    except Exception:
+                        m_entry = dict(m)
+                        m_entry['league_name'] = comp_name
+                        all_upcoming.append(m_entry)
                         
     return all_upcoming, league_stats_dict, league_avg_dict
 
 # ==========================================
-# 3. MOTEUR MATHÉMATIQUE V25.1
+# 3. MOTEUR MATHÉMATIQUE V25.0
 # ==========================================
 def dixon_coles_adjustment(x, y, h_xg, a_xg, rho=-0.08):
     if x == 0 and y == 0: return max(0.01, 1.0 - (h_xg * a_xg * rho))
@@ -404,16 +395,34 @@ def run_quant_prediction_v23(h_name, a_name, score_h=0, score_a=0, elapsed_min=0
     }
 
 # ==========================================
-# 4. INTERFACE APPLICATIVE V25.1
+# 4. INTERFACE APPLICATIVE V25.0
 # ==========================================
-st.sidebar.title("Apex Quant v25.1")
+st.sidebar.title("Apex Quant v25.0")
 selected_comp = st.sidebar.selectbox("Sélectionner la Compétition principale", list(COMPETITIONS.keys()))
 league_code = COMPETITIONS[selected_comp]
 
 team_stats, avg_goals = get_advanced_league_stats(league_code)
-upcoming_matches = fetch_league_matches(league_code, mode="next")
-finished_matches = fetch_league_matches(league_code, mode="past")
-live_matches = [m for m in upcoming_matches if m.get('status') in ['IN_PLAY', 'LIVE', 'PAUSED']]
+raw_matches = fetch_api(f"competitions/{league_code}/matches")
+
+all_matches = raw_matches.get("matches", []) if raw_matches else []
+live_matches = [m for m in all_matches if m.get('status') in ['IN_PLAY', 'LIVE', 'PAUSED']]
+
+today_dt = datetime.utcnow()
+next_week_dt = today_dt + timedelta(days=8)
+
+upcoming_matches = []
+for m in all_matches:
+    if m.get('status') in ['SCHEDULED', 'TIMED']:
+        utc_str = m.get('utcDate', '')
+        if utc_str:
+            try:
+                m_dt = datetime.strptime(utc_str[:19], "%Y-%m-%dT%H:%M:%S")
+                if today_dt - timedelta(hours=3) <= m_dt <= next_week_dt:
+                    upcoming_matches.append(m)
+            except Exception:
+                upcoming_matches.append(m)
+
+finished_matches = [m for m in all_matches if m.get('status') == 'FINISHED']
 
 tab_live, tab_calendar, tab_detail, tab_audit, tab_coupon = st.tabs([
     f"🔴 EN DIRECT ({len(live_matches)})",
@@ -526,7 +535,7 @@ with tab_live:
 # ONGLET 2 : CALENDRIER
 # ------------------------------------------
 with tab_calendar:
-    st.subheader(f"Prochaines Rencontres - {selected_comp}")
+    st.subheader(f"Matchs des 7 Prochains Jours - {selected_comp}")
     if upcoming_matches:
         cal_data = []
         for m in upcoming_matches:
@@ -548,7 +557,7 @@ with tab_calendar:
             
         st.dataframe(pd.DataFrame(cal_data), use_container_width=True, hide_index=True)
     else:
-        st.info("Aucune rencontre programmée dans les prochains jours.")
+        st.info("Aucune rencontre programmée dans les 7 prochains jours.")
 
 # ------------------------------------------
 # ONGLET 3 : ANALYSE DETAILLEE
@@ -556,9 +565,10 @@ with tab_calendar:
 with tab_detail:
     st.subheader("Analyse Détaillée d'une Rencontre")
     
-    if upcoming_matches:
+    if upcoming_matches or all_matches:
         match_options = {}
-        for m in upcoming_matches:
+        pool = upcoming_matches if upcoming_matches else all_matches[:10]
+        for m in pool:
             date_formatted = m['utcDate'][:10] + " [" + m['utcDate'][11:16] + "]"
             label = f"{date_formatted} : {m['homeTeam']['name']} vs {m['awayTeam']['name']}"
             match_options[label] = m
@@ -636,8 +646,6 @@ with tab_detail:
             st.write(f"• Plus de 3.5 Cartons : **{res['cards']['p_3_5']}%**")
             st.write(f"• Plus de 4.5 Cartons : **{res['cards']['p_4_5']}%**")
             st.markdown('</div>', unsafe_allow_html=True)
-    else:
-        st.info("Aucun match disponible pour analyse dans cette compétition.")
 
 # ------------------------------------------
 # ONGLET 4 : AUDIT & VÉRIFICATION AUTOMATIQUE
@@ -741,16 +749,16 @@ with tab_audit:
         st.info("Aucun match terminé disponible pour l'instant dans cette compétition.")
 
 # ------------------------------------------
-# ONGLET 5 : GENERATEUR MULTI-CHAMPIONNATS (V25.1)
+# ONGLET 5 : GENERATEUR MULTI-CHAMPIONNATS (V25.0)
 # ------------------------------------------
 with tab_coupon:
     st.subheader("🎟️ Coupon Multi-Championnats (Minimum 5 Matchs)")
     
-    with st.spinner("Analyse et scan en cours de tous les grands championnats et coupes..."):
+    with st.spinner("Analyse et scan en cours de tous les grands championnats..."):
         all_multi_matches, multi_stats, multi_avg = get_all_competitions_upcoming()
     
     if len(all_multi_matches) < 5:
-        st.warning("Il n'y a pas assez de matchs enregistrés dans l'ensemble des compétitions pour former un coupon de 5 matchs.")
+        st.warning("Il n'y a pas assez de matchs programmés dans l'ensemble des grands championnats pour former un coupon complet de 5 matchs.")
     else:
         dates_dict = {}
         for m in all_multi_matches:
@@ -763,7 +771,7 @@ with tab_coupon:
         day_matches = dates_dict.get(selected_date, [])
         
         if len(day_matches) < 5:
-            st.info(f"Seulement {len(day_matches)} match(s) le {selected_date}. Élargissement du scan aux matchs les plus proches...")
+            st.info(f"Seulement {len(day_matches)} match(s) au total le {selected_date}. Élargissement de la recherche aux matchs les plus proches...")
             pool_matches = all_multi_matches
         else:
             pool_matches = day_matches
@@ -832,7 +840,7 @@ with tab_coupon:
         
         st.markdown(f"""
         <div class="coupon-header">
-            <h2 style="margin:0; color:#F59E0B; font-weight:900;">🔥 COUPON DU JOUR MULTI-CHAMPIONNATS (V25.1)</h2>
+            <h2 style="margin:0; color:#F59E0B; font-weight:900;">🔥 COUPON DU JOUR MULTI-CHAMPIONNATS (V25.0)</h2>
             <div style="font-size:1.4rem; font-weight:800; margin-top:10px; color:#FFFFFF;">
                 Côte Totale Cumulée : <span style="color:#38BDF8; font-size:2rem; font-weight:900;">{total_odds_formatted}</span>
             </div>
@@ -844,7 +852,7 @@ with tab_coupon:
         
         st.markdown("### 📋 DÉTAIL DES 5 SÉLECTIONS DU COMBINÉ")
         
-        coupon_export_text = f"🎟️ COMBINÉ APEX QUANT V25.1 ({selected_date})\n"
+        coupon_export_text = f"🎟️ COMBINÉ APEX QUANT ({selected_date})\n"
         coupon_export_text += f"📊 Cote Totale : {total_odds_formatted} | Fiabilité : {avg_confidence}%\n\n"
 
         for idx, leg in enumerate(selected_coupon, 1):
