@@ -191,7 +191,6 @@ def get_advanced_league_stats(league_code):
             
     return stats, avg_goals
 
-# CHARGEMENT MULTI-CHAMPIONNATS POUR LE GENERATEUR GLOBAL
 @st.cache_data(ttl=300)
 def get_all_competitions_upcoming():
     all_upcoming = []
@@ -341,7 +340,7 @@ def run_quant_prediction_v23(h_name, a_name, score_h=0, score_a=0, elapsed_min=0
             pick_type = "LIVE_CORNER"
             selected_odds = prob_to_odds(prob_more_corners_2plus)
         else:
-            best_pick = f"🔒 En Direct : Score {score_h}-{score_a} conserve"
+            best_pick = f"🔒 En Direct : Score {score_h}-{score_a} conservé"
             best_prob = round(100.0 - prob_more_goals, 1)
             pick_type = "LIVE_STABLE"
             selected_odds = prob_to_odds(best_prob)
@@ -406,7 +405,6 @@ team_stats, avg_goals = get_advanced_league_stats(league_code)
 raw_matches = fetch_api(f"competitions/{league_code}/matches")
 
 all_matches = raw_matches.get("matches", []) if raw_matches else []
-
 live_matches = [m for m in all_matches if m.get('status') in ['IN_PLAY', 'LIVE', 'PAUSED']]
 
 today_dt = datetime.utcnow()
@@ -426,7 +424,6 @@ for m in all_matches:
 
 finished_matches = [m for m in all_matches if m.get('status') == 'FINISHED']
 
-# ONGLET DU GENERATEUR MULTI-CHAMPIONNATS
 tab_live, tab_calendar, tab_detail, tab_audit, tab_coupon = st.tabs([
     f"🔴 EN DIRECT ({len(live_matches)})",
     f"📅 CALENDRIER ({len(upcoming_matches)})", 
@@ -752,7 +749,7 @@ with tab_audit:
         st.info("Aucun match terminé disponible pour l'instant dans cette compétition.")
 
 # ------------------------------------------
-# ONGLET 5 : GENERATEUR MULTI-CHAMPIONNATS (NOUVEAU V25.0)
+# ONGLET 5 : GENERATEUR MULTI-CHAMPIONNATS (V25.0)
 # ------------------------------------------
 with tab_coupon:
     st.subheader("🎟️ Coupon Multi-Championnats (Minimum 5 Matchs)")
@@ -763,7 +760,6 @@ with tab_coupon:
     if len(all_multi_matches) < 5:
         st.warning("Il n'y a pas assez de matchs programmés dans l'ensemble des grands championnats pour former un coupon complet de 5 matchs.")
     else:
-        # Groupement des matchs par date à travers tous les championnats
         dates_dict = {}
         for m in all_multi_matches:
             d = m['utcDate'][:10]
@@ -780,7 +776,6 @@ with tab_coupon:
         else:
             pool_matches = day_matches
         
-        # ANALYSE QUANTITATIVE DE CHAQUE RENCONTRE
         analyzed_list = []
         for m in pool_matches:
             league = m['league_name']
@@ -788,7 +783,6 @@ with tab_coupon:
             a_team = m['awayTeam']['name']
             match_time = m['utcDate'][11:16]
             
-            # Utilisation des stats spécifiques au championnat de la rencontre
             league_team_stats = multi_stats.get(league, {})
             league_avg_goals = multi_avg.get(league, 1.35)
             
@@ -810,20 +804,16 @@ with tab_coupon:
                 "top_score": pred['top_3_scores'][0]['score']
             })
         
-        # TRI PAR PROBABILITÉ DÉCROISSANTE
         analyzed_list.sort(key=lambda x: x["prob"], reverse=True)
         
-        # SÉLECTION DES 5 MEILLEURS ÉVÉNEMENTS (RÉPARTIS SUR LES CHAMPIONNATS)
         selected_coupon = []
         league_counts = {}
         type_counts = {}
         
-        # Pass 1: Sélection équilibrée multi-championnats
         for item in analyzed_list:
             lg = item["league"]
             tp = item["type"]
             
-            # Règle : Max 2 matchs du même championnat & Max 2 types de paris identiques
             if league_counts.get(lg, 0) < 2 and type_counts.get(tp, 0) < 2:
                 selected_coupon.append(item)
                 league_counts[lg] = league_counts.get(lg, 0) + 1
@@ -832,7 +822,6 @@ with tab_coupon:
             if len(selected_coupon) == 5:
                 break
         
-        # Pass 2: Compléter si le filtre strict n'a pas atteint 5
         if len(selected_coupon) < 5:
             for item in analyzed_list:
                 if item not in selected_coupon:
@@ -840,7 +829,6 @@ with tab_coupon:
                 if len(selected_coupon) == 5:
                     break
         
-        # CALCUL DES INDICATEURS CLÉS
         total_odds = 1.0
         sum_prob = 0.0
         for leg in selected_coupon:
@@ -850,7 +838,6 @@ with tab_coupon:
         avg_confidence = round(sum_prob / len(selected_coupon), 1)
         total_odds_formatted = round(total_odds, 2)
         
-        # EN-TÊTE DU COUPON
         st.markdown(f"""
         <div class="coupon-header">
             <h2 style="margin:0; color:#F59E0B; font-weight:900;">🔥 COUPON DU JOUR MULTI-CHAMPIONNATS (V25.0)</h2>
@@ -865,6 +852,9 @@ with tab_coupon:
         
         st.markdown("### 📋 DÉTAIL DES 5 SÉLECTIONS DU COMBINÉ")
         
+        coupon_export_text = f"🎟️ COMBINÉ APEX QUANT ({selected_date})\n"
+        coupon_export_text += f"📊 Cote Totale : {total_odds_formatted} | Fiabilité : {avg_confidence}%\n\n"
+
         for idx, leg in enumerate(selected_coupon, 1):
             st.markdown(f"""
             <div class="coupon-card">
@@ -884,3 +874,10 @@ with tab_coupon:
                 </div>
             </div>
             """, unsafe_allow_html=True)
+
+            coupon_export_text += f"{idx}. [{leg['league']}] {leg['match']}\n"
+            coupon_export_text += f"   👉 Choix : {leg['pick']} (Cote : {leg['odds']})\n"
+
+        st.divider()
+        st.markdown("### 📋 COPIE RAPIDE DU COUPON")
+        st.code(coupon_export_text, language="text")
