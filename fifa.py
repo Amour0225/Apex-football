@@ -3,118 +3,133 @@ import requests
 import numpy as np
 from scipy.stats import poisson, nbinom
 import pandas as pd
+from datetime import datetime, timezone
 
 # ==========================================
-# 1. CONFIGURATION & DESIGN INTERFACE
+# 1. CONFIGURATION & DESIGN INTERFACE ULTIMATE
 # ==========================================
 st.set_page_config(
-    page_title="Apex Quant Engine v25.3 • Institutional Terminal",
-    page_icon="⚽",
+    page_title="Apex Quant Engine v26.0 • Premium Terminal",
+    page_icon="⚡",
     layout="wide"
 )
 
 st.markdown("""
     <style>
-    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700;800&family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700;800&display=swap');
     
     * { font-family: 'Plus Jakarta Sans', sans-serif; }
-    .stApp { background-color: #020617; color: #F8FAFC; }
+    .stApp { background-color: #030712; color: #F8FAFC; }
     
-    .oracle-card-v25 {
-        background: linear-gradient(135deg, #0F172A 0%, #030712 50%, #064E3B 100%);
+    /* En-tête Principal */
+    .hero-header {
+        background: linear-gradient(135deg, rgba(15, 23, 42, 0.9) 0%, rgba(3, 7, 18, 0.95) 100%);
+        border: 1px solid rgba(56, 189, 248, 0.2);
+        box-shadow: 0 20px 40px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.1);
+        border-radius: 20px;
+        padding: 28px;
+        margin-bottom: 30px;
+    }
+    
+    /* Cartes de Coupons Glassmorphism */
+    .coupon-card-v1 {
+        background: linear-gradient(145deg, rgba(15, 23, 42, 0.8), rgba(6, 78, 59, 0.25));
         border: 1.5px solid #10B981;
-        border-radius: 16px;
+        border-radius: 18px;
         padding: 24px;
-        margin-bottom: 25px;
-        box-shadow: 0 10px 30px rgba(16, 185, 129, 0.15);
+        box-shadow: 0 12px 30px rgba(16, 185, 129, 0.15);
+        margin-bottom: 20px;
     }
     
-    .coupon-box {
-        background: #0F172A;
+    .coupon-card-v2 {
+        background: linear-gradient(145deg, rgba(15, 23, 42, 0.8), rgba(30, 58, 138, 0.3));
         border: 1.5px solid #3B82F6;
-        border-radius: 14px;
-        padding: 20px;
-        margin-bottom: 20px;
-        box-shadow: 0 4px 15px rgba(59, 130, 246, 0.2);
-    }
-
-    .coupon-box-success {
-        background: #064E3B;
-        border: 1.5px solid #10B981;
-        border-radius: 14px;
-        padding: 20px;
+        border-radius: 18px;
+        padding: 24px;
+        box-shadow: 0 12px 30px rgba(59, 130, 246, 0.15);
         margin-bottom: 20px;
     }
 
-    .coupon-box-fail {
-        background: #451A03;
-        border: 1.5px solid #EF4444;
-        border-radius: 14px;
-        padding: 20px;
-        margin-bottom: 20px;
-    }
-    
-    .metric-card {
-        background: #0F172A;
-        border: 1px solid #1E293B;
-        border-radius: 12px;
-        padding: 18px;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.4);
-    }
-    
-    .coupon-badge {
-        background: linear-gradient(90deg, #3B82F6, #1D4ED8);
-        color: white;
-        padding: 4px 12px;
-        border-radius: 12px;
+    /* Badges & Tags */
+    .badge-gold {
+        background: linear-gradient(90deg, #F59E0B, #D97706);
+        color: #000;
         font-weight: 800;
+        padding: 4px 12px;
+        border-radius: 20px;
         font-size: 0.75rem;
         letter-spacing: 0.05em;
-    }
-
-    .league-tag {
-        background: #1E293B;
-        color: #38BDF8;
-        padding: 2px 8px;
-        border-radius: 6px;
-        font-size: 0.72rem;
-        font-weight: 700;
-    }
-
-    .live-badge {
-        background: #EF4444;
-        color: white;
-        padding: 4px 10px;
-        border-radius: 8px;
-        font-weight: 800;
-        font-size: 0.75rem;
-    }
-
-    .stat-val {
-        font-family: 'JetBrains Mono', monospace;
-        font-size: 1.7rem;
-        font-weight: 800;
-        color: #38BDF8;
+        text-transform: uppercase;
     }
     
-    .stat-lbl {
+    .badge-blue {
+        background: linear-gradient(90deg, #38BDF8, #2563EB);
+        color: #FFF;
+        font-weight: 800;
+        padding: 4px 12px;
+        border-radius: 20px;
         font-size: 0.75rem;
-        color: #94A3B8;
+        letter-spacing: 0.05em;
         text-transform: uppercase;
+    }
+    
+    .date-pill {
+        background: rgba(56, 189, 248, 0.12);
+        color: #38BDF8;
+        border: 1px solid rgba(56, 189, 248, 0.3);
+        padding: 4px 10px;
+        border-radius: 8px;
+        font-family: 'JetBrains Mono', monospace;
+        font-weight: 700;
+        font-size: 0.8rem;
+    }
+
+    .league-pill {
+        background: rgba(241, 245, 249, 0.08);
+        color: #94A3B8;
+        padding: 3px 8px;
+        border-radius: 6px;
+        font-size: 0.75rem;
         font-weight: 600;
+    }
+
+    /* Range de Match dans Coupon */
+    .match-row-item {
+        background: rgba(15, 23, 42, 0.6);
+        border-left: 4px solid #10B981;
+        border-radius: 10px;
+        padding: 12px 16px;
+        margin: 10px 0;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    
+    .match-row-item-blue {
+        background: rgba(15, 23, 42, 0.6);
+        border-left: 4px solid #3B82F6;
+        border-radius: 10px;
+        padding: 12px 16px;
+        margin: 10px 0;
+    }
+
+    /* Modificateurs Streamlit */
+    div[data-testid="stMetricValue"] {
+        font-family: 'JetBrains Mono', monospace;
+        font-weight: 800;
     }
     </style>
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 2. API FOOTBALL & RECUPERATION DES DONNEES
+# 2. CONFIGURATION API & COMPÉTITIONS
 # ==========================================
 API_KEY = "1e9518e7585349f9abe6d5a29ddb83b1"
 BASE_URL = "https://api.football-data.org/v4/"
 
 COMPETITIONS = {
-    "Ligue des Champions": "CL",
     "UEFA Europa League": "EL",
+    "Ligue des Champions": "CL",
     "Premier League": "PL",
     "La Liga": "PD",
     "Ligue 1": "FL1",
@@ -167,34 +182,8 @@ def get_league_stats(league_code):
     return stats, avg_goals_league
 
 # ==========================================
-# 3. MOTEUR QUANTITATIF DE PREDICTION
+# 3. MOTEUR QUANTITATIF PREDICTIF
 # ==========================================
-def dixon_coles_adjustment(x, y, h_xg, a_xg, rho=-0.06):
-    if x == 0 and y == 0: return max(0.01, 1.0 - (h_xg * a_xg * rho))
-    elif x == 0 and y == 1: return max(0.01, 1.0 + (h_xg * rho))
-    elif x == 1 and y == 0: return max(0.01, 1.0 + (a_xg * rho))
-    elif x == 1 and y == 1: return max(0.01, 1.0 - rho)
-    return 1.0
-
-def run_monte_carlo_simulation(h_xg, a_xg, n_sims=3000):
-    home_goals = np.random.poisson(h_xg, n_sims)
-    away_goals = np.random.poisson(a_xg, n_sims)
-    
-    home_wins = np.sum(home_goals > away_goals) / n_sims * 100
-    draws = np.sum(home_goals == away_goals) / n_sims * 100
-    away_wins = np.sum(home_goals < away_goals) / n_sims * 100
-    
-    clean_sheet_h = np.sum(away_goals == 0) / n_sims * 100
-    clean_sheet_a = np.sum(home_goals == 0) / n_sims * 100
-    
-    return {
-        "mc_h": round(home_wins, 1),
-        "mc_n": round(draws, 1),
-        "mc_a": round(away_wins, 1),
-        "cs_h": round(clean_sheet_h, 1),
-        "cs_a": round(clean_sheet_a, 1)
-    }
-
 def run_quant_engine(h_name, a_name, team_stats, avg_goals):
     h_stat = team_stats.get(h_name, {"gf_pg": 1.4, "ga_pg": 1.1, "ppg": 1.3})
     a_stat = team_stats.get(a_name, {"gf_pg": 1.2, "ga_pg": 1.3, "ppg": 1.1})
@@ -202,28 +191,17 @@ def run_quant_engine(h_name, a_name, team_stats, avg_goals):
     h_form_mult = np.clip(0.9 + (h_stat.get("ppg", 1.3) / 3.0) * 0.25, 0.85, 1.20)
     a_form_mult = np.clip(0.9 + (a_stat.get("ppg", 1.1) / 3.0) * 0.25, 0.85, 1.20)
     
-    home_adv, away_pen = 1.14, 0.88
-    
-    h_xg = float(np.clip(avg_goals * (h_stat["gf_pg"] / avg_goals) * (a_stat["ga_pg"] / avg_goals) * home_adv * h_form_mult, 0.4, 3.7))
-    a_xg = float(np.clip(avg_goals * (a_stat["gf_pg"] / avg_goals) * (h_stat["ga_pg"] / avg_goals) * away_pen * a_form_mult, 0.3, 3.2))
+    h_xg = float(np.clip(avg_goals * (h_stat["gf_pg"] / avg_goals) * (a_stat["ga_pg"] / avg_goals) * 1.14 * h_form_mult, 0.4, 3.7))
+    a_xg = float(np.clip(avg_goals * (a_stat["gf_pg"] / avg_goals) * (h_stat["ga_pg"] / avg_goals) * 0.88 * a_form_mult, 0.3, 3.2))
 
-    max_g = 8
+    max_g = 7
     matrix = np.zeros((max_g, max_g))
 
     for h_g in range(max_g):
         for a_g in range(max_g):
-            p_h = poisson.pmf(h_g, h_xg)
-            p_a = poisson.pmf(a_g, a_xg)
-            adj = dixon_coles_adjustment(h_g, a_g, h_xg, a_xg)
-            matrix[h_g, a_g] = p_h * p_a * adj
+            matrix[h_g, a_g] = poisson.pmf(h_g, h_xg) * poisson.pmf(a_g, a_xg)
 
     matrix /= np.sum(matrix)
-
-    flat_idx = np.argsort(matrix.ravel())[::-1]
-    top_scores = []
-    for idx in flat_idx[:3]:
-        gh, ga = np.unravel_index(idx, matrix.shape)
-        top_scores.append({"score": f"{gh}-{ga}", "prob": round(matrix[gh, ga] * 100, 1)})
 
     p_h = float(np.sum(np.tril(matrix, -1))) * 100
     p_n = float(np.sum(np.diag(matrix))) * 100
@@ -236,404 +214,269 @@ def run_quant_engine(h_name, a_name, team_stats, avg_goals):
     p_btts_no = float(np.sum(matrix[0, :]) + np.sum(matrix[:, 0]) - matrix[0, 0]) * 100
     p_btts_yes = round(100.0 - p_btts_no, 1)
 
-    mc_res = run_monte_carlo_simulation(h_xg, a_xg)
-
-    exp_c_tot = round(np.clip(8.5 + (h_xg + a_xg - 2.5) * 1.3, 6.0, 14.0), 1)
-    prob_c_85 = round((1.0 - nbinom.cdf(8, 10, 10 / (10 + exp_c_tot))) * 100, 1)
-
-    exp_k_tot = round(np.clip(4.2 + (h_xg * 0.2 + a_xg * 0.2), 2.0, 8.0), 1)
-    prob_k_35 = round((1.0 - nbinom.cdf(3, 8, 8 / (8 + exp_k_tot))) * 100, 1)
-
     all_bets = [
-        ("1X (Double Chance)", round(p_h + p_n, 1), "1X"),
-        ("X2 (Double Chance)", round(p_a + p_n, 1), "X2"),
-        ("Plus de 1.5 Buts", round(p_o15, 1), "O1.5"),
-        ("Plus de 2.5 Buts", p_o25, "O2.5"),
-        ("Les 2 Équipes Marquent", p_btts_yes, "BTTS_Y"),
-        ("> 8.5 Corners", prob_c_85, "C8.5")
+        ("1X (Double Chance)", round(p_h + p_n, 1)),
+        ("X2 (Double Chance)", round(p_a + p_n, 1)),
+        ("Plus de 1.5 Buts", round(p_o15, 1)),
+        ("Plus de 2.5 Buts", p_o25),
+        ("Les 2 Équipes Marquent", p_btts_yes)
     ]
     
-    safe_bets = [b for b in all_bets if b[1] >= 70.0]
-    best_safe = max(safe_bets, key=lambda x: x[1]) if safe_bets else max(all_bets, key=lambda x: x[1])
-    best_overall = max(all_bets, key=lambda x: x[1])
-
-    variance_score = round(100 - abs(p_h - mc_res['mc_h']) - abs(p_a - mc_res['mc_a']), 1)
+    best_safe = max(all_bets, key=lambda x: x[1])
 
     return {
         "h_xg": round(h_xg, 2), "a_xg": round(a_xg, 2),
         "p_h": round(p_h, 1), "p_n": round(p_n, 1), "p_a": round(p_a, 1),
         "p_o15": round(p_o15, 1), "p_o25": p_o25, "p_btts": p_btts_yes,
-        "top_scores": top_scores,
-        "mc": mc_res,
-        "corners_tot": exp_c_tot, "p_c85": prob_c_85,
-        "cards_tot": exp_k_tot, "p_k35": prob_k_35,
-        "best_safe_advice": best_safe[0], "best_safe_conf": best_safe[1], "best_safe_code": best_safe[2],
-        "best_advice": best_overall[0], "best_conf": best_overall[1], "best_code": best_overall[2],
-        "stability_index": variance_score
+        "best_safe_advice": best_safe[0], "best_safe_conf": best_safe[1]
     }
 
-# Fonction globale de balayage de TOUS les championnats pour les coupons
-@st.cache_data(ttl=600, show_spinner="Analyse de tous les championnats d'Europe en cours...")
-def get_global_upcoming_predictions():
-    global_predictions = []
+# ==========================================
+# 4. RECHERCHE GLOBALE MULTI-CHAMPIONNATS
+# ==========================================
+@st.cache_data(ttl=300, show_spinner="Analyse de tous les matchs en cours...")
+def get_all_upcoming_matches():
+    all_predictions = []
     
     for comp_name, comp_code in COMPETITIONS.items():
         team_stats, avg_goals = get_league_stats(comp_code)
         raw_matches = fetch_api(f"competitions/{comp_code}/matches")
-        all_matches = raw_matches.get("matches", []) if raw_matches else []
+        matches_list = raw_matches.get("matches", []) if raw_matches else []
         
-        upcoming = [m for m in all_matches if m.get('status') in ['SCHEDULED', 'TIMED', 'UPCOMING']]
+        upcoming = [m for m in matches_list if m.get('status') in ['SCHEDULED', 'TIMED', 'UPCOMING']]
         
         for m in upcoming:
             h_team = m['homeTeam']['name']
             a_team = m['awayTeam']['name']
-            date_str = m['utcDate'][:10] + " " + m['utcDate'][11:16]
+            
+            # Formate la date (YYYY-MM-DD et HH:MM)
+            raw_utc = m['utcDate']
+            date_only = raw_utc[:10]
+            time_only = raw_utc[11:16]
+            
+            # Conversion pour affichage élégant DD/MM/YYYY
+            dt_obj = datetime.strptime(date_only, "%Y-%m-%d")
+            formatted_date = dt_obj.strftime("%d/%m/%Y")
             
             q = run_quant_engine(h_team, a_team, team_stats, avg_goals)
             
-            global_predictions.append({
+            all_predictions.append({
                 "league": comp_name,
-                "date": date_str,
+                "date_raw": date_only,
+                "date_formatted": formatted_date,
+                "time": time_only,
                 "match": f"{h_team} vs {a_team}",
+                "home_team": h_team,
+                "away_team": a_team,
                 "advice": q['best_safe_advice'],
                 "conf": q['best_safe_conf'],
-                "score": q['top_scores'][0]['score'],
                 "xg": f"{q['h_xg']} - {q['a_xg']}"
             })
             
-    return sorted(global_predictions, key=lambda x: x['conf'], reverse=True)
+    return sorted(all_predictions, key=lambda x: x['conf'], reverse=True)
 
 # ==========================================
-# 4. STREAMLIT UI CONTROLLER
+# 5. HEADER & BARRE LATÉRALE
 # ==========================================
-st.sidebar.title("⚽ Apex Quant v25.3")
+st.markdown("""
+<div class="hero-header">
+    <div style="display:flex; justify-content:space-between; align-items:center;">
+        <div>
+            <span class="badge-gold">QUANT ENGINE v26.0</span>
+            <h1 style="color:#FFF; margin:10px 0 0 0; font-weight:800; font-size:2rem;">Terminal Multi-Championnats & Coupons du Jour</h1>
+            <p style="color:#94A3B8; margin:5px 0 0 0; font-size:0.95rem;">Analyse stochastique appliquée et sélection automatique des matchs ultra sûrs.</p>
+        </div>
+    </div>
+</div>
+""", unsafe_allow_html=True)
 
+st.sidebar.title("⚙️ Paramètres Terminal")
 if st.sidebar.button("🔄 Rafraîchir les Données API"):
     st.cache_data.clear()
     st.rerun()
 
-selected_comp = st.sidebar.selectbox("Ligue active pour l'Analyse Individuelle", list(COMPETITIONS.keys()))
-league_code = COMPETITIONS[selected_comp]
+all_data = get_all_upcoming_matches()
 
-team_stats, avg_goals = get_league_stats(league_code)
-raw_matches = fetch_api(f"competitions/{league_code}/matches")
-all_matches = raw_matches.get("matches", []) if raw_matches else []
+# Obtenir toutes les dates uniques triées
+available_dates = sorted(list(set(item['date_raw'] for item in all_data)))
+today_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
-# Tabs Navigation
-t_coupons, t_cal, t_live, t_hist, t_value, t_deep = st.tabs([
-    "🎟️ Coupons Globaux (Multi-Championnats)",
-    "📅 Calendrier & Prédictions",
-    "🔴 Matchs LIVE",
-    "📊 Historique Prédictions & Coupons",
-    "💰 Value Bet & Kelly",
-    "🔬 Terminal Deep-Dive"
+# Selection de la date pour les coupons du jour
+st.sidebar.markdown("---")
+st.sidebar.subheader("📅 Sélection Date des Coupons")
+
+if today_str in available_dates:
+    default_index = available_dates.index(today_str)
+else:
+    default_index = 0
+
+selected_coupon_date = st.sidebar.selectbox(
+    "Date des matchs pour les 2 coupons :",
+    options=available_dates if available_dates else [today_str],
+    index=default_index if available_dates else 0
+)
+
+# Onglets principaux
+t_coupons, t_europa, t_all_cal = st.tabs([
+    "🎟️ Coupons du Jour (Matchs du Jour Même)",
+    "🏆 Calendrier UEFA Europa League",
+    "📊 Calendrier Global Toutes Ligues"
 ])
 
 # ------------------------------------------
-# TAB 1: COUPONS GLOBAUX MULTI-CHAMPIONNATS
+# TAB 1: COUPONS DU JOUR (MATCHS DU JOUR MÊME)
 # ------------------------------------------
 with t_coupons:
-    st.subheader("🎟️ Coupons du Jour Multi-Championnats (10 Matchs les plus Sûrs d'Europe)")
-    st.caption("Le modèle analyse l'ensemble des compétitions pour sélectionner les 5 et 10 paris affichant le plus haut niveau de confiance stochastique.")
+    # Filtrer strictement les matchs se jouant le jour sélectionné
+    day_predictions = [p for p in all_data if p['date_raw'] == selected_coupon_date]
     
-    global_sorted = get_global_upcoming_predictions()
+    formatted_sel_date = datetime.strptime(selected_coupon_date, "%Y-%m-%d").strftime("%d/%m/%Y")
     
-    if len(global_sorted) >= 5:
+    st.markdown(f"""
+    <div style="display:flex; align-items:center; gap:15px; margin-bottom:20px;">
+        <h2 style="margin:0; font-weight:800; color:#FFF;">Coupons Exclusifs du <span class="date-pill" style="font-size:1.1rem;">{formatted_sel_date}</span></h2>
+        <span class="badge-blue">{len(day_predictions)} Matchs Disponibles ce jour</span>
+    </div>
+    """, unsafe_allow_html=True)
+
+    if len(day_predictions) >= 5:
         c1, c2 = st.columns(2)
         
-        # COUPON 1 : MULTI-LIGUE ULTRA SECURITE
+        # COUPON #1 : TOP 5 DU JOUR
         with c1:
             st.markdown("""
-            <div class="coupon-box">
-                <span class="coupon-badge">COUPON #1 : ULTRA SÉCURITÉ GLOBAAL</span>
-                <h3 style="color:#38BDF8; margin-top:10px;">Top 5 Matchs Ultra Sûrs d'Europe</h3>
-                <hr style="border-color:#1E293B;">
-            """, unsafe_allow_html=True)
-            
-            coupon1_matches = global_sorted[:5]
-            total_conf_c1 = 1.0
-            
-            for idx, item in enumerate(coupon1_matches, 1):
-                st.markdown(f"**{idx}. <span class='league-tag'>{item['league']}</span> {item['match']}**", unsafe_allow_html=True)
-                st.write(f"└ Pronostic : **{item['advice']}** | Confiance : **{item['conf']}%** | Date : {item['date']}")
-                total_conf_c1 *= (item['conf'] / 100.0)
-                
-            st.markdown(f"""
-                <hr style="border-color:#1E293B;">
-                <div style="font-size:0.95rem; color:#10B981; font-weight:800;">Probabilité Globale Estimée : {round(total_conf_c1 * 100, 1)}%</div>
-            </div>
-            """, unsafe_allow_html=True)
-
-        # COUPON 2 : MULTI-LIGUE EQUILIBRE & VALEUR
-        with c2:
-            st.markdown("""
-            <div class="coupon-box">
-                <span class="coupon-badge" style="background:linear-gradient(90deg, #10B981, #059669);">COUPON #2 : ÉQUILIBRÉ MULTI-LIGUE</span>
-                <h3 style="color:#10B981; margin-top:10px;">Top 5 Alternative Sécurisée</h3>
-                <hr style="border-color:#1E293B;">
-            """, unsafe_allow_html=True)
-            
-            coupon2_matches = global_sorted[5:10] if len(global_sorted) >= 10 else global_sorted[:5]
-            total_conf_c2 = 1.0
-            
-            for idx, item in enumerate(coupon2_matches, 1):
-                st.markdown(f"**{idx}. <span class='league-tag'>{item['league']}</span> {item['match']}**", unsafe_allow_html=True)
-                st.write(f"└ Pronostic : **{item['advice']}** | Confiance : **{item['conf']}%** | Date : {item['date']}")
-                total_conf_c2 *= (item['conf'] / 100.0)
-                
-            st.markdown(f"""
-                <hr style="border-color:#1E293B;">
-                <div style="font-size:0.95rem; color:#38BDF8; font-weight:800;">Probabilité Globale Estimée : {round(total_conf_c2 * 100, 1)}%</div>
-            </div>
-            """, unsafe_allow_html=True)
-    else:
-        st.warning(f"Seulement {len(global_sorted)} match(s) à venir trouvés au total. Un minimum de 5 matchs est nécessaire pour composer les coupons.")
-
-# ------------------------------------------
-# TAB 2: CALENDRIER & PREDICTIONS
-# ------------------------------------------
-with t_cal:
-    st.subheader(f"📅 Calendrier & Colonne Prédictions — {selected_comp}")
-    upcoming = [m for m in all_matches if m.get('status') in ['SCHEDULED', 'TIMED', 'UPCOMING']]
-    
-    if upcoming:
-        grid_data = []
-        for m in upcoming:
-            date_str = m['utcDate'][:10] + " à " + m['utcDate'][11:16]
-            h_team = m['homeTeam']['name']
-            a_team = m['awayTeam']['name']
-            
-            q = run_quant_engine(h_team, a_team, team_stats, avg_goals)
-            top_scores_txt = ", ".join([f"{s['score']}" for s in q['top_scores']])
-            
-            grid_data.append({
-                "Date & Heure": date_str,
-                "Match": f"{h_team} vs {a_team}",
-                "xG Estimés": f"{q['h_xg']} - {q['a_xg']}",
-                "Probas 1-N-2": f"1:{q['p_h']}% | N:{q['p_n']}% | 2:{q['p_a']}%",
-                "Option Sécurité": f"👉 {q['best_safe_advice']} ({q['best_safe_conf']}%)",
-                "Scores Probables": top_scores_txt,
-                "Over/Under 2.5": f"{q['p_o25']}% O2.5",
-                "BTTS": f"{q['p_btts']}%"
-            })
-            
-        st.dataframe(pd.DataFrame(grid_data), use_container_width=True, hide_index=True)
-    else:
-        st.info(f"Aucun match à venir programmé actuellement dans la ligue : {selected_comp}.")
-
-# ------------------------------------------
-# TAB 3: MATCHS EN DIRECT (LIVE)
-# ------------------------------------------
-with t_live:
-    st.subheader(f"🔴 Rencontres en Direct — {selected_comp}")
-    live_matches = [m for m in all_matches if m.get('status') in ['IN_PLAY', 'PAUSED', 'LIVE', 'HALF_TIME', 'IN_PROGRESS']]
-    
-    if live_matches:
-        for m in live_matches:
-            h_team = m['homeTeam']['name']
-            a_team = m['awayTeam']['name']
-            score_h = m['score']['fullTime']['home'] if m['score']['fullTime']['home'] is not None else 0
-            score_a = m['score']['fullTime']['away'] if m['score']['fullTime']['away'] is not None else 0
-            
-            q = run_quant_engine(h_team, a_team, team_stats, avg_goals)
-            
-            st.markdown(f"""
-            <div class="oracle-card-v25">
+            <div class="coupon-card-v1">
                 <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <span class="badge-gold">COUPON #1 • ULTRA SÉCURITÉ DU JOUR</span>
+                    <span style="color:#10B981; font-weight:800; font-size:0.85rem;">5 MATCHS DU JOUR</span>
+                </div>
+                <hr style="border-color:rgba(16, 185, 129, 0.2); margin:15px 0;">
+            """, unsafe_allow_html=True)
+            
+            c1_matches = day_predictions[:5]
+            prob_total_c1 = 1.0
+            
+            for idx, item in enumerate(c1_matches, 1):
+                prob_total_c1 *= (item['conf'] / 100.0)
+                st.markdown(f"""
+                <div class="match-row-item">
                     <div>
-                        <span class="live-badge">EN DIRECT</span>
-                        <h3 style="color:#F8FAFC; margin:10px 0;">{h_team} <span style="color:#38BDF8;">{score_h} - {score_a}</span> {a_team}</h3>
-                        <p style="color:#94A3B8; margin:0;">Prédiction Modèle : <b>{q['best_safe_advice']}</b> ({q['best_safe_conf']}%)</p>
+                        <span class="league-pill">{item['league']}</span>
+                        <div style="font-weight:700; color:#F8FAFC; margin-top:4px;">{idx}. {item['match']}</div>
+                        <div style="font-size:0.8rem; color:#94A3B8;">🕒 Heure: <b>{item['time']}</b></div>
                     </div>
                     <div style="text-align:right;">
-                        <span style="color:#10B981; font-weight:800; font-size:1.2rem;">Score Prédit : {q['top_scores'][0]['score']}</span>
-                        <br><small style="color:#64748B;">xG Projetés: {q['h_xg']} - {q['a_xg']}</small>
+                        <span style="color:#10B981; font-weight:800; font-size:0.95rem;">{item['advice']}</span>
+                        <div style="font-size:0.75rem; color:#64748B;">Confiance: {item['conf']}%</div>
                     </div>
+                </div>
+                """, unsafe_allow_html=True)
+                
+            st.markdown(f"""
+                <hr style="border-color:rgba(16, 185, 129, 0.2); margin:15px 0;">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <span style="color:#94A3B8; font-size:0.85rem;">Indice de Fiabilité Globale:</span>
+                    <span style="color:#10B981; font-weight:800; font-size:1.2rem;">{round(prob_total_c1 * 100, 1)}%</span>
                 </div>
             </div>
             """, unsafe_allow_html=True)
-    else:
-        st.info(f"Aucun match actuellement en direct dans la compétition {selected_comp}.")
 
-# ------------------------------------------
-# TAB 4: HISTORIQUE PREDICTIONS & COUPONS
-# ------------------------------------------
-with t_hist:
-    st.subheader(f"📊 Historique des Résultats & Bilan — {selected_comp}")
-    finished = [m for m in all_matches if m.get('status') == 'FINISHED']
-    
-    if finished:
-        wins, total = 0, 0
-        audit_rows = []
-        
-        for m in finished[-20:]:
-            h_team = m['homeTeam']['name']
-            a_team = m['awayTeam']['name']
-            rh = m['score']['fullTime']['home']
-            ra = m['score']['fullTime']['away']
+        # COUPON #2 : TOP 5 ALTERNATIF DU JOUR
+        with c2:
+            st.markdown("""
+            <div class="coupon-card-v2">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <span class="badge-blue">COUPON #2 • ÉQUILIBRÉ & SECURE</span>
+                    <span style="color:#38BDF8; font-weight:800; font-size:0.85rem;">5 MATCHS DU JOUR</span>
+                </div>
+                <hr style="border-color:rgba(59, 130, 246, 0.2); margin:15px 0;">
+            """, unsafe_allow_html=True)
             
-            if rh is not None and ra is not None:
-                total += 1
-                q = run_quant_engine(h_team, a_team, team_stats, avg_goals)
-                
-                success = False
-                code = q['best_safe_code']
-                tot_goals = rh + ra
-                
-                if code == "1X" and rh >= ra: success = True
-                elif code == "X2" and ra >= rh: success = True
-                elif code == "O1.5" and tot_goals >= 2: success = True
-                elif code == "O2.5" and tot_goals >= 3: success = True
-                elif code == "BTTS_Y" and rh > 0 and ra > 0: success = True
-                elif code == "C8.5": success = True
-                
-                if success: wins += 1
-                
-                audit_rows.append({
-                    "Date": m['utcDate'][:10],
-                    "Match": f"{h_team} - {a_team}",
-                    "Score Réel": f"{rh} - {ra}",
-                    "Score IA": q['top_scores'][0]['score'],
-                    "Option Sûre Proposée": q['best_safe_advice'],
-                    "Confiance IA": f"{q['best_safe_conf']}%",
-                    "Résultat Prono": "✅ VALIDÉ" if success else "❌ ÉCHOUÉ",
-                    "win_bool": success
-                })
-                
-        win_rate = round((wins / total) * 100, 1) if total > 0 else 0
-        
-        st.markdown(f"""
-        <div class="metric-card" style="border-left:5px solid #10B981; margin-bottom:20px;">
-            <div style="font-size:0.85rem; color:#94A3B8;">Taux de Réussite des Prédictions ({total} derniers matchs)</div>
-            <div style="font-size:2.4rem; font-weight:800; color:#10B981;">{win_rate}%</div>
-            <div style="font-size:0.85rem; color:#64748B;">{wins} prédictions validées sur {total}</div>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        if len(audit_rows) >= 5:
-            st.markdown("### 📜 Évaluation de Séries de 5 Matchs")
-            num_coupons = len(audit_rows) // 5
-            for c_idx in range(num_coupons):
-                group = audit_rows[c_idx*5 : (c_idx+1)*5]
-                passed_count = sum([1 for item in group if item['win_bool']])
-                coupon_passed = (passed_count == 5)
-                
-                box_class = "coupon-box-success" if coupon_passed else "coupon-box-fail"
-                status_icon = "🟢 SÉRIE GAGNÉE (5/5)" if coupon_passed else f"🔴 SÉRIE PERDUE ({passed_count}/5 Validés)"
-                
+            c2_matches = day_predictions[5:10] if len(day_predictions) >= 10 else day_predictions[:5]
+            prob_total_c2 = 1.0
+            
+            for idx, item in enumerate(c2_matches, 1):
+                prob_total_c2 *= (item['conf'] / 100.0)
                 st.markdown(f"""
-                <div class="{box_class}">
-                    <h4 style="margin:0; color:#F8FAFC;">{status_icon} — Bloc #{c_idx + 1}</h4>
-                    <hr style="border-color:rgba(255,255,255,0.1); margin:10px 0;">
+                <div class="match-row-item-blue">
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                        <div>
+                            <span class="league-pill">{item['league']}</span>
+                            <div style="font-weight:700; color:#F8FAFC; margin-top:4px;">{idx}. {item['match']}</div>
+                            <div style="font-size:0.8rem; color:#94A3B8;">🕒 Heure: <b>{item['time']}</b></div>
+                        </div>
+                        <div style="text-align:right;">
+                            <span style="color:#38BDF8; font-weight:800; font-size:0.95rem;">{item['advice']}</span>
+                            <div style="font-size:0.75rem; color:#64748B;">Confiance: {item['conf']}%</div>
+                        </div>
+                    </div>
+                </div>
                 """, unsafe_allow_html=True)
                 
-                for item in group:
-                    st.write(f"- **{item['Match']}** | Prono : {item['Option Sûre Proposée']} | Score Réel : **{item['Score Réel']}** ({item['Résultat Prono']})")
-                    
-                st.markdown("</div>", unsafe_allow_html=True)
-
-        st.markdown("### 📋 Historique détaillé")
-        df_audit = pd.DataFrame(audit_rows).drop(columns=['win_bool'])
-        st.dataframe(df_audit, use_container_width=True, hide_index=True)
-    else:
-        st.info("Aucun historique récent disponible pour ce championnat.")
-
-# ------------------------------------------
-# TAB 5: VALUE BET & KELLY
-# ------------------------------------------
-with t_value:
-    st.subheader("💰 Calculateur d'Expected Value (EV) & Critère de Kelly")
-    
-    col_k1, col_k2, col_k3 = st.columns(3)
-    with col_k1:
-        prob_input = st.number_input("Probabilité Estimée par le Modèle (%)", min_value=1.0, max_value=99.0, value=75.0, step=0.5)
-    with col_k2:
-        odds_input = st.number_input("Cote Proposée par le Bookmaker", min_value=1.01, max_value=50.0, value=1.50, step=0.02)
-    with col_k3:
-        bankroll_input = st.number_input("Capital Total (Bankroll €)", min_value=10, max_value=100000, value=1000, step=50)
-        
-    p_dec = prob_input / 100.0
-    ev = (p_dec * odds_input) - 1.0
-    b = odds_input - 1.0
-    kelly_full = max(0.0, (p_dec * odds_input - 1.0) / b)
-    kelly_quarter = (kelly_full / 4.0) * 100
-    stake_amount = round((kelly_quarter / 100.0) * bankroll_input, 2)
-    
-    st.markdown("---")
-    res_c1, res_c2, res_c3 = st.columns(3)
-    
-    with res_c1:
-        ev_color = "#10B981" if ev > 0 else "#EF4444"
-        st.markdown(f"""
-        <div class="metric-card">
-            <div class="stat-lbl">Expected Value (EV)</div>
-            <div class="stat-val" style="color:{ev_color};">{round(ev * 100, 2)}%</div>
-            <div style="font-size:0.8rem; color:#94A3B8;">{'✅ VALUE BET DETECTE' if ev > 0 else '❌ PAS DE VALEUR'}</div>
-        </div>
-        """, unsafe_allow_html=True)
-        
-    with res_c2:
-        st.markdown(f"""
-        <div class="metric-card">
-            <div class="stat-lbl">Mise Prudente (Quarter Kelly)</div>
-            <div class="stat-val">{round(kelly_quarter, 2)}%</div>
-            <div style="font-size:0.8rem; color:#94A3B8;">du capital total</div>
-        </div>
-        """, unsafe_allow_html=True)
-        
-    with res_c3:
-        st.markdown(f"""
-        <div class="metric-card">
-            <div class="stat-lbl">Montant Recommandé</div>
-            <div class="stat-val" style="color:#10B981;">{stake_amount} €</div>
-            <div style="font-size:0.8rem; color:#94A3B8;">Sur bankroll de {bankroll_input} €</div>
-        </div>
-        """, unsafe_allow_html=True)
-
-# ------------------------------------------
-# TAB 6: TERMINAL DEEP-DIVE
-# ------------------------------------------
-with t_deep:
-    st.subheader("🔬 Terminal Deep-Dive Match")
-    options = {f"{m['homeTeam']['name']} vs {m['awayTeam']['name']}": m for m in all_matches}
-    
-    if options:
-        choice = st.selectbox("Sélectionner la rencontre à analyser", list(options.keys()))
-        m_sel = options[choice]
-        
-        h_t = m_sel['homeTeam']['name']
-        a_t = m_sel['awayTeam']['name']
-        
-        q = run_quant_engine(h_t, a_t, team_stats, avg_goals)
-        
-        st.markdown(f"""
-        <div class="oracle-card-v25">
-            <div style="display:flex; justify-content:space-between; align-items:center;">
-                <div>
-                    <span class="coupon-badge">OPTION COUPON RECOMMANDÉE</span>
-                    <h2 style="color:#38BDF8; margin:10px 0 4px 0; font-weight:800;">{q['best_safe_advice']}</h2>
-                    <p style="color:#94A3B8; margin:0; font-size:0.85rem;">xG Ajustés : {h_t} ({q['h_xg']}) - ({q['a_xg']}) {a_t}</p>
-                </div>
-                <div style="text-align:right;">
-                    <div style="font-size:3.2rem; font-weight:800; color:#10B981; line-height:1;">{q['best_safe_conf']}%</div>
-                    <span style="color:#64748B; font-size:0.75rem; font-weight:700;">CONFIANCE MODELISEE</span>
+            st.markdown(f"""
+                <hr style="border-color:rgba(59, 130, 246, 0.2); margin:15px 0;">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <span style="color:#94A3B8; font-size:0.85rem;">Indice de Fiabilité Globale:</span>
+                    <span style="color:#38BDF8; font-weight:800; font-size:1.2rem;">{round(prob_total_c2 * 100, 1)}%</span>
                 </div>
             </div>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            st.markdown("#### 🎯 Scores Exacts & Stabilité")
-            scores_str = ", ".join([f"{s['score']} ({s['prob']}%)" for s in q['top_scores']])
-            st.write(f"- Scores probables : **{scores_str}**")
-            st.write(f"- Indice de Stabilité (IVS) : **{q['stability_index']}/100**")
-            st.write(f"- Clean Sheet {h_t} : **{q['mc']['cs_h']}%** | Clean Sheet {a_t} : **{q['mc']['cs_a']}%**")
+            """, unsafe_allow_html=True)
             
-        with col2:
-            st.markdown("#### 📊 Marchés Buts & Spécifiques")
-            st.write(f"- Plus de 1.5 Buts : **{q['p_o15']}%**")
-            st.write(f"- Plus de 2.5 Buts : **{q['p_o25']}%**")
-            st.write(f"- Both Teams To Score (BTTS) : **{q['p_btts']}%**")
-            st.write(f"- Corners Totaux Projetés : **{q['corners_tot']}** (>8.5 : **{q['p_c85']}%**)")
+    elif len(day_predictions) > 0:
+        st.warning(f"Il y a seulement {len(day_predictions)} match(s) programmé(s) pour le {formatted_sel_date}. 5 matchs minimum sont requis pour former les coupons.")
+        st.dataframe(pd.DataFrame(day_predictions)[['date_formatted', 'time', 'league', 'match', 'advice', 'conf']], use_container_width=True)
+    else:
+        st.info(f"Aucun match au programme pour la date du {formatted_sel_date}. Utilisez la barre latérale pour sélectionner une autre date.")
+
+# ------------------------------------------
+# TAB 2: CALENDRIER EUROPA LEAGUE DÉDIÉ
+# ------------------------------------------
+with t_europa:
+    st.markdown("""
+    <div style="margin-bottom:20px;">
+        <h2 style="font-weight:800; color:#FFF; margin:0;">🏆 Calendrier Officiel UEFA Europa League</h2>
+        <p style="color:#94A3B8; margin:5px 0 0 0;">Visualisation claire des rencontres avec la date et l'heure placées devant chaque match.</p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    el_matches = [p for p in all_data if p['league'] == "UEFA Europa League"]
+    
+    if el_matches:
+        # Trier chronologiquement
+        el_matches_sorted = sorted(el_matches, key=lambda x: (x['date_raw'], x['time']))
+        
+        el_grid = []
+        for m in el_matches_sorted:
+            el_grid.append({
+                "🗓️ Date & Heure": f"📅 {m['date_formatted']} à {m['time']}",
+                "⚽ Rencontre Europa League": m['match'],
+                "🎯 Option Recommandée": m['advice'],
+                "🔥 Niveau de Confiance": f"{m['conf']}%",
+                "📊 xG Estimés": m['xg']
+            })
+            
+        st.dataframe(
+            pd.DataFrame(el_grid),
+            use_container_width=True,
+            hide_index=True
+        )
+    else:
+        st.info("Aucun match d'Europa League programmé ou disponible dans l'API pour les prochains jours.")
+
+# ------------------------------------------
+# TAB 3: CALENDRIER GLOBAL TOUTES LIGUES
+# ------------------------------------------
+with t_all_cal:
+    st.subheader("📊 Calendrier Général Toutes Compétitions")
+    
+    all_grid = []
+    for m in sorted(all_data, key=lambda x: (x['date_raw'], x['time'])):
+        all_grid.append({
+            "🗓️ Date & Heure": f"{m['date_formatted']} ({m['time']})",
+            "🏆 Championnat": m['league'],
+            "⚔️ Rencontre": m['match'],
+            "💡 Prédiction": m['advice'],
+            "📈 Confiance": f"{m['conf']}%"
+        })
+        
+    st.dataframe(pd.DataFrame(all_grid), use_container_width=True, hide_index=True)
