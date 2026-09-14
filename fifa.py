@@ -8,7 +8,7 @@ import pandas as pd
 # 1. CONFIGURATION & DESIGN INTERFACE
 # ==========================================
 st.set_page_config(
-    page_title="Apex Quant Engine v25.2 • Institutional Terminal",
+    page_title="Apex Quant Engine v25.3 • Institutional Terminal",
     page_icon="⚽",
     layout="wide"
 )
@@ -72,6 +72,15 @@ st.markdown("""
         letter-spacing: 0.05em;
     }
 
+    .league-tag {
+        background: #1E293B;
+        color: #38BDF8;
+        padding: 2px 8px;
+        border-radius: 6px;
+        font-size: 0.72rem;
+        font-weight: 700;
+    }
+
     .live-badge {
         background: #EF4444;
         color: white;
@@ -79,7 +88,6 @@ st.markdown("""
         border-radius: 8px;
         font-weight: 800;
         font-size: 0.75rem;
-        animation: blink 1.5s infinite;
     }
 
     .stat-val {
@@ -116,7 +124,7 @@ COMPETITIONS = {
     "Primeira Liga": "PPD"
 }
 
-@st.cache_data(ttl=300)
+@st.cache_data(ttl=300, show_spinner=False)
 def fetch_api(endpoint):
     try:
         headers = {"X-Auth-Token": API_KEY}
@@ -127,7 +135,7 @@ def fetch_api(endpoint):
         return None
     return None
 
-@st.cache_data(ttl=600)
+@st.cache_data(ttl=1800, show_spinner=False)
 def get_league_stats(league_code):
     data = fetch_api(f"competitions/{league_code}/standings")
     stats = {}
@@ -168,7 +176,7 @@ def dixon_coles_adjustment(x, y, h_xg, a_xg, rho=-0.06):
     elif x == 1 and y == 1: return max(0.01, 1.0 - rho)
     return 1.0
 
-def run_monte_carlo_simulation(h_xg, a_xg, n_sims=5000):
+def run_monte_carlo_simulation(h_xg, a_xg, n_sims=3000):
     home_goals = np.random.poisson(h_xg, n_sims)
     away_goals = np.random.poisson(a_xg, n_sims)
     
@@ -264,11 +272,47 @@ def run_quant_engine(h_name, a_name, team_stats, avg_goals):
         "stability_index": variance_score
     }
 
+# Fonction globale de balayage de TOUS les championnats pour les coupons
+@st.cache_data(ttl=600, show_spinner="Analyse de tous les championnats d'Europe en cours...")
+def get_global_upcoming_predictions():
+    global_predictions = []
+    
+    for comp_name, comp_code in COMPETITIONS.items():
+        team_stats, avg_goals = get_league_stats(comp_code)
+        raw_matches = fetch_api(f"competitions/{comp_code}/matches")
+        all_matches = raw_matches.get("matches", []) if raw_matches else []
+        
+        upcoming = [m for m in all_matches if m.get('status') in ['SCHEDULED', 'TIMED', 'UPCOMING']]
+        
+        for m in upcoming:
+            h_team = m['homeTeam']['name']
+            a_team = m['awayTeam']['name']
+            date_str = m['utcDate'][:10] + " " + m['utcDate'][11:16]
+            
+            q = run_quant_engine(h_team, a_team, team_stats, avg_goals)
+            
+            global_predictions.append({
+                "league": comp_name,
+                "date": date_str,
+                "match": f"{h_team} vs {a_team}",
+                "advice": q['best_safe_advice'],
+                "conf": q['best_safe_conf'],
+                "score": q['top_scores'][0]['score'],
+                "xg": f"{q['h_xg']} - {q['a_xg']}"
+            })
+            
+    return sorted(global_predictions, key=lambda x: x['conf'], reverse=True)
+
 # ==========================================
 # 4. STREAMLIT UI CONTROLLER
 # ==========================================
-st.sidebar.title("⚽ Apex Quant v25.2")
-selected_comp = st.sidebar.selectbox("Sélectionner la Ligue", list(COMPETITIONS.keys()))
+st.sidebar.title("⚽ Apex Quant v25.3")
+
+if st.sidebar.button("🔄 Rafraîchir les Données API"):
+    st.cache_data.clear()
+    st.rerun()
+
+selected_comp = st.sidebar.selectbox("Ligue active pour l'Analyse Individuelle", list(COMPETITIONS.keys()))
 league_code = COMPETITIONS[selected_comp]
 
 team_stats, avg_goals = get_league_stats(league_code)
@@ -276,21 +320,113 @@ raw_matches = fetch_api(f"competitions/{league_code}/matches")
 all_matches = raw_matches.get("matches", []) if raw_matches else []
 
 # Tabs Navigation
-t_live, t_cal, t_coupons, t_hist, t_value, t_deep = st.tabs([
-    "🔴 Matchs LIVE",
+t_coupons, t_cal, t_live, t_hist, t_value, t_deep = st.tabs([
+    "🎟️ Coupons Globaux (Multi-Championnats)",
     "📅 Calendrier & Prédictions",
-    "🎟️ Coupons du Jour (2x5 Matchs)",
+    "🔴 Matchs LIVE",
     "📊 Historique Prédictions & Coupons",
     "💰 Value Bet & Kelly",
     "🔬 Terminal Deep-Dive"
 ])
 
 # ------------------------------------------
-# TAB 1: MATCHS EN DIRECT (LIVE)
+# TAB 1: COUPONS GLOBAUX MULTI-CHAMPIONNATS
+# ------------------------------------------
+with t_coupons:
+    st.subheader("🎟️ Coupons du Jour Multi-Championnats (10 Matchs les plus Sûrs d'Europe)")
+    st.caption("Le modèle analyse l'ensemble des compétitions pour sélectionner les 5 et 10 paris affichant le plus haut niveau de confiance stochastique.")
+    
+    global_sorted = get_global_upcoming_predictions()
+    
+    if len(global_sorted) >= 5:
+        c1, c2 = st.columns(2)
+        
+        # COUPON 1 : MULTI-LIGUE ULTRA SECURITE
+        with c1:
+            st.markdown("""
+            <div class="coupon-box">
+                <span class="coupon-badge">COUPON #1 : ULTRA SÉCURITÉ GLOBAAL</span>
+                <h3 style="color:#38BDF8; margin-top:10px;">Top 5 Matchs Ultra Sûrs d'Europe</h3>
+                <hr style="border-color:#1E293B;">
+            """, unsafe_allow_html=True)
+            
+            coupon1_matches = global_sorted[:5]
+            total_conf_c1 = 1.0
+            
+            for idx, item in enumerate(coupon1_matches, 1):
+                st.markdown(f"**{idx}. <span class='league-tag'>{item['league']}</span> {item['match']}**", unsafe_allow_html=True)
+                st.write(f"└ Pronostic : **{item['advice']}** | Confiance : **{item['conf']}%** | Date : {item['date']}")
+                total_conf_c1 *= (item['conf'] / 100.0)
+                
+            st.markdown(f"""
+                <hr style="border-color:#1E293B;">
+                <div style="font-size:0.95rem; color:#10B981; font-weight:800;">Probabilité Globale Estimée : {round(total_conf_c1 * 100, 1)}%</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+        # COUPON 2 : MULTI-LIGUE EQUILIBRE & VALEUR
+        with c2:
+            st.markdown("""
+            <div class="coupon-box">
+                <span class="coupon-badge" style="background:linear-gradient(90deg, #10B981, #059669);">COUPON #2 : ÉQUILIBRÉ MULTI-LIGUE</span>
+                <h3 style="color:#10B981; margin-top:10px;">Top 5 Alternative Sécurisée</h3>
+                <hr style="border-color:#1E293B;">
+            """, unsafe_allow_html=True)
+            
+            coupon2_matches = global_sorted[5:10] if len(global_sorted) >= 10 else global_sorted[:5]
+            total_conf_c2 = 1.0
+            
+            for idx, item in enumerate(coupon2_matches, 1):
+                st.markdown(f"**{idx}. <span class='league-tag'>{item['league']}</span> {item['match']}**", unsafe_allow_html=True)
+                st.write(f"└ Pronostic : **{item['advice']}** | Confiance : **{item['conf']}%** | Date : {item['date']}")
+                total_conf_c2 *= (item['conf'] / 100.0)
+                
+            st.markdown(f"""
+                <hr style="border-color:#1E293B;">
+                <div style="font-size:0.95rem; color:#38BDF8; font-weight:800;">Probabilité Globale Estimée : {round(total_conf_c2 * 100, 1)}%</div>
+            </div>
+            """, unsafe_allow_html=True)
+    else:
+        st.warning(f"Seulement {len(global_sorted)} match(s) à venir trouvés au total. Un minimum de 5 matchs est nécessaire pour composer les coupons.")
+
+# ------------------------------------------
+# TAB 2: CALENDRIER & PREDICTIONS
+# ------------------------------------------
+with t_cal:
+    st.subheader(f"📅 Calendrier & Colonne Prédictions — {selected_comp}")
+    upcoming = [m for m in all_matches if m.get('status') in ['SCHEDULED', 'TIMED', 'UPCOMING']]
+    
+    if upcoming:
+        grid_data = []
+        for m in upcoming:
+            date_str = m['utcDate'][:10] + " à " + m['utcDate'][11:16]
+            h_team = m['homeTeam']['name']
+            a_team = m['awayTeam']['name']
+            
+            q = run_quant_engine(h_team, a_team, team_stats, avg_goals)
+            top_scores_txt = ", ".join([f"{s['score']}" for s in q['top_scores']])
+            
+            grid_data.append({
+                "Date & Heure": date_str,
+                "Match": f"{h_team} vs {a_team}",
+                "xG Estimés": f"{q['h_xg']} - {q['a_xg']}",
+                "Probas 1-N-2": f"1:{q['p_h']}% | N:{q['p_n']}% | 2:{q['p_a']}%",
+                "Option Sécurité": f"👉 {q['best_safe_advice']} ({q['best_safe_conf']}%)",
+                "Scores Probables": top_scores_txt,
+                "Over/Under 2.5": f"{q['p_o25']}% O2.5",
+                "BTTS": f"{q['p_btts']}%"
+            })
+            
+        st.dataframe(pd.DataFrame(grid_data), use_container_width=True, hide_index=True)
+    else:
+        st.info(f"Aucun match à venir programmé actuellement dans la ligue : {selected_comp}.")
+
+# ------------------------------------------
+# TAB 3: MATCHS EN DIRECT (LIVE)
 # ------------------------------------------
 with t_live:
     st.subheader(f"🔴 Rencontres en Direct — {selected_comp}")
-    live_matches = [m for m in all_matches if m['status'] in ['IN_PLAY', 'PAUSED', 'LIVE', 'HALF_TIME', 'IN_PROGRESS']]
+    live_matches = [m for m in all_matches if m.get('status') in ['IN_PLAY', 'PAUSED', 'LIVE', 'HALF_TIME', 'IN_PROGRESS']]
     
     if live_matches:
         for m in live_matches:
@@ -310,132 +446,21 @@ with t_live:
                         <p style="color:#94A3B8; margin:0;">Prédiction Modèle : <b>{q['best_safe_advice']}</b> ({q['best_safe_conf']}%)</p>
                     </div>
                     <div style="text-align:right;">
-                        <span style="color:#10B981; font-weight:800; font-size:1.2rem;">Score Précoce : {q['top_scores'][0]['score']}</span>
+                        <span style="color:#10B981; font-weight:800; font-size:1.2rem;">Score Prédit : {q['top_scores'][0]['score']}</span>
                         <br><small style="color:#64748B;">xG Projetés: {q['h_xg']} - {q['a_xg']}</small>
                     </div>
                 </div>
             </div>
             """, unsafe_allow_html=True)
     else:
-        st.info("Aucun match de cette compétition n'est actuellement en direct.")
-
-# ------------------------------------------
-# TAB 2: CALENDRIER & PREDICTIONS COMPLETES
-# ------------------------------------------
-with t_cal:
-    st.subheader(f"📅 Calendrier & Colonne Prédictions — {selected_comp}")
-    upcoming = [m for m in all_matches if m['status'] in ['SCHEDULED', 'TIMED']]
-    
-    if upcoming:
-        grid_data = []
-        for m in upcoming:
-            date_str = m['utcDate'][:10] + " à " + m['utcDate'][11:16]
-            h_team = m['homeTeam']['name']
-            a_team = m['awayTeam']['name']
-            
-            q = run_quant_engine(h_team, a_team, team_stats, avg_goals)
-            
-            top_scores_txt = ", ".join([f"{s['score']}" for s in q['top_scores']])
-            
-            grid_data.append({
-                "Date & Heure": date_str,
-                "Affiche (Match)": f"{h_team} vs {a_team}",
-                "xG Estimés": f"{q['h_xg']} - {q['a_xg']}",
-                "Probas 1-N-2": f"1:{q['p_h']}% | N:{q['p_n']}% | 2:{q['p_a']}%",
-                "Option Sécurité (Très Sûre)": f"👉 {q['best_safe_advice']} ({q['best_safe_conf']}%)",
-                "Scores Probables": top_scores_txt,
-                "Over/Under 2.5": f"{q['p_o25']}% O2.5",
-                "Les 2 Marquent": f"{q['p_btts']}%"
-            })
-            
-        st.dataframe(pd.DataFrame(grid_data), use_container_width=True, hide_index=True)
-    else:
-        st.info("Aucun match à venir programmé dans ce championnat.")
-
-# ------------------------------------------
-# TAB 3: PROPOSITION DE 2 COUPONS DU JOUR
-# ------------------------------------------
-with t_coupons:
-    st.subheader("🎟️ Générateur Automatique de 2 Coupons du Jour (5 Matchs Sûrs Chaque)")
-    st.caption("Sélection algorithmique des prédictions présentant le plus fort indice de confiance stochastique.")
-    
-    upcoming = [m for m in all_matches if m['status'] in ['SCHEDULED', 'TIMED']]
-    
-    all_predictions = []
-    for m in upcoming:
-        h_team = m['homeTeam']['name']
-        a_team = m['awayTeam']['name']
-        q = run_quant_engine(h_team, a_team, team_stats, avg_goals)
-        
-        all_predictions.append({
-            "match": f"{h_team} vs {a_team}",
-            "advice": q['best_safe_advice'],
-            "conf": q['best_safe_conf'],
-            "score": q['top_scores'][0]['score'],
-            "xg": f"{q['h_xg']}-{q['a_xg']}"
-        })
-        
-    # Tri par probabilité décroissante
-    sorted_preds = sorted(all_predictions, key=lambda x: x['conf'], reverse=True)
-    
-    if len(sorted_preds) >= 5:
-        c1, c2 = st.columns(2)
-        
-        # COUPON 1 : ULTRA SECURITE
-        with c1:
-            st.markdown("""
-            <div class="coupon-box">
-                <span class="coupon-badge">COUPON #1 : ULTRA SÉCURITÉ</span>
-                <h3 style="color:#38BDF8; margin-top:10px;">5 Matchs Réputés Ultra Sûrs</h3>
-                <hr style="border-color:#1E293B;">
-            """, unsafe_allow_html=True)
-            
-            coupon1_matches = sorted_preds[:5]
-            total_conf_c1 = 1.0
-            
-            for idx, item in enumerate(coupon1_matches, 1):
-                st.markdown(f"**{idx}. {item['match']}**")
-                st.write(f"└ Pronostic : **{item['advice']}** | Confiance : **{item['conf']}%**")
-                total_conf_c1 *= (item['conf'] / 100.0)
-                
-            st.markdown(f"""
-                <hr style="border-color:#1E293B;">
-                <div style="font-size:0.9rem; color:#10B981; font-weight:700;">Probabilité Globale Estimée du Coupon : {round(total_conf_c1 * 100, 1)}%</div>
-            </div>
-            """, unsafe_allow_html=True)
-
-        # COUPON 2 : EQUILIBRE & VALEUR
-        with c2:
-            st.markdown("""
-            <div class="coupon-box">
-                <span class="coupon-badge" style="background:linear-gradient(90deg, #10B981, #059669);">COUPON #2 : ÉQUILIBRÉ & VALEUR</span>
-                <h3 style="color:#10B981; margin-top:10px;">5 Matchs Sécurisés Alternatifs</h3>
-                <hr style="border-color:#1E293B;">
-            """, unsafe_allow_html=True)
-            
-            coupon2_matches = sorted_preds[5:10] if len(sorted_preds) >= 10 else sorted_preds[:5]
-            total_conf_c2 = 1.0
-            
-            for idx, item in enumerate(coupon2_matches, 1):
-                st.markdown(f"**{idx}. {item['match']}**")
-                st.write(f"└ Pronostic : **{item['advice']}** | Confiance : **{item['conf']}%**")
-                total_conf_c2 *= (item['conf'] / 100.0)
-                
-            st.markdown(f"""
-                <hr style="border-color:#1E293B;">
-                <div style="font-size:0.9rem; color:#38BDF8; font-weight:700;">Probabilité Globale Estimée du Coupon : {round(total_conf_c2 * 100, 1)}%</div>
-            </div>
-            """, unsafe_allow_html=True)
-    else:
-        st.warning(f"Il n'y a actuellement que {len(sorted_preds)} matchs à venir dans cette ligue. Un minimum de 5 matchs est requis pour générer les coupons complets.")
+        st.info(f"Aucun match actuellement en direct dans la compétition {selected_comp}.")
 
 # ------------------------------------------
 # TAB 4: HISTORIQUE PREDICTIONS & COUPONS
 # ------------------------------------------
 with t_hist:
-    st.subheader(f"📊 Historique des Résultats & Validation des Coupons — {selected_comp}")
-    
-    finished = [m for m in all_matches if m['status'] == 'FINISHED']
+    st.subheader(f"📊 Historique des Résultats & Bilan — {selected_comp}")
+    finished = [m for m in all_matches if m.get('status') == 'FINISHED']
     
     if finished:
         wins, total = 0, 0
@@ -477,19 +502,16 @@ with t_hist:
                 
         win_rate = round((wins / total) * 100, 1) if total > 0 else 0
         
-        # Bilan Global
         st.markdown(f"""
         <div class="metric-card" style="border-left:5px solid #10B981; margin-bottom:20px;">
-            <div style="font-size:0.85rem; color:#94A3B8;">Taux de Réussite des Prédictions Individuelles ({total} derniers matchs)</div>
+            <div style="font-size:0.85rem; color:#94A3B8;">Taux de Réussite des Prédictions ({total} derniers matchs)</div>
             <div style="font-size:2.4rem; font-weight:800; color:#10B981;">{win_rate}%</div>
             <div style="font-size:0.85rem; color:#64748B;">{wins} prédictions validées sur {total}</div>
         </div>
         """, unsafe_allow_html=True)
         
-        # Historique par bloc de Coupons Passés
-        st.markdown("### 📜 Historique d'Évaluation des Coupons Passés (Par blocs de 5 matchs)")
         if len(audit_rows) >= 5:
-            # Séparer par blocs de 5 matchs
+            st.markdown("### 📜 Évaluation de Séries de 5 Matchs")
             num_coupons = len(audit_rows) // 5
             for c_idx in range(num_coupons):
                 group = audit_rows[c_idx*5 : (c_idx+1)*5]
@@ -497,11 +519,11 @@ with t_hist:
                 coupon_passed = (passed_count == 5)
                 
                 box_class = "coupon-box-success" if coupon_passed else "coupon-box-fail"
-                status_icon = "🟢 COUPON GAGNÉ (5/5)" if coupon_passed else f"🔴 COUPON PERDU ({passed_count}/5 Validés)"
+                status_icon = "🟢 SÉRIE GAGNÉE (5/5)" if coupon_passed else f"🔴 SÉRIE PERDUE ({passed_count}/5 Validés)"
                 
                 st.markdown(f"""
                 <div class="{box_class}">
-                    <h4 style="margin:0; color:#F8FAFC;">{status_icon} — Session {c_idx + 1}</h4>
+                    <h4 style="margin:0; color:#F8FAFC;">{status_icon} — Bloc #{c_idx + 1}</h4>
                     <hr style="border-color:rgba(255,255,255,0.1); margin:10px 0;">
                 """, unsafe_allow_html=True)
                 
@@ -510,11 +532,11 @@ with t_hist:
                     
                 st.markdown("</div>", unsafe_allow_html=True)
 
-        st.markdown("### 📋 Détail complet des prédictions individuelles passées")
+        st.markdown("### 📋 Historique détaillé")
         df_audit = pd.DataFrame(audit_rows).drop(columns=['win_bool'])
         st.dataframe(df_audit, use_container_width=True, hide_index=True)
     else:
-        st.info("Aucun historique de matchs terminés n'a été trouvé pour le moment.")
+        st.info("Aucun historique récent disponible pour ce championnat.")
 
 # ------------------------------------------
 # TAB 5: VALUE BET & KELLY
@@ -532,7 +554,6 @@ with t_value:
         
     p_dec = prob_input / 100.0
     ev = (p_dec * odds_input) - 1.0
-    
     b = odds_input - 1.0
     kelly_full = max(0.0, (p_dec * odds_input - 1.0) / b)
     kelly_quarter = (kelly_full / 4.0) * 100
@@ -563,7 +584,7 @@ with t_value:
     with res_c3:
         st.markdown(f"""
         <div class="metric-card">
-            <div class="stat-lbl">Montant de Mise Recommandé</div>
+            <div class="stat-lbl">Montant Recommandé</div>
             <div class="stat-val" style="color:#10B981;">{stake_amount} €</div>
             <div style="font-size:0.8rem; color:#94A3B8;">Sur bankroll de {bankroll_input} €</div>
         </div>
@@ -607,7 +628,7 @@ with t_deep:
             st.markdown("#### 🎯 Scores Exacts & Stabilité")
             scores_str = ", ".join([f"{s['score']} ({s['prob']}%)" for s in q['top_scores']])
             st.write(f"- Scores probables : **{scores_str}**")
-            st.write(f"- Indice de Stabilité de Variance (IVS) : **{q['stability_index']}/100**")
+            st.write(f"- Indice de Stabilité (IVS) : **{q['stability_index']}/100**")
             st.write(f"- Clean Sheet {h_t} : **{q['mc']['cs_h']}%** | Clean Sheet {a_t} : **{q['mc']['cs_a']}%**")
             
         with col2:
