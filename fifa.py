@@ -6,11 +6,11 @@ import pandas as pd
 from datetime import datetime, timedelta, timezone
 
 # ==========================================
-# 1. CONFIGURATION & STYLES CSS
+# 1. CONFIGURATION DE LA PAGE & STYLES CSS
 # ==========================================
 st.set_page_config(
-    page_title="Apex Quant Engine v25.8 • Europa League Edition",
-    page_icon="⚡",
+    page_title="Apex Quant Engine • fifa.py",
+    page_icon="⚽",
     layout="wide"
 )
 
@@ -105,12 +105,10 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 2. CLIENT API & CACHING
+# 2. CLIENT API FOOTBALL-DATA.ORG
 # ==========================================
 API_KEY = "1e9518e7585349f9abe6d5a29ddb83b1"
 BASE_URL = "https://api.football-data.org/v4/"
-
-# Compétitions cibles (inclus Europa League 'EL' et Champions League 'CL')
 TARGET_COMPETITIONS = "PL,CL,EL,FL1,BL1,SA,PD,DED,PPD"
 
 @st.cache_data(ttl=300, show_spinner=False)
@@ -125,24 +123,34 @@ def fetch_api(endpoint):
     return None
 
 # ==========================================
-# 3. MOTEUR STATISTIQUE adaptatif (Championnats + Europa League)
+# 3. MODÈLE HYBRIDE : POISSON & DIXON-COLES
 # ==========================================
+def dixon_coles_tau(x, y, lambda_h, mu_a, rho=-0.13):
+    """Facteur de correction de Dixon-Coles pour les scores faibles (0-0, 1-0, 0-1, 1-1)"""
+    if x == 0 and y == 0:
+        return 1.0 - (lambda_h * mu_a * rho)
+    elif x == 1 and y == 0:
+        return 1.0 + (mu_a * rho)
+    elif x == 0 and y == 1:
+        return 1.0 + (lambda_h * rho)
+    elif x == 1 and y == 1:
+        return 1.0 - rho
+    return 1.0
+
 @st.cache_data(ttl=3600, show_spinner=False)
 def get_league_standings(competition_code):
-    """Récupère et fusionne le classement, gère les groupes pour Europa League / Champions League"""
     data = fetch_api(f"competitions/{competition_code}/standings")
     standings = {}
     
     if data and "standings" in data and len(data["standings"]) > 0:
         all_rows = []
-        # Fusion des groupes si phase de poules/ligue (Europa League / Champions League)
         for st_group in data["standings"]:
             if "table" in st_group:
                 all_rows.extend(st_group["table"])
                 
         total_goals = sum(t["goalsFor"] for t in all_rows)
         total_played = sum(t["playedGames"] for t in all_rows)
-        avg_league_goals = (total_goals / total_played / 2.0) if total_played > 0 else 1.40
+        avg_league_goals = (total_goals / total_played / 2.0) if total_played > 0 else 1.35
 
         for row in all_rows:
             played = max(1, row["playedGames"])
@@ -151,7 +159,7 @@ def get_league_standings(competition_code):
                 "def": (row["goalsAgainst"] / played) / avg_league_goals
             }
         return standings, avg_league_goals
-    return {}, 1.40
+    return {}, 1.35
 
 def compute_quant_predictions(home_team, away_team, comp_code):
     standings, avg_goals = get_league_standings(comp_code)
@@ -161,17 +169,23 @@ def compute_quant_predictions(home_team, away_team, comp_code):
     a_att = standings.get(away_team, {}).get("att", 1.05)
     a_def = standings.get(away_team, {}).get("def", 1.10)
     
-    # Avantage domicile ajusté pour l'Europe
-    home_advantage = 1.12 if comp_code in ['EL', 'CL'] else 1.10
-    h_xg = max(0.4, h_att * a_def * avg_goals * home_advantage)
-    a_xg = max(0.3, a_att * h_def * avg_goals * (2.0 - home_advantage))
+    home_adv = 1.12 if comp_code in ['EL', 'CL'] else 1.10
+    h_xg = max(0.4, h_att * a_def * avg_goals * home_adv)
+    a_xg = max(0.3, a_att * h_def * avg_goals * (2.0 - home_adv))
     
     max_goals = 6
     p_matrix = np.zeros((max_goals, max_goals))
     for i in range(max_goals):
         for j in range(max_goals):
-            p_matrix[i, j] = poisson.pmf(i, h_xg) * poisson.pmf(j, a_xg)
+            p_raw = poisson.pmf(i, h_xg) * poisson.pmf(j, a_xg)
+            tau = dixon_coles_tau(i, j, h_xg, a_xg)
+            p_matrix[i, j] = max(0, p_raw * tau)
             
+    # Normalisation de la matrice de probabilité
+    total_p = np.sum(p_matrix)
+    if total_p > 0:
+        p_matrix = p_matrix / total_p
+
     p_h = np.sum(np.triu(p_matrix, 1).T) * 100
     p_n = np.sum(np.diag(p_matrix)) * 100
     p_a = np.sum(np.tril(p_matrix, -1)) * 100
@@ -213,24 +227,21 @@ def compute_quant_predictions(home_team, away_team, comp_code):
     }
 
 # ==========================================
-# 4. RÉCUPÉRATION DES MATCHS DU JOUR (INCLUS EUROPA LEAGUE)
+# 4. RÉCUPÉRATION DES MATCHS & HISTORIQUE
 # ==========================================
-@st.cache_data(ttl=300, show_spinner="Récupération des matchs (Ligue Europa & Championnats)...")
+@st.cache_data(ttl=300, show_spinner="Analyse des rencontres en cours...")
 def get_today_matches():
     now = datetime.now(timezone.utc)
     date_from = now.strftime("%Y-%m-%d")
     date_to = (now + timedelta(days=1)).strftime("%Y-%m-%d")
     
-    # Appel explicite incluant Europa League (EL) et Champions League (CL)
-    endpoint = f"matches?competitions={TARGET_COMPETITIONS}&dateFrom={date_from}&dateTo={date_to}"
-    raw_data = fetch_api(endpoint)
-    
+    raw_data = fetch_api(f"matches?competitions={TARGET_COMPETITIONS}&dateFrom={date_from}&dateTo={date_to}")
     predictions = []
     
     if raw_data and "matches" in raw_data:
         for m in raw_data["matches"]:
             league_name = m.get("competition", {}).get("name", "Autre Ligue")
-            comp_code = m.get("competition", {}).get("code", "EL")
+            comp_code = m.get("competition", {}).get("code", "PL")
             h_team = m["homeTeam"]["name"]
             a_team = m["awayTeam"]["name"]
             
@@ -256,21 +267,20 @@ def get_today_matches():
             
     return sorted(predictions, key=lambda x: x["conf"], reverse=True)
 
-@st.cache_data(ttl=600, show_spinner="Vérification des résultats récents...")
+@st.cache_data(ttl=600, show_spinner="Calcul de l'audit de performance...")
 def get_finished_history():
     now = datetime.now(timezone.utc)
     date_from = (now - timedelta(days=7)).strftime("%Y-%m-%d")
     date_to = now.strftime("%Y-%m-%d")
     
-    endpoint = f"matches?status=FINISHED&competitions={TARGET_COMPETITIONS}&dateFrom={date_from}&dateTo={date_to}"
-    raw_data = fetch_api(endpoint)
+    raw_data = fetch_api(f"matches?status=FINISHED&competitions={TARGET_COMPETITIONS}&dateFrom={date_from}&dateTo={date_to}")
     history = []
     
     if raw_data and "matches" in raw_data:
         for m in raw_data["matches"]:
             h_team = m["homeTeam"]["name"]
             a_team = m["awayTeam"]["name"]
-            comp_code = m.get("competition", {}).get("code", "EL")
+            comp_code = m.get("competition", {}).get("code", "PL")
             league_name = m.get("competition", {}).get("name", "Autre Ligue")
             
             h_score = m["score"]["fullTime"]["home"]
@@ -300,57 +310,48 @@ def get_finished_history():
                 })
     return history
 
-# Chargement
 all_predictions = get_today_matches()
 history_data = get_finished_history()
 
 # ==========================================
-# 5. SIDEBAR : FILTRE LIGUE & EUROPA LEAGUE
+# 5. SIDEBAR : SELECTION DES LIGUES
 # ==========================================
-st.sidebar.title("🏆 Choix du Championnat")
-
+st.sidebar.title("🏆 Compétitions")
 available_leagues = sorted(list(set(item['league'] for item in all_predictions)))
 league_options = ["Toutes les ligues (Global)"] + available_leagues
 
-selected_league = st.sidebar.selectbox(
-    "Sélectionnez la compétition :",
-    options=league_options,
-    index=0
-)
+selected_league = st.sidebar.selectbox("Sélectionnez la compétition :", options=league_options, index=0)
 
 st.sidebar.markdown("---")
-if st.sidebar.button("🔄 Actualiser les matchs du jour"):
+if st.sidebar.button("🔄 Actualiser les données"):
     st.cache_data.clear()
     st.rerun()
 
-if selected_league == "Toutes les ligues (Global)":
-    filtered_predictions = all_predictions
-else:
-    filtered_predictions = [p for p in all_predictions if p['league'] == selected_league]
+filtered_predictions = all_predictions if selected_league == "Toutes les ligues (Global)" else [p for p in all_predictions if p['league'] == selected_league]
 
 # ==========================================
-# 6. EN-TÊTE ET ONGLETS PRINCIPAUX
+# 6. INTERFACE UTILISATEUR
 # ==========================================
 st.markdown(f"""
 <div class="hero-header">
     <div style="display:flex; justify-content:space-between; align-items:center;">
         <div>
-            <span class="badge-gold">QUANT ENGINE v25.8 • INCLUS EUROPA LEAGUE</span>
+            <span class="badge-gold">MOTEUR DIXON-COLES & POISSON • FIFA.PY</span>
             <h1 style="color:#FFF; margin:10px 0 0 0; font-weight:800; font-size:1.8rem;">{selected_league}</h1>
-            <p style="color:#94A3B8; margin:5px 0 0 0; font-size:0.9rem;">Coupons du jour exclusifs (24h-48h), prédictions de Poisson et suivi complet des résultats.</p>
+            <p style="color:#94A3B8; margin:5px 0 0 0; font-size:0.9rem;">Générateur quantitatif de coupons et analyse prédictive à haute fréquence.</p>
         </div>
         <div style="text-align:right;">
-            <span class="badge-blue">{len(filtered_predictions)} Matchs du Jour</span>
+            <span class="badge-blue">{len(filtered_predictions)} Rencontres Analysées</span>
         </div>
     </div>
 </div>
 """, unsafe_allow_html=True)
 
 t_coupons, t_deep, t_hist, t_cal = st.tabs([
-    "🎟️ Coupons du Jour",
-    "🔍 Prédiction Détaillée par Match",
-    "📜 Historique Gagné/Perdu (7J)",
-    "📅 Programme des Matchs du Jour"
+    "🎟️ Coupons Optimisés",
+    "🔍 Prédiction Détaillée",
+    "📜 Audit & Historique (7J)",
+    "📅 Programme des Matchs"
 ])
 
 # ------------------------------------------
@@ -363,7 +364,7 @@ with t_coupons:
         with c1:
             st.markdown("""
             <div class="coupon-card-v1">
-                <span class="badge-gold">COUPON DU JOUR #1 • HAUTE SÉCURITÉ</span>
+                <span class="badge-gold">COUPON SÉCURITÉ MAX</span>
                 <hr style="border-color:rgba(16, 185, 129, 0.2); margin:15px 0;">
             """, unsafe_allow_html=True)
             
@@ -375,7 +376,7 @@ with t_coupons:
                 <div class="match-row-item">
                     <div style="display:flex; justify-content:space-between;">
                         <div>
-                            <span class="league-pill">{item['league']}</span> • <span style="font-size:0.75rem; color:#94A3B8;">Aujourd'hui à {item['time']}</span>
+                            <span class="league-pill">{item['league']}</span> • <span style="font-size:0.75rem; color:#94A3B8;">{item['time']}</span>
                             <div style="font-weight:700; color:#F8FAFC; margin-top:4px;">{idx}. {item['match']}</div>
                         </div>
                         <div style="text-align:right;">
@@ -385,12 +386,12 @@ with t_coupons:
                     </div>
                 </div>
                 """, unsafe_allow_html=True)
-            st.markdown(f"<b>Fiabilité Cumulée : {round(conf_c1*100, 1)}%</b></div>", unsafe_allow_html=True)
+            st.markdown(f"<b>Fiabilité Cumulée Estimée : {round(conf_c1*100, 1)}%</b></div>", unsafe_allow_html=True)
 
         with c2:
             st.markdown("""
             <div class="coupon-card-v2">
-                <span class="badge-blue">COUPON DU JOUR #2 • PARIS ALTERNATIFS</span>
+                <span class="badge-blue">COUPON ALTERNATIF / VALEUR</span>
                 <hr style="border-color:rgba(59, 130, 246, 0.2); margin:15px 0;">
             """, unsafe_allow_html=True)
             
@@ -402,7 +403,7 @@ with t_coupons:
                 <div class="match-row-item-blue">
                     <div style="display:flex; justify-content:space-between;">
                         <div>
-                            <span class="league-pill">{item['league']}</span> • <span style="font-size:0.75rem; color:#94A3B8;">Aujourd'hui à {item['time']}</span>
+                            <span class="league-pill">{item['league']}</span> • <span style="font-size:0.75rem; color:#94A3B8;">{item['time']}</span>
                             <div style="font-weight:700; color:#F8FAFC; margin-top:4px;">{idx}. {item['match']}</div>
                         </div>
                         <div style="text-align:right;">
@@ -412,15 +413,15 @@ with t_coupons:
                     </div>
                 </div>
                 """, unsafe_allow_html=True)
-            st.markdown(f"<b>Fiabilité Cumulée : {round(conf_c2*100, 1)}%</b></div>", unsafe_allow_html=True)
+            st.markdown(f"<b>Fiabilité Cumulée Estimée : {round(conf_c2*100, 1)}%</b></div>", unsafe_allow_html=True)
     else:
-        st.info("Aucun match prévu pour aujourd'hui dans ce championnat. Sélectionnez 'Toutes les ligues' pour inclure la UEFA Europa League et les autres compétitions du jour.")
+        st.info("Aucun match disponible pour cette sélection.")
 
 # ------------------------------------------
-# TAB 2 : DEEP-DIVE MATCHS DU JOUR
+# TAB 2 : DEEP DIVE
 # ------------------------------------------
 with t_deep:
-    st.subheader("🔍 Analyse Approfondie (Matchs du Jour)")
+    st.subheader("🔍 Analyse Approfondie par Match")
     if filtered_predictions:
         match_titles = [f"{m['match']} ({m['league']} - {m['time']})" for m in filtered_predictions]
         sel_match_idx = st.selectbox("Sélectionnez le match :", range(len(match_titles)), format_func=lambda x: match_titles[x])
@@ -430,7 +431,7 @@ with t_deep:
         st.markdown(f"""
         <div class="deep-card">
             <h2 style="color:#FFF; margin:0; text-align:center;">{m['match']}</h2>
-            <p style="text-align:center; color:#94A3B8; margin-top:5px;">{m['league']} • Match programmé aujourd'hui à {m['time']}</p>
+            <p style="text-align:center; color:#94A3B8; margin-top:5px;">{m['league']} • Programmé à {m['time']}</p>
             <hr style="border-color:#1E293B; margin:15px 0;">
             
             <div style="display:flex; justify-content:space-around; text-align:center;">
@@ -470,10 +471,10 @@ with t_deep:
             st.info(f"**Pari Sécurité :** {m['advice']} ({m['conf']}%)")
             st.warning(f"**Pari Secours :** {m['sec_advice']} ({m['sec_conf']}%)")
     else:
-        st.info("Aucun match disponible pour cette sélection.")
+        st.info("Aucun match disponible.")
 
 # ------------------------------------------
-# TAB 3 : HISTORIQUE RÉSULTATS
+# TAB 3 : HISTORIQUE ET AUDIT
 # ------------------------------------------
 with t_hist:
     st.subheader("📜 Historique Récent des 7 Derniers Jours")
@@ -492,13 +493,13 @@ with t_hist:
         df_hist.columns = ['Date', 'Championnat', 'Match & Score', 'Conseil Algo', 'Confiance', 'Résultat']
         st.dataframe(df_hist, use_container_width=True, hide_index=True)
     else:
-        st.info("Aucun historique disponible pour les 7 derniers jours.")
+        st.info("Aucun historique récent disponible.")
 
 # ------------------------------------------
-# TAB 4 : CALENDRIER DU JOUR
+# TAB 4 : CALENDRIER DES MATCHS
 # ------------------------------------------
 with t_cal:
-    st.subheader("📅 Programme des Matchs du Jour")
+    st.subheader("📅 Programme des Rencontres")
     if filtered_predictions:
         grid = [{
             "⏰ Heure": m['time'],
