@@ -437,7 +437,8 @@ with t4:
         
         with col1:
             st.markdown("#### Scores Exacts & Stabilité")
-            st.write(f"- Scores probables : **{', '.join([f'{s[\"score\"]} ({s[\"prob\"]}% )' for s in q['top_scores']])}**")
+            scores_str = ", ".join([f"{s['score']} ({s['prob']}%)" for s in q['top_scores']])
+            st.write(f"- Scores probables : **{scores_str}**")
             st.write(f"- Indice de Stabilité de Variance (IVS) : **{q['stability_index']}/100**")
             st.write(f"- Clean Sheet {h_t} : **{q['mc']['cs_h']}%** | Clean Sheet {a_t} : **{q['mc']['cs_a']}%**")
             
