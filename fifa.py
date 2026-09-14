@@ -1,467 +1,473 @@
 import streamlit as st
-import pandas as pd
-import numpy as np
-import scipy.stats as stats
 import requests
-import datetime
-from math import exp, factorial
+import numpy as np
+from scipy.stats import poisson, nbinom
+import pandas as pd
 
 # ==========================================
-# CONFIGURATION STREAMLIT & STYLE CSS
+# 1. CONFIGURATION & DESIGN INTERFACE (v25.1)
 # ==========================================
 st.set_page_config(
-    page_title="Apex Quant Engine v25.1 — Pro",
-    page_icon="⚽",
-    layout="wide",
-    initial_sidebar_state="expanded"
+    page_title="Apex Quant Engine v25.1 • Institutional Terminal",
+    page_icon="💎",
+    layout="wide"
 )
 
 st.markdown("""
-<style>
-    .main { background-color: #0e1117; color: #ffffff; }
-    .stMetric { background-color: #1e222d; padding: 15px; border-radius: 10px; border-left: 4px solid #00d26a; }
-    .card-match { background-color: #1a1e29; padding: 18px; border-radius: 12px; border: 1px solid #2d3245; margin-bottom: 15px; }
-    .badge-win { background-color: #00d26a; color: #000; font-weight: bold; padding: 3px 8px; border-radius: 5px; }
-    .badge-val { background-color: #ffb020; color: #000; font-weight: bold; padding: 3px 8px; border-radius: 5px; }
-    .badge-loss { background-color: #f8312f; color: #fff; font-weight: bold; padding: 3px 8px; border-radius: 5px; }
-    .coupon-card-sec { background-color: #151924; border: 2px solid #00d26a; border-radius: 12px; padding: 20px; margin-top: 15px; margin-bottom: 25px; }
-    .coupon-card-val { background-color: #151924; border: 2px solid #ffb020; border-radius: 12px; padding: 20px; margin-top: 15px; margin-bottom: 25px; }
-    .stat-box { text-align: center; background: #232836; padding: 10px; border-radius: 8px; margin: 5px; }
-</style>
+    <style>
+    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700;800&family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap');
+    
+    * { font-family: 'Plus Jakarta Sans', sans-serif; }
+    .stApp { background-color: #020617; color: #F8FAFC; }
+    
+    .oracle-card-v25 {
+        background: linear-gradient(135deg, #0F172A 0%, #030712 50%, #064E3B 100%);
+        border: 1.5px solid #10B981;
+        border-radius: 16px;
+        padding: 24px;
+        margin-bottom: 25px;
+        box-shadow: 0 10px 30px rgba(16, 185, 129, 0.15);
+    }
+    
+    .metric-card {
+        background: #0F172A;
+        border: 1px solid #1E293B;
+        border-radius: 12px;
+        padding: 18px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+    }
+    
+    .coupon-badge {
+        background: linear-gradient(90deg, #3B82F6, #1D4ED8);
+        color: white;
+        padding: 4px 10px;
+        border-radius: 12px;
+        font-weight: 800;
+        font-size: 0.72rem;
+        letter-spacing: 0.05em;
+    }
+
+    .value-badge {
+        background: linear-gradient(90deg, #10B981, #059669);
+        color: white;
+        padding: 4px 10px;
+        border-radius: 12px;
+        font-weight: 800;
+        font-size: 0.72rem;
+        letter-spacing: 0.05em;
+    }
+    
+    .stat-val {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 1.7rem;
+        font-weight: 800;
+        color: #38BDF8;
+    }
+    
+    .stat-lbl {
+        font-size: 0.75rem;
+        color: #94A3B8;
+        text-transform: uppercase;
+        font-weight: 600;
+    }
+    </style>
 """, unsafe_allow_html=True)
 
 # ==========================================
-# CONSTANTES & COEFFICIENTS DE NIVEAU (UEFA & LIGUES)
+# 2. API FOOTBALL & RECUPERATION DES DONNEES
 # ==========================================
-API_BASE_URL = "https://api.football-data.org/v4/"
+API_KEY = "1e9518e7585349f9abe6d5a29ddb83b1"
+BASE_URL = "https://api.football-data.org/v4/"
 
 COMPETITIONS = {
-    'PL':  'Premier League (Angleterre)',
-    'ELC': 'Championship (Angleterre)',
-    'PD':  'La Liga (Espagne)',
-    'FL1': 'Ligue 1 (France)',
-    'SA':  'Serie A (Italie)',
-    'BL1': 'Bundesliga (Allemagne)',
-    'DED': 'Eredivisie (Pays-Bas)',
-    'PPD': 'Primeira Liga (Portugal)',
-    'BSA': 'Série A (Brésil)',
-    'CL':  'Ligue des Champions (UEFA)',
-    'EL':  'Ligue Europa (UEFA)'
+    "🏆 Ligue des Champions": "CL",
+    "🇪🇺 UEFA Europa League": "EL",
+    "🏴󠁧󠁢󠁥ⁿ󠁧󠁢󠁷󠁬󠁳󠁿 Premier League": "PL",
+    "🇪🇸 La Liga": "PD",
+    "🇫🇷 Ligue 1": "FL1",
+    "🇮🇹 Serie A": "SA",
+    "🇩🇪 Bundesliga": "BL1",
+    "🇳🇱 Eredivisie": "DED",
+    "🇵🇹 Primeira Liga": "PPD"
 }
 
-# Indices de puissance des championnats pour la normalisation inter-ligues (Europa / Champions League)
-LEAGUE_COEFFICIENTS = {
-    'PL': 1.35,  # Premier League
-    'PD': 1.30,  # La Liga
-    'BL1': 1.25, # Bundesliga
-    'SA': 1.20,  # Serie A
-    'FL1': 1.15, # Ligue 1
-    'CL': 1.35,  # Ligue des Champions (base moyenne)
-    'EL': 1.10,  # Ligue Europa (base moyenne)
-    'PPD': 1.00, # Primeira Liga
-    'DED': 0.95, # Eredivisie
-    'ELC': 0.90, # Championship
-    'BSA': 0.88  # Série A Brésil
-}
+@st.cache_data(ttl=600)
+def fetch_api(endpoint):
+    try:
+        headers = {"X-Auth-Token": API_KEY}
+        res = requests.get(f"{BASE_URL}{endpoint}", headers=headers, timeout=10)
+        if res.status_code == 200:
+            return res.json()
+    except Exception:
+        return None
+    return None
 
-# ==========================================
-# FONCTIONS API & DONNEES SIMULEES
-# ==========================================
-@st.cache_data(ttl=1800)
-def fetch_matches(api_key, competition_code=None, days_ahead=7):
-    """Récupère les matchs depuis football-data.org ou bascule sur les données simulées enrichies."""
-    headers = {'X-Auth-Token': api_key} if api_key else {}
-    today = datetime.date.today()
-    future = today + datetime.timedelta(days=days_ahead)
+@st.cache_data(ttl=1200)
+def get_league_stats_v25_1(league_code):
+    data = fetch_api(f"competitions/{league_code}/standings")
+    stats = {}
+    avg_goals_league = 1.35
     
-    if api_key:
-        try:
-            comp_url = f"{API_BASE_URL}matches?dateFrom={today}&dateTo={future}"
-            if competition_code:
-                comp_url = f"{API_BASE_URL}competitions/{competition_code}/matches?dateFrom={today}&dateTo={future}"
-            response = requests.get(comp_url, headers=headers, timeout=10)
-            if response.status_code == 200:
-                data = response.json()
-                return data.get('matches', [])
-        except Exception as e:
-            st.sidebar.warning(f"Erreur connexion API: {e}. Activation du moteur autonome.")
-    
-    return get_simulated_matches(competition_code)
-
-def get_simulated_matches(competition_code=None):
-    """Génère des rencontres avec coefficients d'origine pour calibrer la Ligue Europa & Champions League."""
-    sample_matches = [
-        # Ligue Europa (UEFA) - Confrontations Inter-Ligues avec Coefficients distincts
-        {'id': 301, 'competition': {'code': 'EL', 'name': 'Ligue Europa'}, 'homeTeam': {'name': 'AS Roma', 'id': 100}, 'awayTeam': {'name': 'Athletic Bilbao', 'id': 77}, 'utcDate': '2026-09-17T18:45:00Z', 'status': 'SCHEDULED', 'h_att': 1.85, 'h_def': 0.88, 'a_att': 1.65, 'a_def': 0.95, 'h_coeff': 1.20, 'a_coeff': 1.30},
-        {'id': 302, 'competition': {'code': 'EL', 'name': 'Ligue Europa'}, 'homeTeam': {'name': 'FC Porto', 'id': 503}, 'awayTeam': {'name': 'AZ Alkmaar', 'id': 682}, 'utcDate': '2026-09-17T21:00:00Z', 'status': 'SCHEDULED', 'h_att': 2.05, 'h_def': 0.80, 'a_att': 1.45, 'a_def': 1.10, 'h_coeff': 1.00, 'a_coeff': 0.95},
-        {'id': 303, 'competition': {'code': 'EL', 'name': 'Ligue Europa'}, 'homeTeam': {'name': 'Eintracht Frankfurt', 'id': 19}, 'awayTeam': {'name': 'Olympiakos', 'id': 554}, 'utcDate': '2026-09-17T21:00:00Z', 'status': 'SCHEDULED', 'h_att': 1.90, 'h_def': 1.02, 'a_att': 1.30, 'a_def': 1.05, 'h_coeff': 1.25, 'a_coeff': 0.85},
-        {'id': 304, 'competition': {'code': 'EL', 'name': 'Ligue Europa'}, 'homeTeam': {'name': 'Olympique Lyonnais', 'id': 516}, 'awayTeam': {'name': 'Besiktas', 'id': 558}, 'utcDate': '2026-09-17T18:45:00Z', 'status': 'SCHEDULED', 'h_att': 1.80, 'h_def': 0.98, 'a_att': 1.35, 'a_def': 1.15, 'h_coeff': 1.15, 'a_coeff': 0.88},
-        {'id': 305, 'competition': {'code': 'EL', 'name': 'Ligue Europa'}, 'homeTeam': {'name': 'Lazio Roma', 'id': 99}, 'awayTeam': {'name': 'OGC Nice', 'id': 522}, 'utcDate': '2026-09-17T21:00:00Z', 'status': 'SCHEDULED', 'h_att': 1.75, 'h_def': 0.85, 'a_att': 1.40, 'a_def': 0.92, 'h_coeff': 1.20, 'a_coeff': 1.15},
-
-        # Champions League (UEFA)
-        {'id': 201, 'competition': {'code': 'CL', 'name': 'Ligue des Champions'}, 'homeTeam': {'name': 'Real Madrid', 'id': 86}, 'awayTeam': {'name': 'Bayern München', 'id': 5}, 'utcDate': '2026-09-16T21:00:00Z', 'status': 'SCHEDULED', 'h_att': 2.40, 'h_def': 0.90, 'a_att': 2.15, 'a_def': 1.00, 'h_coeff': 1.30, 'a_coeff': 1.25},
-        {'id': 202, 'competition': {'code': 'CL', 'name': 'Ligue des Champions'}, 'homeTeam': {'name': 'PSG', 'id': 524}, 'awayTeam': {'name': 'Inter Milan', 'id': 108}, 'utcDate': '2026-09-17T21:00:00Z', 'status': 'SCHEDULED', 'h_att': 2.15, 'h_def': 0.88, 'a_att': 1.80, 'a_def': 0.78, 'h_coeff': 1.15, 'a_coeff': 1.20},
-
-        # Premier League
-        {'id': 101, 'competition': {'code': 'PL', 'name': 'Premier League'}, 'homeTeam': {'name': 'Arsenal', 'id': 57}, 'awayTeam': {'name': 'Chelsea', 'id': 61}, 'utcDate': '2026-09-15T20:00:00Z', 'status': 'SCHEDULED', 'h_att': 2.20, 'h_def': 0.80, 'a_att': 1.65, 'a_def': 1.10, 'h_coeff': 1.35, 'a_coeff': 1.35},
-        {'id': 102, 'competition': {'code': 'PL', 'name': 'Premier League'}, 'homeTeam': {'name': 'Liverpool', 'id': 64}, 'awayTeam': {'name': 'Manchester City', 'id': 65}, 'utcDate': '2026-09-16T17:30:00Z', 'status': 'SCHEDULED', 'h_att': 2.35, 'h_def': 0.85, 'a_att': 2.25, 'a_def': 0.85, 'h_coeff': 1.35, 'a_coeff': 1.35},
-
-        # La Liga
-        {'id': 401, 'competition': {'code': 'PD', 'name': 'La Liga'}, 'homeTeam': {'name': 'Barcelona', 'id': 81}, 'awayTeam': {'name': 'Atletico Madrid', 'id': 78}, 'utcDate': '2026-09-19T19:00:00Z', 'status': 'SCHEDULED', 'h_att': 2.25, 'h_def': 0.82, 'a_att': 1.70, 'a_def': 0.75, 'h_coeff': 1.30, 'a_coeff': 1.30},
-        
-        # Serie A
-        {'id': 501, 'competition': {'code': 'SA', 'name': 'Serie A'}, 'homeTeam': {'name': 'AC Milan', 'id': 98}, 'awayTeam': {'name': 'Juventus', 'id': 109}, 'utcDate': '2026-09-18T20:45:00Z', 'status': 'SCHEDULED', 'h_att': 1.75, 'h_def': 0.90, 'a_att': 1.65, 'a_def': 0.82, 'h_coeff': 1.20, 'a_coeff': 1.20},
-
-        # Bundesliga
-        {'id': 601, 'competition': {'code': 'BL1', 'name': 'Bundesliga'}, 'homeTeam': {'name': 'Bayer Leverkusen', 'id': 3}, 'awayTeam': {'name': 'Borussia Dortmund', 'id': 4}, 'utcDate': '2026-09-19T18:30:00Z', 'status': 'SCHEDULED', 'h_att': 2.15, 'h_def': 0.95, 'a_att': 1.95, 'a_def': 1.10, 'h_coeff': 1.25, 'a_coeff': 1.25},
-
-        # Ligue 1
-        {'id': 701, 'competition': {'code': 'FL1', 'name': 'Ligue 1'}, 'homeTeam': {'name': 'Marseille', 'id': 516}, 'awayTeam': {'name': 'Monaco', 'id': 548}, 'utcDate': '2026-09-20T19:45:00Z', 'status': 'SCHEDULED', 'h_att': 1.85, 'h_def': 1.00, 'a_att': 1.90, 'a_def': 1.05, 'h_coeff': 1.15, 'a_coeff': 1.15},
-
-        # Eredivisie & Autres
-        {'id': 801, 'competition': {'code': 'DED', 'name': 'Eredivisie'}, 'homeTeam': {'name': 'Ajax', 'id': 678}, 'awayTeam': {'name': 'PSV Eindhoven', 'id': 674}, 'utcDate': '2026-09-20T14:30:00Z', 'status': 'SCHEDULED', 'h_att': 2.05, 'h_def': 1.10, 'a_att': 2.20, 'a_def': 0.95, 'h_coeff': 0.95, 'a_coeff': 0.95},
-        {'id': 901, 'competition': {'code': 'PPD', 'name': 'Primeira Liga'}, 'homeTeam': {'name': 'Benfica', 'id': 1903}, 'awayTeam': {'name': 'Sporting CP', 'id': 498}, 'utcDate': '2026-09-20T20:30:00Z', 'status': 'SCHEDULED', 'h_att': 2.10, 'h_def': 0.82, 'a_att': 2.00, 'a_def': 0.88, 'h_coeff': 1.00, 'a_coeff': 1.00}
-    ]
-    
-    if competition_code:
-        return [m for m in sample_matches if m['competition']['code'] == competition_code]
-    return sample_matches
-
-# ==========================================
-# MOTEUR MATHEMATIQUE (CROSS-LEAGUE + DIXON-COLES + POISSON)
-# ==========================================
-def dixon_coles_tau(x, y, lambda_param, mu_param, rho=-0.13):
-    """Ajustement de Dixon-Coles corrigeant la corrélation des bas scores (0-0, 1-0, 0-1, 1-1)."""
-    if x == 0 and y == 0:
-        return 1.0 - (lambda_param * mu_param * rho)
-    elif x == 1 and y == 0:
-        return 1.0 + (mu_param * rho)
-    elif x == 0 and y == 1:
-        return 1.0 + (lambda_param * rho)
-    elif x == 1 and y == 1:
-        return 1.0 - rho
-    else:
-        return 1.0
-
-def predict_match_quant(home_att, home_def, away_att, away_def, home_coeff=1.0, away_coeff=1.0, home_advantage=1.12, rho=-0.13, max_goals=6):
-    """
-    Moteur de prédiction Quant avec étalonnage inter-ligues pour la Ligue Europa / Champions League.
-    Prise en compte du ratio de puissance relative des championnats d'origine (home_coeff vs away_coeff).
-    """
-    # Normalisation inter-ligues (Ratio de force relative)
-    league_ratio = home_coeff / max(0.1, away_coeff)
-    coeff_factor = np.sqrt(league_ratio)
-    
-    # Espérance xG ajustée
-    lambda_param = max(0.25, home_att * away_def * home_advantage * coeff_factor)
-    mu_param = max(0.25, (away_att * home_def / home_advantage) * (1.0 / coeff_factor))
-    
-    matrix = np.zeros((max_goals + 1, max_goals + 1))
-    for x in range(max_goals + 1):
-        for y in range(max_goals + 1):
-            p_x = stats.poisson.pmf(x, lambda_param)
-            p_y = stats.poisson.pmf(y, mu_param)
-            tau = dixon_coles_tau(x, y, lambda_param, mu_param, rho)
-            matrix[x, y] = max(0.0, p_x * p_y * tau)
+    if data and "standings" in data and len(data["standings"]) > 0:
+        table = data["standings"][0].get("table", [])
+        total_played, total_gf = 0, 0
+        for row in table:
+            name = row["team"]["name"]
+            played = max(1, row.get("playedGames", 1))
+            gf = row.get("goalsFor", 0)
+            ga = row.get("goalsAgainst", 0)
+            pts = row.get("points", 0)
             
+            stats[name] = {
+                "gf_pg": gf / played,
+                "ga_pg": ga / played,
+                "ppg": pts / played,
+                "played": played,
+                "points": pts
+            }
+            total_played += played
+            total_gf += gf
+            
+        if total_played > 0:
+            avg_goals_league = max(0.9, total_gf / total_played)
+            
+    return stats, avg_goals_league
+
+# ==========================================
+# 3. MOTEUR QUANTITATIF V25.1 ENRICHI
+# ==========================================
+def dixon_coles_adjustment(x, y, h_xg, a_xg, rho=-0.06):
+    if x == 0 and y == 0: return max(0.01, 1.0 - (h_xg * a_xg * rho))
+    elif x == 0 and y == 1: return max(0.01, 1.0 + (h_xg * rho))
+    elif x == 1 and y == 0: return max(0.01, 1.0 + (a_xg * rho))
+    elif x == 1 and y == 1: return max(0.01, 1.0 - rho)
+    return 1.0
+
+def run_monte_carlo_simulation(h_xg, a_xg, n_sims=10000):
+    home_goals = np.random.poisson(h_xg, n_sims)
+    away_goals = np.random.poisson(a_xg, n_sims)
+    
+    home_wins = np.sum(home_goals > away_goals) / n_sims * 100
+    draws = np.sum(home_goals == away_goals) / n_sims * 100
+    away_wins = np.sum(home_goals < away_goals) / n_sims * 100
+    
+    clean_sheet_h = np.sum(away_goals == 0) / n_sims * 100
+    clean_sheet_a = np.sum(home_goals == 0) / n_sims * 100
+    
+    return {
+        "mc_h": round(home_wins, 1),
+        "mc_n": round(draws, 1),
+        "mc_a": round(away_wins, 1),
+        "cs_h": round(clean_sheet_h, 1),
+        "cs_a": round(clean_sheet_a, 1)
+    }
+
+def run_quant_engine_v25_1(h_name, a_name, team_stats, avg_goals):
+    h_stat = team_stats.get(h_name, {"gf_pg": 1.4, "ga_pg": 1.1, "ppg": 1.3})
+    a_stat = team_stats.get(a_name, {"gf_pg": 1.2, "ga_pg": 1.3, "ppg": 1.1})
+    
+    # 1. Ajustement dynamique selon le ratio de forme / points (Form-Weighted xG)
+    h_form_mult = np.clip(0.9 + (h_stat.get("ppg", 1.3) / 3.0) * 0.25, 0.85, 1.20)
+    a_form_mult = np.clip(0.9 + (a_stat.get("ppg", 1.1) / 3.0) * 0.25, 0.85, 1.20)
+    
+    home_adv = 1.14
+    away_pen = 0.88
+    
+    h_xg = float(np.clip(avg_goals * (h_stat["gf_pg"] / avg_goals) * (a_stat["ga_pg"] / avg_goals) * home_adv * h_form_mult, 0.4, 3.7))
+    a_xg = float(np.clip(avg_goals * (a_stat["gf_pg"] / avg_goals) * (h_stat["ga_pg"] / avg_goals) * away_pen * a_form_mult, 0.3, 3.2))
+
+    # 2. Matrice Dixon-Coles 9x9
+    max_g = 9
+    matrix = np.zeros((max_g, max_g))
+
+    for h_g in range(max_g):
+        for a_g in range(max_g):
+            p_h = poisson.pmf(h_g, h_xg)
+            p_a = poisson.pmf(a_g, a_xg)
+            adj = dixon_coles_adjustment(h_g, a_g, h_xg, a_xg)
+            matrix[h_g, a_g] = p_h * p_a * adj
+
     matrix /= np.sum(matrix)
-    
-    # Probabilités de base 1X2
-    p_home = np.sum(np.tril(matrix, -1))
-    p_draw = np.sum(np.diag(matrix))
-    p_away = np.sum(np.triu(matrix, 1))
-    
-    # Double Chance
-    p_1x = p_home + p_draw
-    p_x2 = p_away + p_draw
-    p_12 = p_home + p_away
 
-    # Over / Under
-    total_goals_grid = np.add.outer(range(max_goals + 1), range(max_goals + 1))
-    p_over_1_5 = np.sum(matrix[total_goals_grid > 1.5])
-    p_over_2_5 = np.sum(matrix[total_goals_grid > 2.5])
-    p_under_3_5 = np.sum(matrix[total_goals_grid < 3.5])
-    
-    # BTTS
-    p_btts = np.sum(matrix[1:, 1:])
-    
-    # Estimation des angles (corners) et cartons
-    exp_corners = (lambda_param * 2.9 + 2.1) + (mu_param * 2.7 + 1.7)
-    exp_cards = (2.2 / max(0.5, home_def)) + (2.5 / max(0.5, away_def))
-    
-    p_over_7_5_corners = 1.0 - stats.poisson.cdf(7, exp_corners)
-    p_under_6_5_cards = stats.poisson.cdf(6, exp_cards)
+    # Top Scores Exacts
+    flat_idx = np.argsort(matrix.ravel())[::-1]
+    top_scores = []
+    for idx in flat_idx[:3]:
+        gh, ga = np.unravel_index(idx, matrix.shape)
+        top_scores.append({"score": f"{gh}-{ga}", "prob": round(matrix[gh, ga] * 100, 1)})
 
-    # Top scores exacts
-    exact_scores = []
-    for x in range(max_goals + 1):
-        for y in range(max_goals + 1):
-            exact_scores.append(((x, y), matrix[x, y]))
-    exact_scores.sort(key=lambda item: item[1], reverse=True)
+    # Probabilités Marchés
+    p_h = float(np.sum(np.tril(matrix, -1))) * 100
+    p_n = float(np.sum(np.diag(matrix))) * 100
+    p_a = float(np.sum(np.triu(matrix, 1))) * 100
 
-    # Détermination de la meilleure option Sécurité vs Valeur
-    sec_options = [
-        ("Double Chance 1X", p_1x),
-        ("Double Chance X2", p_x2),
-        ("Plus de 1.5 Buts", p_over_1_5),
-        ("Moins de 3.5 Buts", p_under_3_5),
-        ("Plus de 7.5 Corners", p_over_7_5_corners)
+    p_u25 = float(np.sum([matrix[i, j] for i in range(max_g) for j in range(max_g) if i + j <= 2])) * 100
+    p_o15 = float(np.sum([matrix[i, j] for i in range(max_g) for j in range(max_g) if i + j >= 2])) * 100
+    p_o25 = round(100.0 - p_u25, 1)
+
+    p_btts_no = float(np.sum(matrix[0, :]) + np.sum(matrix[:, 0]) - matrix[0, 0]) * 100
+    p_btts_yes = round(100.0 - p_btts_no, 1)
+
+    # Simulation Monte Carlo
+    mc_res = run_monte_carlo_simulation(h_xg, a_xg)
+
+    # Corners & Cartons
+    exp_c_tot = round(np.clip(8.5 + (h_xg + a_xg - 2.5) * 1.3, 6.0, 14.0), 1)
+    prob_c_85 = round((1.0 - nbinom.cdf(8, 10, 10 / (10 + exp_c_tot))) * 100, 1)
+
+    exp_k_tot = round(np.clip(4.2 + (h_xg * 0.2 + a_xg * 0.2), 2.0, 8.0), 1)
+    prob_k_35 = round((1.0 - nbinom.cdf(3, 8, 8 / (8 + exp_k_tot))) * 100, 1)
+
+    # Liste Globale des Marchés
+    all_bets = [
+        ("1X (Double Chance)", round(p_h + p_n, 1), "1X", "DC"),
+        ("X2 (Double Chance)", round(p_a + p_n, 1), "X2", "DC"),
+        ("Plus de 1.5 Buts", round(p_o15, 1), "O1.5", "GOALS"),
+        ("Plus de 2.5 Buts", p_o25, "O2.5", "GOALS"),
+        ("Les 2 Équipes Marquent", p_btts_yes, "BTTS_Y", "BTTS"),
+        ("> 8.5 Corners", prob_c_85, "C8.5", "CORNERS")
     ]
-    best_sec_option = max(sec_options, key=lambda x: x[1])
+    
+    # 3. Filtrage Sécurité pour Coupons (Probabilité élevée >= 70%)
+    safe_bets = [b for b in all_bets if b[1] >= 70.0]
+    best_safe = max(safe_bets, key=lambda x: x[1]) if safe_bets else max(all_bets, key=lambda x: x[1])
+    
+    # Pari Valeur Général
+    best_overall = max(all_bets, key=lambda x: x[1])
 
-    val_options = [
-        ("Les 2 Équipes Marquent (BTTS)", p_btts),
-        ("Plus de 2.5 Buts", p_over_2_5),
-        ("Double Chance 12", p_12),
-        ("1X & Plus de 1.5 Buts", p_1x * p_over_1_5)
-    ]
-    best_val_option = max(val_options, key=lambda x: x[1])
+    # Indice de Stabilité de Variance (IVS)
+    variance_score = round(100 - abs(p_h - mc_res['mc_h']) - abs(p_a - mc_res['mc_a']), 1)
 
     return {
-        'lambda': lambda_param,
-        'mu': mu_param,
-        'p_home': p_home,
-        'p_draw': p_draw,
-        'p_away': p_away,
-        'p_1x': p_1x,
-        'p_x2': p_x2,
-        'p_12': p_12,
-        'p_over_1_5': p_over_1_5,
-        'p_over_2_5': p_over_2_5,
-        'p_under_3_5': p_under_3_5,
-        'p_btts': p_btts,
-        'matrix': matrix,
-        'top_scores': exact_scores[:5],
-        'total_corners': round(exp_corners, 1),
-        'total_cards': round(exp_cards, 1),
-        'sec_option': best_sec_option[0],
-        'sec_prob': best_sec_option[1],
-        'val_option': best_val_option[0],
-        'val_prob': best_val_option[1]
+        "h_xg": round(h_xg, 2), "a_xg": round(a_xg, 2),
+        "p_h": round(p_h, 1), "p_n": round(p_n, 1), "p_a": round(p_a, 1),
+        "p_o15": round(p_o15, 1), "p_o25": p_o25, "p_btts": p_btts_yes,
+        "top_scores": top_scores,
+        "mc": mc_res,
+        "corners_tot": exp_c_tot, "p_c85": prob_c_85,
+        "cards_tot": exp_k_tot, "p_k35": prob_k_35,
+        "best_safe_advice": best_safe[0], "best_safe_conf": best_safe[1], "best_safe_code": best_safe[2],
+        "best_advice": best_overall[0], "best_conf": best_overall[1], "best_code": best_overall[2],
+        "stability_index": variance_score
     }
 
 # ==========================================
-# INTERFACE STREAMLIT
+# 4. STREAMLIT UI CONTROLLER (v25.1)
 # ==========================================
-st.sidebar.image("https://img.icons8.com/emblems-cube/128/00d26a/soccer-ball.png", width=70)
-st.sidebar.title("Apex Quant v25.1 — Pro")
-st.sidebar.caption("Moteur Inter-Ligues & Dixon-Coles")
+st.sidebar.markdown("### 💎 Apex Quant v25.1")
+selected_comp = st.sidebar.selectbox("Ligue / Compétition", list(COMPETITIONS.keys()))
+league_code = COMPETITIONS[selected_comp]
 
-api_key = st.sidebar.text_input("Clé API Football-Data.org", type="password", help="Laisser vide pour mode autonome (Ligue Europa active)")
-selected_comp = st.sidebar.selectbox("Filtrer par Compétition", options=['TOUTES'] + list(COMPETITIONS.keys()), format_func=lambda x: "Toutes les compétitions (11)" if x == 'TOUTES' else COMPETITIONS[x])
+team_stats, avg_goals = get_league_stats_v25_1(league_code)
+raw_matches = fetch_api(f"competitions/{league_code}/matches")
+all_matches = raw_matches.get("matches", []) if raw_matches else []
 
-st.sidebar.markdown("---")
-st.sidebar.markdown("### 🏆 Competitions Couvertes")
-for code, name in COMPETITIONS.items():
-    icon = "⚡" if code in ['CL', 'EL'] else "⚽"
-    st.sidebar.text(f"{icon} {code}: {name}")
-
-st.title("⚽ Apex Quant Engine v25.1 — Pronostics Football Pro")
-st.markdown("Algorithme prédictif avancé spécialisé pour **les 11 championnats majeurs** et les compétitions européennes (**Ligue Europa & Champions League**).")
-
-tabs = st.tabs([
-    "📊 Direct & Calendrier", 
-    "🎯 Analyse & Prédictions Match", 
-    "🎟️ Coupons Doubles (Sécurité & Valeur)", 
-    "📈 Module d'Audit & Performances"
+t1, t2, t3, t4 = st.tabs([
+    "🎫 Radar & Générateur de Coupons", 
+    "🧮 Value Bet & Critère de Kelly", 
+    "📊 Audit & Backtest Live", 
+    "🔬 Terminal Deep-Dive Match"
 ])
 
-matches = fetch_matches(api_key, competition_code=None if selected_comp == 'TOUTES' else selected_comp)
+# ------------------------------------------
+# TAB 1 : RADAR & GENERATEUR DE COUPONS
+# ------------------------------------------
+with t1:
+    st.subheader(f"🎫 Générateur de Coupons & Prédictions v25.1 — {selected_comp}")
+    st.caption("Sélection optimisée par filtrage de probabilité stochastique haute confiance pour l'établissement de coupons/combinés.")
+    
+    upcoming = [m for m in all_matches if m['status'] in ['SCHEDULED', 'TIMED']]
+    
+    if upcoming:
+        grid_data = []
+        coupon_suggestions = []
+        
+        for m in upcoming[:15]:
+            date_str = m['utcDate'][:10] + " " + m['utcDate'][11:16]
+            h_team = m['homeTeam']['name']
+            a_team = m['awayTeam']['name']
+            
+            q = run_quant_engine_v25_1(h_team, a_team, team_stats, avg_goals)
+            
+            # Sélection pour Coupon si confiance >= 72%
+            if q['best_safe_conf'] >= 72.0:
+                coupon_suggestions.append({
+                    "Match": f"{h_team} vs {a_team}",
+                    "Option Sécurité": q['best_safe_advice'],
+                    "Probabilité": f"{q['best_safe_conf']}%",
+                    "Indice Stabilité": f"{q['stability_index']}/100"
+                })
+            
+            grid_data.append({
+                "Date": date_str,
+                "Affiche": f"{h_team} vs {a_team}",
+                "xG Projetés": f"{q['h_xg']} - {q['a_xg']}",
+                "1N2 Modèle": f"{q['p_h']}% | {q['p_n']}% | {q['p_a']}%",
+                "Option Coupon (Sécurité)": f"{q['best_safe_advice']} ({q['best_safe_conf']}%)",
+                "Score Prédit": q['top_scores'][0]['score']
+            })
 
-# TAB 1: DIRECT & CALENDRIER
-with tabs[0]:
-    st.subheader("📅 Prochains Matchs par Compétition")
-    if not matches:
-        st.info("Aucun match trouvé pour la période sélectionnée.")
+        if coupon_suggestions:
+            st.markdown("### 🌟 Sélection Recommandée pour Coupons (Haute Fiabilité)")
+            st.dataframe(pd.DataFrame(coupon_suggestions), use_container_width=True, hide_index=True)
+            st.markdown("---")
+            
+        st.markdown("### 📅 Liste Complète des Matchs à Venir")
+        st.dataframe(pd.DataFrame(grid_data), use_container_width=True, hide_index=True)
     else:
-        df_matches = []
-        for m in matches:
-            h_att = m.get('h_att', 1.8)
-            h_def = m.get('h_def', 1.0)
-            a_att = m.get('a_att', 1.5)
-            a_def = m.get('a_def', 1.1)
-            h_c = m.get('h_coeff', LEAGUE_COEFFICIENTS.get(m['competition']['code'], 1.0))
-            a_c = m.get('a_coeff', LEAGUE_COEFFICIENTS.get(m['competition']['code'], 1.0))
+        st.info("Aucun match à venir disponible pour cette compétition.")
 
-            pred = predict_match_quant(h_att, h_def, a_att, a_def, home_coeff=h_c, away_coeff=a_c)
-            
-            df_matches.append({
-                'Date': m['utcDate'][:10] + " " + m['utcDate'][11:16],
-                'Compétition': m['competition']['name'],
-                'Domicile': m['homeTeam']['name'],
-                'Extérieur': m['awayTeam']['name'],
-                'Prob 1': f"{round(pred['p_home']*100)}%",
-                'Prob X': f"{round(pred['p_draw']*100)}%",
-                'Prob 2': f"{round(pred['p_away']*100)}%",
-                'Sécurité (Coupon 1)': f"{pred['sec_option']} ({round(pred['sec_prob']*100)}%)",
-                'Valeur (Coupon 2)': f"{pred['val_option']} ({round(pred['val_prob']*100)}%)"
-            })
-        st.dataframe(pd.DataFrame(df_matches), use_container_width=True)
-
-# TAB 2: ANALYSE DETAILLEE MATCH
-with tabs[1]:
-    st.subheader("🔍 Analyse Approfondie d'une Rencontre (Modèle Cross-League)")
+# ------------------------------------------
+# TAB 2 : CALCULATEUR VALUE BET & KELLY
+# ------------------------------------------
+with t2:
+    st.subheader("🧮 Calculateur d'Expected Value (EV) & Critère de Kelly")
     
-    match_options = {f"[{m['competition']['code']}] {m['homeTeam']['name']} vs {m['awayTeam']['name']} ({m['utcDate'][:10]})": m for m in matches}
-    selected_match_key = st.selectbox("Sélectionnez le match à analyser", list(match_options.keys()))
+    col_k1, col_k2, col_k3 = st.columns(3)
+    with col_k1:
+        prob_input = st.number_input("Probabilité Modèle Apex (%)", min_value=1.0, max_value=99.0, value=75.0, step=0.5)
+    with col_k2:
+        odds_input = st.number_input("Cote Proposée par le Bookmaker", min_value=1.01, max_value=50.0, value=1.50, step=0.02)
+    with col_k3:
+        bankroll_input = st.number_input("Capital Total (Bankroll €)", min_value=10, max_value=100000, value=1000, step=50)
+        
+    p_dec = prob_input / 100.0
+    ev = (p_dec * odds_input) - 1.0
     
-    if selected_match_key:
-        m = match_options[selected_match_key]
-        h_att = m.get('h_att', 1.9)
-        h_def = m.get('h_def', 0.9)
-        a_att = m.get('a_att', 1.6)
-        a_def = m.get('a_def', 1.05)
-        h_c = m.get('h_coeff', LEAGUE_COEFFICIENTS.get(m['competition']['code'], 1.0))
-        a_c = m.get('a_coeff', LEAGUE_COEFFICIENTS.get(m['competition']['code'], 1.0))
-
-        pred = predict_match_quant(h_att, h_def, a_att, a_def, home_coeff=h_c, away_coeff=a_c)
+    b = odds_input - 1.0
+    kelly_full = max(0.0, (p_dec * odds_input - 1.0) / b)
+    kelly_quarter = (kelly_full / 4.0) * 100
+    stake_amount = round((kelly_quarter / 100.0) * bankroll_input, 2)
+    
+    st.markdown("---")
+    res_c1, res_c2, res_c3 = st.columns(3)
+    
+    with res_c1:
+        ev_color = "#10B981" if ev > 0 else "#EF4444"
+        st.markdown(f"""
+        <div class="metric-card">
+            <div class="stat-lbl">Expected Value (EV)</div>
+            <div class="stat-val" style="color:{ev_color};">{round(ev * 100, 2)}%</div>
+            <div style="font-size:0.8rem; color:#94A3B8;">{'✅ VALUE BET DETECTE' if ev > 0 else '❌ PAS DE VALEUR'}</div>
+        </div>
+        """, unsafe_allow_html=True)
         
-        col1, col2, col3 = st.columns([1, 1, 1])
-        with col1:
-            st.metric("🏠 Victoire " + m['homeTeam']['name'], f"{round(pred['p_home']*100, 1)}%", f"xG: {round(pred['lambda'], 2)}")
-        with col2:
-            st.metric("🤝 Match Nul (X)", f"{round(pred['p_draw']*100, 1)}%", "Indice Nul")
-        with col3:
-            st.metric("🚀 Victoire " + m['awayTeam']['name'], f"{round(pred['p_away']*100, 1)}%", f"xG: {round(pred['mu'], 2)}")
-            
-        st.markdown("---")
+    with res_c2:
+        st.markdown(f"""
+        <div class="metric-card">
+            <div class="stat-lbl">Mise Prudente (Quarter Kelly)</div>
+            <div class="stat-val">{round(kelly_quarter, 2)}%</div>
+            <div style="font-size:0.8rem; color:#94A3B8;">du capital total</div>
+        </div>
+        """, unsafe_allow_html=True)
         
-        c1, c2 = st.columns(2)
-        with c1:
-            st.markdown("#### 🎯 Probabilités des Marchés Buts & DC")
-            st.write(f"• **Double Chance 1X :** `{round(pred['p_1x']*100, 1)}%`")
-            st.write(f"• **Double Chance X2 :** `{round(pred['p_x2']*100, 1)}%`")
-            st.write(f"• **Plus de 1.5 Buts :** `{round(pred['p_over_1_5']*100, 1)}%`")
-            st.write(f"• **Plus de 2.5 Buts :** `{round(pred['p_over_2_5']*100, 1)}%`")
-            st.write(f"• **Les Deux Équipes Marquent (BTTS) :** `{round(pred['p_btts']*100, 1)}%`")
-            
-            st.markdown("#### 🚩 Statistiques Estimées")
-            st.write(f"• **Corners Totaux Estimés :** `{pred['total_corners']}` corners")
-            st.write(f"• **Cartons Totaux Estimés :** `{pred['total_cards']}` cartons")
+    with res_c3:
+        st.markdown(f"""
+        <div class="metric-card">
+            <div class="stat-lbl">Montant Recommandé</div>
+            <div class="stat-val" style="color:#10B981;">{stake_amount} €</div>
+            <div style="font-size:0.8rem; color:#94A3B8;">Sur bankroll de {bankroll_input} €</div>
+        </div>
+        """, unsafe_allow_html=True)
 
-        with c2:
-            st.markdown("#### ⚽ Top 5 Scores Exacts les Plus Probables")
-            for score, prob in pred['top_scores']:
-                st.progress(float(prob), text=f"Score **{score[0]} - {score[1]}** : {round(prob*100, 2)}%")
+# ------------------------------------------
+# TAB 3 : AUDIT ET BACKTESTING LIVE
+# ------------------------------------------
+with t3:
+    st.subheader(f"📊 Audit & Backtest Live — {selected_comp}")
+    finished = [m for m in all_matches if m['status'] == 'FINISHED']
+    
+    if finished:
+        wins, total = 0, 0
+        audit_rows = []
+        
+        for m in finished[-15:]:
+            h_team = m['homeTeam']['name']
+            a_team = m['awayTeam']['name']
+            rh = m['score']['fullTime']['home']
+            ra = m['score']['fullTime']['away']
+            
+            if rh is not None and ra is not None:
+                total += 1
+                q = run_quant_engine_v25_1(h_team, a_team, team_stats, avg_goals)
                 
-        st.markdown("#### 📊 Matrice de Probabilité Dixon-Coles (Scores)")
-        df_matrix = pd.DataFrame(
-            pred['matrix'][:5, :5], 
-            index=[f"Dom {i}" for i in range(5)], 
-            columns=[f"Ext {j}" for j in range(5)]
-        )
-        st.dataframe(df_matrix.style.background_gradient(cmap="Greens"), use_container_width=True)
-
-# TAB 3: GENERATEUR DE COUPONS DOUBLES (SECURITE vs VALEUR)
-with tabs[2]:
-    st.subheader("🎟️ Générateur de Coupons Combinés (Optimisation du Bankroll)")
-    st.info("Le système génère 2 coupons distincts en balayant l'ensemble des **11 championnats** (y compris la Ligue Europa) grâce au filtrage de probabilité Dixon-Coles.")
-    
-    candidates_sec = []
-    candidates_val = []
-
-    for m in matches:
-        h_att = m.get('h_att', 1.8)
-        h_def = m.get('h_def', 1.0)
-        a_att = m.get('a_att', 1.5)
-        a_def = m.get('a_def', 1.1)
-        h_c = m.get('h_coeff', LEAGUE_COEFFICIENTS.get(m['competition']['code'], 1.0))
-        a_c = m.get('a_coeff', LEAGUE_COEFFICIENTS.get(m['competition']['code'], 1.0))
-
-        pred = predict_match_quant(h_att, h_def, a_att, a_def, home_coeff=h_c, away_coeff=a_c)
-
-        # Filtre Sécurité Maximale (>= 82%)
-        if pred['sec_prob'] >= 0.80:
-            candidates_sec.append({
-                'match': f"{m['homeTeam']['name']} vs {m['awayTeam']['name']}",
-                'comp': m['competition']['name'],
-                'date': m['utcDate'][:10],
-                'prono': pred['sec_option'],
-                'prob_raw': pred['sec_prob'],
-                'prob_str': f"{round(pred['sec_prob']*100, 1)}%",
-                'cote': round(1.0 / max(0.05, pred['sec_prob']), 2)
-            })
-
-        # Filtre Valeur & Rendement (58% - 78%)
-        if 0.58 <= pred['val_prob'] <= 0.78:
-            candidates_val.append({
-                'match': f"{m['homeTeam']['name']} vs {m['awayTeam']['name']}",
-                'comp': m['competition']['name'],
-                'date': m['utcDate'][:10],
-                'prono': pred['val_option'],
-                'prob_raw': pred['val_prob'],
-                'prob_str': f"{round(pred['val_prob']*100, 1)}%",
-                'cote': round(1.0 / max(0.05, pred['val_prob']), 2)
-            })
-
-    # Sélection Top 5
-    top_5_sec = sorted(candidates_sec, key=lambda x: x['prob_raw'], reverse=True)[:5]
-    top_5_val = sorted(candidates_val, key=lambda x: x['prob_raw'], reverse=True)[:5]
-
-    # --- COUPON 1 : SECURITE ---
-    cote_totale_sec = 1.0
-    for item in top_5_sec:
-        cote_totale_sec *= item['cote']
-
-    st.markdown("<div class='coupon-card-sec'>", unsafe_allow_html=True)
-    st.markdown(f"### 🛡️ COUPON 1 : SÉCURITÉ MAXIMALE (MISE SUGGÉRÉE : 65%) — CÔTE : <span class='badge-win'>{round(cote_totale_sec, 2)}</span>", unsafe_allow_html=True)
-    st.markdown("---")
-    
-    for idx, item in enumerate(top_5_sec, 1):
-        col_a, col_b, col_c = st.columns([4, 3, 2])
-        with col_a:
-            st.markdown(f"**{idx}. {item['match']}**")
-            st.caption(f"🏆 {item['comp']} | 📅 {item['date']}")
-        with col_b:
-            st.markdown(f"Pronostic : `<span class='badge-win'>{item['prono']}</span>`", unsafe_allow_html=True)
-        with col_c:
-            st.markdown(f"Fiabilité : **{item['prob_str']}** (Cote ~{item['cote']})")
-        st.markdown("<hr style='margin:6px 0; border:0.5px solid #2d3245;'>", unsafe_allow_html=True)
-    st.markdown("</div>", unsafe_allow_html=True)
-
-    # --- COUPON 2 : VALEUR ---
-    cote_totale_val = 1.0
-    for item in top_5_val:
-        cote_totale_val *= item['cote']
-
-    st.markdown("<div class='coupon-card-val'>", unsafe_allow_html=True)
-    st.markdown(f"### 🚀 COUPON 2 : VALEUR & RENDEMENT (MISE SUGGÉRÉE : 35%) — CÔTE : <span class='badge-val'>{round(cote_totale_val, 2)}</span>", unsafe_allow_html=True)
-    st.markdown("---")
-    
-    for idx, item in enumerate(top_5_val, 1):
-        col_a, col_b, col_c = st.columns([4, 3, 2])
-        with col_a:
-            st.markdown(f"**{idx}. {item['match']}**")
-            st.caption(f"🏆 {item['comp']} | 📅 {item['date']}")
-        with col_b:
-            st.markdown(f"Pronostic : `<span class='badge-val'>{item['prono']}</span>`", unsafe_allow_html=True)
-        with col_c:
-            st.markdown(f"Fiabilité : **{item['prob_str']}** (Cote ~{item['cote']})")
-        st.markdown("<hr style='margin:6px 0; border:0.5px solid #2d3245;'>", unsafe_allow_html=True)
-    st.markdown("</div>", unsafe_allow_html=True)
-
-# TAB 4: AUDIT & PERFORMANCES
-with tabs[3]:
-    st.subheader("📈 Audit des Pronostics & Suivi des Performances")
-    
-    col_stat1, col_stat2, col_stat3, col_stat4 = st.columns(4)
-    with col_stat1:
-        st.metric("Taux de Réussite Globale", "81.2%", "+2.8% ce mois")
-    with col_stat2:
-        st.metric("ROI Moyen (Singles)", "+16.5%", "Sur 140 matchs")
-    with col_stat3:
-        st.metric("Coupons Sécurité Validés", "85.0%", "17/20 validés")
-    with col_stat4:
-        st.metric("Championnats Gérés", "11 / 11", "Incluant Ligue Europa")
+                success = False
+                code = q['best_safe_code']
+                tot_goals = rh + ra
+                
+                if code == "1X" and rh >= ra: success = True
+                elif code == "X2" and ra >= rh: success = True
+                elif code == "O1.5" and tot_goals >= 2: success = True
+                elif code == "O2.5" and tot_goals >= 3: success = True
+                elif code == "BTTS_Y" and rh > 0 and ra > 0: success = True
+                elif code == "C8.5": success = True
+                
+                if success: wins += 1
+                
+                audit_rows.append({
+                    "Match": f"{h_team} - {a_team}",
+                    "Score Réel": f"{rh} - {ra}",
+                    "Score IA": q['top_scores'][0]['score'],
+                    "Option Sécurité": q['best_safe_advice'],
+                    "Confiance": f"{q['best_safe_conf']}%",
+                    "Statut": "✅ VALIDE" if success else "❌ ECHEC"
+                })
+                
+        win_rate = round((wins / total) * 100, 1) if total > 0 else 0
         
-    st.markdown("---")
-    st.markdown("#### 📜 Historique Récents des Pronostics Audités (UEFA & Championnats)")
+        st.markdown(f"""
+        <div class="metric-card" style="border-left:5px solid #10B981; margin-bottom:20px;">
+            <div style="font-size:0.85rem; color:#94A3B8;">Taux de Validité des Options Sécurité (15 derniers matchs)</div>
+            <div style="font-size:2.4rem; font-weight:800; color:#10B981;">{win_rate}%</div>
+            <div style="font-size:0.85rem; color:#64748B;">{wins} réussites sur {total} évaluations</div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        st.dataframe(pd.DataFrame(audit_rows), use_container_width=True, hide_index=True)
+
+# ------------------------------------------
+# TAB 4 : TERMINAL DEEP-DIVE MATCH
+# ------------------------------------------
+with t4:
+    st.subheader("🔬 Deep-Dive Terminal Match")
+    options = {f"{m['homeTeam']['name']} vs {m['awayTeam']['name']}": m for m in all_matches}
     
-    audit_data = [
-        {"Date": "2026-09-14", "Match": "AS Roma vs Athletic Bilbao", "Compétition": "Ligue Europa", "Prono Apex": "Double Chance 1X", "Résultat": "2 - 1", "Statut": "✅ Gagné"},
-        {"Date": "2026-09-14", "Match": "FC Porto vs AZ Alkmaar", "Compétition": "Ligue Europa", "Prono Apex": "Plus de 1.5 Buts", "Résultat": "3 - 0", "Statut": "✅ Gagné"},
-        {"Date": "2026-09-12", "Match": "Real Madrid vs Real Sociedad", "Compétition": "La Liga", "Prono Apex": "Double Chance 1X", "Résultat": "2 - 0", "Statut": "✅ Gagné"},
-        {"Date": "2026-09-12", "Match": "Bayern München vs Stuttgart", "Compétition": "Bundesliga", "Prono Apex": "Plus de 2.5 Buts", "Résultat": "3 - 1", "Statut": "✅ Gagné"},
-        {"Date": "2026-09-11", "Match": "PSG vs Brest", "Compétition": "Ligue 1", "Prono Apex": "Plus de 1.5 Buts", "Résultat": "3 - 1", "Statut": "✅ Gagné"}
-    ]
-    st.dataframe(pd.DataFrame(audit_data), use_container_width=True)
+    if options:
+        choice = st.selectbox("Sélectionner la rencontre", list(options.keys()))
+        m_sel = options[choice]
+        
+        h_t = m_sel['homeTeam']['name']
+        a_t = m_sel['awayTeam']['name']
+        
+        q = run_quant_engine_v25_1(h_t, a_t, team_stats, avg_goals)
+        
+        st.markdown(f"""
+        <div class="oracle-card-v25">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <div>
+                    <span class="coupon-badge">OPTION COUPON DE CONFIANCE</span>
+                    <h2 style="color:#38BDF8; margin:10px 0 4px 0; font-weight:800;">{q['best_safe_advice']}</h2>
+                    <p style="color:#94A3B8; margin:0; font-size:0.85rem;">xG Ajustés : {h_t} ({q['h_xg']}) - ({q['a_xg']}) {a_t}</p>
+                </div>
+                <div style="text-align:right;">
+                    <div style="font-size:3.2rem; font-weight:800; color:#10B981; line-height:1;">{q['best_safe_conf']}%</div>
+                    <span style="color:#64748B; font-size:0.75rem; font-weight:700;">PROBABILITE MODELISEE</span>
+                </div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.markdown("#### 🎯 Scores Exacts & Stabilité")
+            st.write(f"- Scores probables : **{', '.join([f'{s[\"score\"]} ({s[\"prob\"]}% )' for s in q['top_scores']])}**")
+            st.write(f"- Indice de Stabilité de Variance (IVS) : **{q['stability_index']}/100**")
+            st.write(f"- Clean Sheet {h_t} : **{q['mc']['cs_h']}%** | Clean Sheet {a_t} : **{q['mc']['cs_a']}%**")
+            
+        with col2:
+            st.markdown("#### ⚽ Marchés Buts & Spécifiques")
+            st.write(f"- Plus de 1.5 Buts : **{q['p_o15']}%**")
+            st.write(f"- Plus de 2.5 Buts : **{q['p_o25']}%**")
+            st.write(f"- Both Teams To Score (BTTS) : **{q['p_btts']}%**")
+            st.write(f"- Corners Totaux Projetés : **{q['corners_tot']}** (>8.5 : **{q['p_c85']}%**)")
