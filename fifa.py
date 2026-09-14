@@ -102,17 +102,21 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 2. DONNÉES & API FOOTBALL
+# 2. DONNÉES & API FOOTBALL (10 CHAMPIONNATS)
 # ==========================================
 API_KEY = "1e9518e7585349f9abe6d5a29ddb83b1"
 BASE_URL = "https://api.football-data.org/v4/"
 
 COMPETITIONS = {
     "Premier League": "PL",
+    "Championship (Angleterre)": "ELC",
     "La Liga": "PD",
     "Ligue 1": "FL1",
     "Serie A": "SA",
     "Bundesliga": "BL1",
+    "Eredivisie (Pays-Bas)": "DED",
+    "Primeira Liga (Portugal)": "PPD",
+    "Série A (Brésil)": "BSA",
     "Ligue des Champions": "CL"
 }
 
@@ -749,12 +753,12 @@ with tab_audit:
         st.info("Aucun match terminé disponible pour l'instant dans cette compétition.")
 
 # ------------------------------------------
-# ONGLET 5 : GENERATEUR MULTI-CHAMPIONNATS (V25.0)
+# ONGLET 5 : GENERATEUR MULTI-CHAMPIONNATS (10 CHAMPIONNATS)
 # ------------------------------------------
 with tab_coupon:
     st.subheader("🎟️ Coupon Multi-Championnats (Minimum 5 Matchs)")
     
-    with st.spinner("Analyse et scan en cours de tous les grands championnats..."):
+    with st.spinner("Analyse et scan en cours de l'ensemble des 10 championnats..."):
         all_multi_matches, multi_stats, multi_avg = get_all_competitions_upcoming()
     
     if len(all_multi_matches) < 5:
