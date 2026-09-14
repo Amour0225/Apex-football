@@ -328,3 +328,95 @@ document.addEventListener("DOMContentLoaded", () => {
   renderActiveCouponUI(activeCoupon);
   renderHistoryUI();
 });
+// ==========================================
+// MOTEUR DE PRÉDICTION MATHEMATIQUE (POISSON & DIXON-COLES)
+// ==========================================
+
+const ApexPredictor = {
+  // Calcul de la factorielle
+  factorial: function(n) {
+    if (n === 0 || n === 1) return 1;
+    let res = 1;
+    for (let i = 2; i <= n; i++) res *= i;
+    return res;
+  },
+
+  // Calcul de la probabilité de Poisson P(X = k)
+  poissonProbability: function(k, lambda) {
+    return (Math.pow(lambda, k) * Math.exp(-lambda)) / this.factorial(k);
+  },
+
+  // Générateur de matrice de scores exacts (jusqu'à 5-5)
+  generateScoreMatrix: function(lambdaHome, lambdaAway) {
+    let matrix = [];
+    for (let h = 0; h <= 5; h++) {
+      matrix[h] = [];
+      for (let a = 0; a <= 5; a++) {
+        matrix[h][a] = this.poissonProbability(h, lambdaHome) * this.poissonProbability(a, lambdaAway);
+      }
+    }
+    return matrix;
+  },
+
+  // Analyse complète d'un match
+  predictMatch: function(leagueKey, homeAttack, homeDefense, awayAttack, awayDefense) {
+    const config = LEAGUES_CONFIG[leagueKey.toUpperCase()] || { avgGoals: 2.50, homeAdv: 1.15 };
+    
+    const baseGoalsPerTeam = config.avgGoals / 2;
+    const lambdaHome = homeAttack * awayDefense * config.homeAdv * baseGoalsPerTeam;
+    const lambdaAway = awayAttack * homeDefense * baseGoalsPerTeam;
+
+    const matrix = this.generateScoreMatrix(lambdaHome, lambdaAway);
+
+    let probHome = 0, probDraw = 0, probAway = 0;
+    let probUnder25 = 0, probOver25 = 0;
+    let probBTTS_Yes = 0, probBTTS_No = 0;
+
+    for (let h = 0; h <= 5; h++) {
+      for (let a = 0; a <= 5; a++) {
+        const p = matrix[h][a];
+        
+        // 1X2
+        if (h > a) probHome += p;
+        else if (h === a) probDraw += p;
+        else probAway += p;
+
+        // Over / Under 2.5
+        if (h + a < 2.5) probUnder25 += p;
+        else probOver25 += p;
+
+        // BTTS (Les 2 équipes marquent)
+        if (h > 0 && a > 0) probBTTS_Yes += p;
+        else probBTTS_No += p;
+      }
+    }
+// Détermination de la meilleure sélection et de l'indice de confiance
+    const selections = [
+      { name: "Victoire Domicile (1)", prob: probHome, odds: (1 / probHome) },
+      { name: "Match Nul (X)", prob: probDraw, odds: (1 / probDraw) },
+      { name: "Victoire Extérieur (2)", prob: probAway, odds: (1 / probAway) },
+      { name: "Plus de 2.5 Buts", prob: probOver25, odds: (1 / probOver25) },
+      { name: "Moins de 2.5 Buts", prob: probUnder25, odds: (1 / probUnder25) },
+      { name: "Les 2 équipes marquent (Oui)", prob: probBTTS_Yes, odds: (1 / probBTTS_Yes) }
+    ];
+
+    // Tri par probabilité décroissante
+    selections.sort((a, b) => b.prob - a.prob);
+    const bestPick = selections[0];
+    const confidenceIndex = Math.min(Math.round(bestPick.prob * 100), 95);
+
+    return {
+      expectedGoals: { home: lambdaHome.toFixed(2), away: lambdaAway.toFixed(2) },
+      probabilities: {
+        home: (probHome * 100).toFixed(1) + "%",
+        draw: (probDraw * 100).toFixed(1) + "%",
+        away: (probAway * 100).toFixed(1) + "%",
+        over25: (probOver25 * 100).toFixed(1) + "%",
+        btts: (probBTTS_Yes * 100).toFixed(1) + "%"
+      },
+      recommendedPick: bestPick.name,
+      fairOdds: bestPick.odds.toFixed(2),
+      confidence: confidenceIndex + "%"
+    };
+  }
+};
