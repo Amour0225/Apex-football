@@ -113,7 +113,9 @@ COMPETITIONS = {
     "Ligue 1": "FL1",
     "Serie A": "SA",
     "Bundesliga": "BL1",
-    "Ligue des Champions": "CL"
+    "Ligue des Champions": "CL",
+    "UEFA Europa League": "EL",
+    "Championship (Angleterre)": "ELC"
 }
 
 @st.cache_data(ttl=30)
