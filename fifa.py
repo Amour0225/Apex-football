@@ -163,19 +163,16 @@ def get_advanced_league_stats(league_code):
             
             elo_rating = 1500 + (pts * 12) + ((gf - ga) * 4)
             
-            # CALCUL AVANCÉ DE L'ÉTAT DE FORME (Pondération des 5 derniers matchs)
             form_pts = 0
             if form:
                 clean_form = str(form).replace(",", "").upper()
                 recent_matches = clean_form[-5:]
-                # Plus le match est récent, plus le poids est important
                 weights = [1.0, 1.2, 1.4, 1.7, 2.0]
                 for i, char in enumerate(recent_matches):
                     w = weights[i] if i < len(weights) else 1.0
                     if char == 'W': form_pts += 3 * w
                     elif char == 'D': form_pts += 1 * w
             
-            # Coefficient dynamique de forme entre 0.70 et 1.30
             form_factor = np.clip(0.70 + (form_pts / 25.0), 0.70, 1.30)
             
             seed_val = sum(ord(c) for c in name)
@@ -223,7 +220,7 @@ def get_all_competitions_upcoming():
                 if utc_str:
                     try:
                         m_dt = datetime.strptime(utc_str[:19], "%Y-%m-%dT%H:%M:%S")
-                        if today_dt - timedelta(hours=3) <= m_dt <= next_week_dt:
+                        if (today_dt - timedelta(hours=3)) <= m_dt <= next_week_dt:
                             m_entry = dict(m)
                             m_entry['league_name'] = comp_name
                             all_upcoming.append(m_entry)
@@ -258,7 +255,6 @@ def run_quant_prediction_v23(h_name, a_name, score_h=0, score_a=0, elapsed_min=0
     h_stat = team_stats.get(h_name, default_stat)
     a_stat = team_stats.get(a_name, default_stat)
     
-    # Intégration stricte des performances Domicile/Extérieur + Forme Récente
     raw_h_xg = avg_goals * (h_stat["home_gf_pg"] / avg_goals) * (a_stat["away_ga_pg"] / avg_goals) * 1.12
     raw_a_xg = avg_goals * (a_stat["away_gf_pg"] / avg_goals) * (h_stat["home_ga_pg"] / avg_goals) * 0.90
     
@@ -266,7 +262,6 @@ def run_quant_prediction_v23(h_name, a_name, score_h=0, score_a=0, elapsed_min=0
     elo_mult_h = np.clip(1.0 + (elo_diff / 1200.0), 0.70, 1.35)
     elo_mult_a = np.clip(1.0 - (elo_diff / 1200.0), 0.70, 1.35)
     
-    # Application directe de l'état de forme réels sur l'esperance de buts
     full_h_xg = float(np.clip(raw_h_xg * elo_mult_h * h_stat["form_factor"], 0.5, 3.5))
     full_a_xg = float(np.clip(raw_a_xg * elo_mult_a * a_stat["form_factor"], 0.4, 3.0))
 
@@ -430,7 +425,7 @@ for m in all_matches:
         if utc_str:
             try:
                 m_dt = datetime.strptime(utc_str[:19], "%Y-%m-%dT%H:%M:%S")
-                if today_dt - timedelta(hours=3) <= m_dt <= next_week_dt:
+                if (today_dt - timedelta(hours=3)) <= m_dt <= next_week_dt:
                     upcoming_matches.append(m)
             except Exception:
                 upcoming_matches.append(m)
@@ -496,7 +491,7 @@ with tab_search:
                     </div>
                     """, unsafe_allow_html=True)
         else:
-            st.info("Aucun match trouvé dans les données API courantes. Vous pouvez configurer un match personnalisé ci-dessous (Exemple : Europa League) :")
+            st.info("Aucun match trouvé dans les données API courantes. Vous pouvez configurer un match personnalisé ci-dessous :")
             
             c_h, c_a = st.columns(2)
             with c_h:
