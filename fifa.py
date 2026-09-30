@@ -6,10 +6,10 @@ import pandas as pd
 from datetime import datetime, timedelta
 
 # ==========================================
-# 1. CONFIGURATION ET DESIGN V27.0
+# 1. CONFIGURATION ET DESIGN V26.0 ULTRA
 # ==========================================
 st.set_page_config(
-    page_title="Apex Quant v27.0 Ultra-Pro",
+    page_title="Apex Quant v26.0 Ultra-Pro",
     page_icon="⚽",
     layout="wide"
 )
@@ -73,7 +73,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 2. COMPETITIONS (6 CLUBS + CAN + LIGUE DES NATIONS)
+# 2. SELECTION STRICTE DES 6 GRANDS CHAMPIONNATS
 # ==========================================
 API_KEY = "1e9518e7585349f9abe6d5a29ddb83b1"
 BASE_URL = "https://api.football-data.org/v4/"
@@ -84,162 +84,11 @@ COMPETITIONS = {
     "Ligue 1": "FL1",
     "Serie A": "SA",
     "Bundesliga": "BL1",
-    "Ligue des Champions": "CL",
-    "Coupe d'Afrique des Nations (CAN)": "CAN",
-    "UEFA Ligue des Nations": "NL"
+    "Ligue des Champions": "CL"
 }
 
-# ------------------------------------------
-# SELECTIONS NATIONALES (CAN + LIGUE DES NATIONS)
-# home_adv : avantage du terrain en points Elo (0 = terrain neutre)
-# field    : écart domicile/extérieur sur les buts (0 = neutre)
-# hist     : mot-clé d'une 2e compétition (qualifications) pour enrichir l'historique
-# ------------------------------------------
-NATIONAL_CFG = {
-    "NL": {"names": ["uefa nations league"], "skip": ["women", "u-"], "hist": None,
-           "home_adv": 100.0, "field": 0.06},
-    "CAN": {"names": ["africa cup", "african cup"], "skip": ["qualification", "women", "u-"],
-            "hist": "qualification", "home_adv": 0.0, "field": 0.0},
-}
-PRIOR_GAMES = 4   # matchs "moyenne" ajoutés : régression vers la moyenne (peu de matchs en sélection)
-ELO_K = 40.0
-
-def is_national(code):
-    return code in NATIONAL_CFG
-
-def _nat_get(url, params=None):
-    try:
-        r = requests.get(url, headers={"X-Auth-Token": API_KEY}, params=params, timeout=10)
-        return r.json() if r.status_code == 200 else {"_status": r.status_code}
-    except Exception:
-        return {"_status": 0}
-
-@st.cache_data(ttl=86400)
-def _nat_catalog():
-    d = _nat_get(f"{BASE_URL}competitions")
-    return d.get("competitions", []) if "_status" not in d else []
-
-def _nat_resolve(code):
-    """Retrouve les ids des compétitions par leur nom (aucun code deviné)."""
-    cfg, comps = NATIONAL_CFG[code], _nat_catalog()
-
-    def find(must=None, skip=()):
-        for c in comps:
-            n = str(c.get("name", "")).lower()
-            if (any(p in n for p in cfg["names"]) and not any(s in n for s in skip)
-                    and (must is None or must in n)):
-                return c.get("id")
-        return None
-
-    main = find(skip=cfg["skip"])
-    hist = find(must=cfg["hist"], skip=("women", "u-")) if cfg["hist"] else None
-    return main, hist
-
-def _score_90(m):
-    """Score après 90 minutes (exclut prolongations et tirs au but si fournis)."""
-    s = m.get("score") or {}
-    reg = s.get("regularTime") or {}
-    if s.get("duration") in ("EXTRA_TIME", "PENALTY_SHOOTOUT") and reg.get("home") is not None:
-        return reg
-    return s.get("fullTime") or {}
-
-def _nat_finished(cid):
-    out, year = [], datetime.utcnow().year
-    for season in (year, year - 1, year - 2, year - 3):
-        d = _nat_get(f"{BASE_URL}competitions/{cid}/matches", {"season": season, "status": "FINISHED"})
-        if d.get("_status") == 429:   # quota atteint : on garde ce qu'on a
-            break
-        out += d.get("matches", [])
-    return out
-
-def _nat_build(matches, cfg):
-    seen, rows = set(), []
-    for m in sorted(matches, key=lambda x: x.get("utcDate", "")):
-        if m.get("id") in seen:
-            continue
-        seen.add(m.get("id"))
-        h = (m.get("homeTeam") or {}).get("name")
-        a = (m.get("awayTeam") or {}).get("name")
-        s = _score_90(m)
-        gh, ga = s.get("home"), s.get("away")
-        if h and a and gh is not None and ga is not None:
-            rows.append((h, a, gh, ga))
-
-    meta = {"__home_adv__": cfg["home_adv"]}
-    if not rows:
-        return meta, 1.30
-
-    avg = sum(r[2] + r[3] for r in rows) / (2 * len(rows))
-    elo, t = {}, {}
-    for h, a, gh, ga in rows:
-        # Elo : K fixe, bonus selon l'écart de buts, avantage du terrain selon la compétition
-        eh, ea = elo.get(h, 1500.0), elo.get(a, 1500.0)
-        exp_h = 1.0 / (1.0 + 10.0 ** (-(eh - ea + cfg["home_adv"]) / 400.0))
-        res = 1.0 if gh > ga else 0.5 if gh == ga else 0.0
-        d = abs(gh - ga)
-        mult = 1.0 if d <= 1 else 1.5 if d == 2 else (11 + d) / 8.0
-        delta = ELO_K * mult * (res - exp_h)
-        elo[h], elo[a] = eh + delta, ea - delta
-        for name, gf, gc in ((h, gh, ga), (a, ga, gh)):
-            e = t.setdefault(name, {"gf": 0, "ga": 0, "n": 0, "hist": []})
-            e["gf"] += gf
-            e["ga"] += gc
-            e["n"] += 1
-            r = "W" if gf > gc else "D" if gf == gc else "L"
-            e["hist"].append((r, 3 if r == "W" else 1 if r == "D" else 0))
-
-    w = [0.35, 0.25, 0.20, 0.12, 0.08]
-    f = cfg["field"]
-    stats = dict(meta)
-    for name, e in t.items():
-        n = e["n"]
-        gf = (e["gf"] + PRIOR_GAMES * avg) / (n + PRIOR_GAMES)
-        ga = (e["ga"] + PRIOR_GAMES * avg) / (n + PRIOR_GAMES)
-        last = e["hist"][-5:][::-1]                       # le plus récent d'abord
-        wp = sum(w[i] * p for i, (_, p) in enumerate(last)) / sum(w[:len(last)])
-        stats[name] = {
-            "gf_pg": gf, "ga_pg": ga,
-            "home_gf_pg": gf * (1 + f), "home_ga_pg": ga * (1 - f),
-            "away_gf_pg": gf * (1 - f), "away_ga_pg": ga * (1 + f),
-            "elo": elo[name],
-            "form_factor": float(np.clip(0.85 + (wp / 3.0) * 0.30, 0.85, 1.15)),
-            "recent_results": [r for r, _ in e["hist"][-5:]],
-            "card_rate": 2.3, "corner_rate": 5.0, "midfield": 1.0, "played_total": n,
-        }
-    return stats, avg
-
-@st.cache_data(ttl=3600)
-def national_stats(code):
-    cfg = NATIONAL_CFG[code]
-    main, hist = _nat_resolve(code)
-    if main is None:
-        st.sidebar.warning(f"{code} : compétition introuvable avec cette clé API "
-                           "(absente des 12 compétitions gratuites de football-data.org).")
-        return {"__home_adv__": cfg["home_adv"]}, 1.30
-    matches = _nat_finished(main) + (_nat_finished(hist) if hist else [])
-    if not matches:
-        st.sidebar.warning(f"{code} : aucun match terminé récupéré (accès refusé ou quota atteint).")
-    return _nat_build(matches, cfg)
-
-def national_matches(endpoint):
-    """Intercepte 'competitions/<NL|CAN>/matches' ; renvoie None pour tout le reste."""
-    p = endpoint.split("/")
-    if len(p) != 3 or p[0] != "competitions" or p[2] != "matches" or p[1] not in NATIONAL_CFG:
-        return None
-    main, _ = _nat_resolve(p[1])
-    if main is None:
-        return {"matches": []}
-    d = _nat_get(f"{BASE_URL}competitions/{main}/matches")
-    return {"matches": []} if "_status" in d else d
-
-# ------------------------------------------
-# ACCES API
-# ------------------------------------------
 @st.cache_data(ttl=30)
 def fetch_api(endpoint):
-    _nat = national_matches(endpoint)
-    if _nat is not None:
-        return _nat
     try:
         res = requests.get(f"{BASE_URL}{endpoint}", headers={"X-Auth-Token": API_KEY}, timeout=8)
         if res.status_code == 200:
@@ -250,9 +99,6 @@ def fetch_api(endpoint):
 
 @st.cache_data(ttl=300)
 def get_advanced_league_stats(league_code):
-    if is_national(league_code):
-        return national_stats(league_code)
-
     standings_data = fetch_api(f"competitions/{league_code}/standings")
     matches_data = fetch_api(f"competitions/{league_code}/matches")
     
@@ -430,7 +276,6 @@ def run_quant_prediction_v26(h_name, a_name, score_h=0, score_a=0, elapsed_min=0
     a_def = a_stat["away_ga_pg"] / max(0.1, avg_goals)
 
     elo_diff = h_stat["elo"] - a_stat["elo"]
-    home_adv = team_stats.get("__home_adv__", 80.0)  # 0 = terrain neutre (CAN)
     elo_adj = np.clip(elo_diff / 800.0, -0.25, 0.25)
 
     full_h_xg = float(np.clip(avg_goals * h_att * a_def * (1.0 + elo_adj) * h_stat["form_factor"], 0.4, 3.4))
@@ -477,8 +322,8 @@ def run_quant_prediction_v26(h_name, a_name, score_h=0, score_a=0, elapsed_min=0
     matrix = 0.60 * matrix_poisson + 0.40 * matrix_nbinom
 
     # 3. Modèle Logistique ELO direct pour l'issue 1N2
-    p_elo_win_h = 1.0 / (1.0 + 10.0 ** (-(elo_diff + home_adv) / 400.0)) # avantage terrain selon compétition
-    p_elo_win_a = 1.0 / (1.0 + 10.0 ** ((elo_diff + home_adv) / 400.0))
+    p_elo_win_h = 1.0 / (1.0 + 10.0 ** (-(elo_diff + 80.0) / 400.0)) # +80 avantage terrain
+    p_elo_win_a = 1.0 / (1.0 + 10.0 ** ((elo_diff + 80.0) / 400.0))
     p_elo_draw = np.clip(1.0 - (p_elo_win_h + p_elo_win_a), 0.18, 0.30)
     
     # Re-normalisation ELO
@@ -597,10 +442,10 @@ def run_quant_prediction_v26(h_name, a_name, score_h=0, score_a=0, elapsed_min=0
     }
 
 # ==========================================
-# 4. INTERFACE UTILISATEUR V27.0
+# 4. INTERFACE UTILISATEUR V26.0
 # ==========================================
-st.sidebar.title("Apex Quant v27.0 Ultra")
-st.sidebar.caption("Clubs élite + CAN + Ligue des Nations")
+st.sidebar.title("Apex Quant v26.0 Ultra")
+st.sidebar.caption("Championnats Élite uniquement")
 selected_comp = st.sidebar.selectbox("Sélectionner la Compétition", list(COMPETITIONS.keys()))
 league_code = COMPETITIONS[selected_comp]
 
@@ -797,7 +642,7 @@ with tab_coupon:
     with col_opt2:
         min_threshold = st.slider("Seuil minimal de sécurité par match (%) :", min_value=70, max_value=85, value=76, step=1)
     
-    with st.spinner("Analyse approfondie des championnats et compétitions de sélections..."):
+    with st.spinner("Analyse approfondie des 6 championnats élite..."):
         all_multi_matches, multi_stats, multi_avg = get_all_competitions_upcoming()
     
     if len(all_multi_matches) < nb_legs:
@@ -883,4 +728,4 @@ with tab_coupon:
                 coupon_export_text += f"{idx}. [{leg['league']}] {leg['match']}\n   👉 Choix : {leg['pick']} (Cote : {leg['odds']})\n"
 
             st.markdown("### 📋 DÉTAIL TEXTE DU COUPON")
-            st.code(coupon_export_text, language="text")
+            st.code(coupon_export_text, language="text"
