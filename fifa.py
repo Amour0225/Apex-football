@@ -728,4 +728,4 @@ with tab_coupon:
                 coupon_export_text += f"{idx}. [{leg['league']}] {leg['match']}\n   👉 Choix : {leg['pick']} (Cote : {leg['odds']})\n"
 
             st.markdown("### 📋 DÉTAIL TEXTE DU COUPON")
-            st.code(coupon_export_text, language="text")
+            st.code(coupon_export_text, language="text"
