@@ -6,10 +6,10 @@ import pandas as pd
 from datetime import datetime, timedelta
 
 # ==========================================
-# 1. CONFIGURATION & DESIGN ULTIME V36.0
+# 1. CONFIGURATION & DESIGN ULTIME V36.1
 # ==========================================
 st.set_page_config(
-    page_title="Apex Quant v36.0 - Ultimate Master Engine",
+    page_title="Apex Quant v36.1 - Ultimate Master Engine",
     page_icon="⚡",
     layout="wide"
 )
@@ -33,7 +33,6 @@ st.markdown("""
         border-radius: 14px; padding: 18px; margin-bottom: 18px;
     }
     .badge-live { background-color: #EF4444; color: white; padding: 6px 12px; border-radius: 8px; font-weight: 900; }
-    .badge-reprise { background-color: #F59E0B; color: #0F172A; padding: 5px 10px; border-radius: 6px; font-weight: 900; font-size: 0.85rem; }
     .badge-league { background-color: #8B5CF6; color: white; padding: 4px 10px; border-radius: 6px; font-weight: 800; font-size: 0.85rem; margin-right: 8px; }
     
     .big-score-box { background: #1E293B; border: 2px solid #38BDF8; border-radius: 12px; padding: 15px; text-align: center; margin: 8px 0; }
@@ -85,7 +84,6 @@ def fetch_api(endpoint):
     return None
 
 def get_team_last_4_matches_history(team_name, all_matches):
-    """ Extrait chirurgicalement les 4 derniers matchs terminés de l'équipe """
     team_history = []
     for m in all_matches:
         if m.get('status') == 'FINISHED':
@@ -108,7 +106,6 @@ def get_team_last_4_matches_history(team_name, all_matches):
                         "score": f"{gf}-{ga}",
                         "result": res_char
                     })
-    # Trier par date décroissante et prendre les 4 derniers
     team_history.sort(key=lambda x: x["date"], reverse=True)
     return team_history[:4]
 
@@ -165,7 +162,6 @@ def get_advanced_league_stats(league_code):
             corner_rate = float(np.clip(4.0 + (seed_val % 12) * 0.25 + (gf / played) * 0.50, 3.5, 8.0))
             midfield_control = float(np.clip(0.80 + (pts / (played * 3.0)) * 0.40, 0.70, 1.35))
             
-            # Récupérer les 4 derniers matchs réels
             last_4 = get_team_last_4_matches_history(name, all_comp_matches)
             
             stats[name] = {
@@ -224,7 +220,7 @@ def get_all_competitions_upcoming():
     return all_upcoming, league_stats_dict, league_avg_h_dict, league_avg_a_dict
 
 # ==========================================
-# 3. MOTEUR MATHÉMATIQUE AVEC BASCULE BUTS / CORNERS (V36.0)
+# 3. MOTEUR MATHÉMATIQUE (V36.1)
 # ==========================================
 def dixon_coles_adjustment(x, y, h_xg, a_xg, rho=-0.08):
     if x == 0 and y == 0: return max(0.01, 1.0 - (h_xg * a_xg * rho))
@@ -261,7 +257,7 @@ def generate_fabuleux_report_v36(h_name, a_name, h_stat, a_stat, full_h_xg, full
     h_history = format_last_4_summary(h_stat.get('last_4', []))
     a_history = format_last_4_summary(a_stat.get('last_4', []))
     
-    report = f"👑 **Rapport d'Expertise Ultime (v36.0)** :<br>"
+    report = f"👑 **Rapport d'Expertise Ultime (v36.1)** :<br>"
     report += f"• 🏠 **Forme Récente de {h_name} (4 derniers matchs)** : {h_history}<br>"
     report += f"• ✈️ **Forme Récente de {a_name} (4 derniers matchs)** : {a_history}<br>"
     report += f"• 📊 **Analyse xG & Territoriale** : xG Domicile = <b>{full_h_xg:.2f}</b> | xG Extérieur = <b>{full_a_xg:.2f}</b>. Écart ELO : <code>{h_stat['elo'] - a_stat['elo']:+.0f} pts</code>.<br>"
@@ -339,21 +335,11 @@ def run_quant_prediction_v36(h_name, a_name, score_h=0, score_a=0, elapsed_min=0
     prob_o15 = round((1.0 - (matrix[0,0] + matrix[1,0] + matrix[0,1])) * 100, 1)
     prob_o25 = round((1.0 - np.sum([matrix[i,j] for i in range(3) for j in range(3) if i+j <= 2])) * 100, 1)
     prob_u35 = round(np.sum([matrix[i,j] for i in range(4) for j in range(4) if i+j <= 3]) * 100, 1)
-    prob_u25 = round(100.0 - prob_o25, 1)
 
     attack_drive = (full_h_xg + full_a_xg) / 2.3
     exp_corners = round(np.clip(((h_stat["corner_rate"] + a_stat["corner_rate"]) * attack_drive * tenacity_index * 0.88) * rem_factor, 2.5, 16.0), 1)
     prob_c_85 = round((1.0 - poisson.cdf(8, exp_corners)) * 100, 1)
-    prob_c_95 = round((1.0 - poisson.cdf(9, exp_corners)) * 100, 1)
 
-    base_cards = (h_stat["card_rate"] + a_stat["card_rate"]) / 2.0
-    exp_cards = round(np.clip((base_cards * tenacity_index * h_stat["midfield"] * 1.25) * rem_factor, 1.0, 9.5), 1)
-    prob_k_25 = round((1.0 - poisson.cdf(2, exp_cards)) * 100, 1)
-
-    # ==========================================
-    # LOGIQUE DE SÉLECTION INTELLIGENTE (SMART FALLBACK)
-    # Si la Double Chance / 1X2 est incertaine, l'algorithme privilégie les buts ou corners ultra-sûrs !
-    # ==========================================
     threshold_dc = 74.0 if post_break_active else 71.0
 
     if is_live:
@@ -366,7 +352,6 @@ def run_quant_prediction_v36(h_name, a_name, score_h=0, score_a=0, elapsed_min=0
             best_prob = round(100.0 - prob_o15, 1)
             pick_type = "LIVE_STABLE"
     else:
-        # Vérification d'abord des marchés de buts ultra-sécurisés si la certitude 1X2 est limite
         if prob_o15 >= 78.0:
             best_pick = "⚽ Plus de 1.5 Buts au Total (Sécurité Buts)"
             best_prob = prob_o15
@@ -388,7 +373,6 @@ def run_quant_prediction_v36(h_name, a_name, score_h=0, score_a=0, elapsed_min=0
             best_prob = prob_o25
             pick_type = "O25"
         else:
-            # Fallback ultime sur les corners si le match est très indécis
             if prob_c_85 >= 75.0:
                 best_pick = "⛳ Plus de 8.5 Corners dans le Match"
                 best_prob = prob_c_85
@@ -407,23 +391,19 @@ def run_quant_prediction_v36(h_name, a_name, score_h=0, score_a=0, elapsed_min=0
 
     return {
         "p_h": round(p_h, 1), "p_n": round(p_n, 1), "p_a": round(p_a, 1),
-        "odds_h": prob_to_odds(p_h), "odds_n": prob_to_odds(p_n), "odds_a": prob_to_odds(p_a),
         "top_3_scores": top_3_scores,
-        "prob_o15": prob_o15, "prob_o25": prob_o25, "prob_u35": prob_u35, "prob_u25": prob_u25,
+        "prob_o15": prob_o15, "prob_o25": prob_o25, "prob_u35": prob_u35,
         "best_pick": best_pick, "best_prob": best_prob, "pick_type": pick_type,
         "model_odds": model_odds, "actual_odds": actual_odds,
         "kelly_stake": kelly_stake, "ev_value": ev_value,
-        "tenacity": round(tenacity_index, 2),
-        "corners": {"tot": exp_corners, "p_85": prob_c_85, "p_95": prob_c_95},
-        "cards": {"tot": exp_cards, "p_25": prob_k_25},
-        "xg": {"h": full_h_xg, "a": full_a_xg},
+        "corners": {"tot": exp_corners, "p_85": prob_c_85},
         "analysis_text": analysis_text
     }
 
 # ==========================================
 # 4. INTERFACE STREAMLIT (5 ONGLETS)
 # ==========================================
-st.sidebar.title("Apex Quant v36.0 ⚡")
+st.sidebar.title("Apex Quant v36.1 ⚡")
 selected_comp = st.sidebar.selectbox("Compétition Principale", list(COMPETITIONS.keys()))
 
 st.sidebar.divider()
@@ -452,7 +432,8 @@ for m in all_matches:
             except Exception:
                 upcoming_matches.append(m)
 
-finished_matches = [m for m in all_matches if m.get('status'] == 'FINISHED']
+# CORRECTION DE LA LIGNE 455 (FERMETURE DE PARENTHÈSE CORRECTE)
+finished_matches = [m for m in all_matches if m.get('status') == 'FINISHED']
 
 tab_live, tab_calendar, tab_detail, tab_audit, tab_coupon = st.tabs([
     f"🔴 EN DIRECT ({len(live_matches)})",
@@ -552,7 +533,7 @@ with tab_detail:
 
         st.divider()
         st.markdown("### 📢 FICHE TÉLÉGRAM VIP PRÊTE")
-        telegram_card = f"⚡ **SIGNAL VIP APEX QUANT (v36.0)** 👑\n\n⚽ **Match** : {ht} vs {at}\n🎯 **Conseil Clé** : {res['best_pick']} ({res['best_prob']}%)\n📊 **Buts** : +1.5 ({res['prob_o15']}%) | +2.5 ({res['prob_o25']}%) | -3.5 ({res['prob_u35']}%)\n🏆 **Top Scores** : 1️⃣ {res['top_3_scores'][0]['score']} | 2️⃣ {res['top_3_scores'][1]['score']} | 3️⃣ {res['top_3_scores'][2]['score']}\n⛳ **Corners** : ~{res['corners']['tot']} (+8.5 à {res['corners']['p_85']}%)\n💰 **Mise Kelly** : {res['kelly_stake']} $"
+        telegram_card = f"⚡ **SIGNAL VIP APEX QUANT (v36.1)** 👑\n\n⚽ **Match** : {ht} vs {at}\n🎯 **Conseil Clé** : {res['best_pick']} ({res['best_prob']}%)\n📊 **Buts** : +1.5 ({res['prob_o15']}%) | +2.5 ({res['prob_o25']}%) | -3.5 ({res['prob_u35']}%)\n🏆 **Top Scores** : 1️⃣ {res['top_3_scores'][0]['score']} | 2️⃣ {res['top_3_scores'][1]['score']} | 3️⃣ {res['top_3_scores'][2]['score']}\n⛳ **Corners** : ~{res['corners']['tot']} (+8.5 à {res['corners']['p_85']}%)\n💰 **Mise Kelly** : {res['kelly_stake']} $"
         st.code(telegram_card, language="text")
 
 # ------------------------------------------
@@ -658,7 +639,7 @@ with tab_coupon:
         </div>
         """, unsafe_allow_html=True)
         
-        telegram_coupon = f"👑 **COMBINÉ VIP OR (APEX QUANT v36.0)** ⚡\n🗓 Date : {sel_date}\n📊 Cote Totale : {total_odds:.2f} | Fiabilité : {avg_conf:.1f}%\n\n"
+        telegram_coupon = f"👑 **COMBINÉ VIP OR (APEX QUANT v36.1)** ⚡\n🗓 Date : {sel_date}\n📊 Cote Totale : {total_odds:.2f} | Fiabilité : {avg_conf:.1f}%\n\n"
         for idx, leg in enumerate(coupon_4_5, 1):
             st.markdown(f"""
             <div class="sub-card">
