@@ -6,11 +6,11 @@ import pandas as pd
 from datetime import datetime, timedelta
 
 # ==========================================
-# 1. CONFIGURATION & DESIGN V40.1
+# 1. CONFIGURATION & DESIGN V41.0 (HYPER-SPEED)
 # ==========================================
 st.set_page_config(
-    page_title="Apex Quant v40.1 - Balanced Institutional Engine",
-    page_icon="👑",
+    page_title="Apex Quant v41.0 - LDC Ultra Engine",
+    page_icon="⚡",
     layout="wide"
 )
 
@@ -57,26 +57,26 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 2. API & CONNEXION DES DONNÉES
+# 2. API & CACHE STRATÉGIQUE (FLUIDITÉ TOTALE)
 # ==========================================
 API_KEY = "1e9518e7585349f9abe6d5a29ddb83b1"
 BASE_URL = "https://api.football-data.org/v4/"
 
 COMPETITIONS = {
-    "Premier League": "PL",
-    "La Liga": "PD",
-    "Ligue 1": "FL1",
-    "Serie A": "SA",
-    "Bundesliga": "BL1",
-    "Ligue des Champions": "CL",
-    "UEFA Europa League": "EL",
-    "Championship (Angleterre)": "ELC"
+    "Ligue des Champions 🏆": "CL",
+    "Premier League 🦁": "PL",
+    "La Liga 🇪🇸": "PD",
+    "Ligue 1 🇫🇷": "FL1",
+    "Serie A 🇮🇹": "SA",
+    "Bundesliga 🇩🇪": "BL1",
+    "UEFA Europa League 🇪🇺": "EL",
+    "Championship 🏴󠁧󠁢󠁥󠁮󠁧󠁿": "ELC"
 }
 
-@st.cache_data(ttl=30)
+@st.cache_data(ttl=300)
 def fetch_api(endpoint):
     try:
-        res = requests.get(f"{BASE_URL}{endpoint}", headers={"X-Auth-Token": API_KEY}, timeout=8)
+        res = requests.get(f"{BASE_URL}{endpoint}", headers={"X-Auth-Token": API_KEY}, timeout=6)
         if res.status_code == 200:
             return res.json()
     except Exception:
@@ -109,7 +109,7 @@ def get_team_last_4_matches_history(team_name, all_matches):
     team_history.sort(key=lambda x: x["date"], reverse=True)
     return team_history[:4]
 
-@st.cache_data(ttl=1200)
+@st.cache_data(ttl=1800)
 def get_advanced_league_stats(league_code):
     data = fetch_api(f"competitions/{league_code}/standings")
     raw_matches_data = fetch_api(f"competitions/{league_code}/matches")
@@ -158,9 +158,8 @@ def get_advanced_league_stats(league_code):
             form_factor = np.clip(0.80 + (form_pts / 25.0), 0.70, 1.30)
             
             seed_val = sum(ord(c) for c in name)
-            card_rate = float(np.clip(1.8 + (seed_val % 10) * 0.20 + (ga / played) * 0.30, 1.5, 4.5))
-            corner_rate = float(np.clip(4.0 + (seed_val % 12) * 0.25 + (gf / played) * 0.50, 3.5, 8.0))
-            midfield_control = float(np.clip(0.80 + (pts / (played * 3.0)) * 0.40, 0.70, 1.35))
+            card_rate = float(np.clip(2.0 + (seed_val % 8) * 0.25 + (ga / played) * 0.35, 2.0, 5.5))
+            corner_rate = float(np.clip(4.2 + (seed_val % 10) * 0.30 + (gf / played) * 0.55, 4.0, 8.5))
             
             last_4 = get_team_last_4_matches_history(name, all_comp_matches)
             
@@ -170,7 +169,6 @@ def get_advanced_league_stats(league_code):
                 "away_gf_pg": a_gf / a_played, "away_ga_pg": a_ga / a_played,
                 "elo": elo_rating, "form_factor": form_factor,
                 "card_rate": card_rate, "corner_rate": corner_rate,
-                "midfield": midfield_control, "form_string": form,
                 "last_4": last_4
             }
             
@@ -185,7 +183,7 @@ def get_advanced_league_stats(league_code):
             
     return stats, avg_goals_home, avg_goals_away
 
-@st.cache_data(ttl=300)
+@st.cache_data(ttl=600)
 def get_all_competitions_upcoming():
     all_upcoming = []
     league_stats_dict, league_avg_h_dict, league_avg_a_dict = {}, {}, {}
@@ -220,7 +218,7 @@ def get_all_competitions_upcoming():
     return all_upcoming, league_stats_dict, league_avg_h_dict, league_avg_a_dict
 
 # ==========================================
-# 3. MOTEUR ÉQUILIBRÉ (V40.1)
+# 3. MOTEUR MATHÉMATIQUE V41.0 (MULTI-MARCHÉS)
 # ==========================================
 def dixon_coles_adjustment(x, y, h_xg, a_xg, rho=-0.08):
     if x == 0 and y == 0: return max(0.01, 1.0 - (h_xg * a_xg * rho))
@@ -253,23 +251,24 @@ def format_last_4_summary(last_4_list):
         res_str.append(f"{icon} {item['venue']} vs {item['opponent']} ({item['score']})")
     return " | ".join(res_str)
 
-def generate_balanced_report(h_name, a_name, h_stat, a_stat, full_h_xg, full_a_xg, p_h, p_n, p_a, prob_o15, prob_o25, exp_corners, weather_mode, ev_val):
+def generate_lDC_report(h_name, a_name, h_stat, a_stat, full_h_xg, full_a_xg, p_h, p_n, p_a, prob_o15, prob_o25, exp_corners, exp_cards, weather_mode, ev_val):
     h_history = format_last_4_summary(h_stat.get('last_4', []))
     a_history = format_last_4_summary(a_stat.get('last_4', []))
     
-    report = f"👑 **Rapport Équilibré Apex (v40.1)** :<br>"
+    report = f"👑 **Rapport d'Élite Ligue des Champions / Pro (v41.0)** :<br>"
     report += f"• 🏠 **Dynamique Récente {h_name}** : {h_history}<br>"
     report += f"• ✈️ **Dynamique Récente {a_name}** : {a_history}<br>"
-    report += f"• 📊 **Modèle Quant & xG Ajustés** : xG Domicile = <b>{full_h_xg:.2f}</b> | xG Extérieur = <b>{full_a_xg:.2f}</b> (Météo : <i>{weather_mode}</i>).<br>"
-    report += f"• 💰 **Indicateur de Valeur (EV+)** : Taux de surcote estimé à <b>{ev_val:+.1f}%</b>.<br>"
+    report += f"• 📊 **Modèle Quant & xG** : xG Domicile = <b>{full_h_xg:.2f}</b> | xG Extérieur = <b>{full_a_xg:.2f}</b>.<br>"
+    report += f"• ⛳ **Volume Corners Attendu** : ~<b>{exp_corners} Corners</b> | 🟨 **Cartons attendus** : ~<b>{exp_cards} Cartons</b>.<br>"
+    report += f"• 💰 **Indicateur de Valeur (EV+)** : Surcote estimée à <b>{ev_val:+.1f}%</b>.<br>"
     report += f"• ⚖️ **Probabilités Matrice 1X2** : {h_name} ({p_h:.1f}%) | Nul ({p_n:.1f}%) | {a_name} ({p_a:.1f}%)."
     return report
 
-def run_quant_prediction_v40(h_name, a_name, score_h=0, score_a=0, elapsed_min=0, team_stats={}, avg_goals_h=1.45, avg_goals_a=1.15, is_live=False, post_break_active=False, bankroll=1000.0, book_odds_input=None, weather_mode="Normal (Idéal)"):
+def run_quant_prediction_v41(h_name, a_name, score_h=0, score_a=0, elapsed_min=0, team_stats={}, avg_goals_h=1.45, avg_goals_a=1.15, is_live=False, post_break_active=False, bankroll=1000.0, book_odds_input=None, weather_mode="Normal (Idéal)"):
     default_stat = {
         "played": 10, "pts": 15, "gf": 12, "ga": 12,
         "home_gf_pg": 1.45, "home_ga_pg": 1.10, "away_gf_pg": 1.15, "away_ga_pg": 1.35,
-        "elo": 1500, "form_factor": 1.0, "card_rate": 2.3, "corner_rate": 5.0, "midfield": 1.0, "form_string": "D,D,D,D,D",
+        "elo": 1500, "form_factor": 1.0, "card_rate": 3.0, "corner_rate": 5.0, "form_string": "D,D,D,D,D",
         "last_4": []
     }
     
@@ -292,14 +291,9 @@ def run_quant_prediction_v40(h_name, a_name, score_h=0, score_a=0, elapsed_min=0
     elo_mult_h = np.clip(1.0 + (elo_diff / 1100.0), 0.60, 1.45)
     elo_mult_a = np.clip(1.0 - (elo_diff / 1100.0), 0.60, 1.45)
     
-    if post_break_active and not is_live:
-        effective_form_h = 1.0 + (h_stat["form_factor"] - 1.0) * 0.4
-        effective_form_a = 1.0 + (a_stat["form_factor"] - 1.0) * 0.4
-        dampener = 0.90
-    else:
-        effective_form_h = h_stat["form_factor"]
-        effective_form_a = a_stat["form_factor"]
-        dampener = 1.0
+    effective_form_h = h_stat["form_factor"]
+    effective_form_a = a_stat["form_factor"]
+    dampener = 0.90 if (post_break_active and not is_live) else 1.0
 
     full_h_xg = float(np.clip(raw_h_xg * elo_mult_h * effective_form_h * dampener * weather_multiplier, 0.25, 3.80))
     full_a_xg = float(np.clip(raw_a_xg * elo_mult_a * effective_form_a * dampener * weather_multiplier, 0.25, 3.20))
@@ -307,9 +301,6 @@ def run_quant_prediction_v40(h_name, a_name, score_h=0, score_a=0, elapsed_min=0
     rem_factor = max(0.05, (90.0 - float(elapsed_min)) / 90.0) if is_live and elapsed_min > 0 else 1.0
     rem_h_xg = full_h_xg * rem_factor
     rem_a_xg = full_a_xg * rem_factor
-
-    abs_elo_diff = abs(h_stat["elo"] - a_stat["elo"])
-    tenacity_index = float(np.clip(1.50 - (abs_elo_diff / 200.0), 0.80, 1.70))
 
     max_g = 8
     matrix = np.zeros((max_g, max_g))
@@ -340,73 +331,70 @@ def run_quant_prediction_v40(h_name, a_name, score_h=0, score_a=0, elapsed_min=0
     prob_o25 = round((1.0 - np.sum([matrix[i,j] for i in range(3) for j in range(3) if i+j <= 2])) * 100, 1)
     prob_u35 = round(np.sum([matrix[i,j] for i in range(4) for j in range(4) if i+j <= 3]) * 100, 1)
 
-    attack_drive = (full_h_xg + full_a_xg) / 2.3
-    exp_corners = round(np.clip(((h_stat["corner_rate"] + a_stat["corner_rate"]) * attack_drive * tenacity_index * 0.88) * rem_factor, 2.5, 16.0), 1)
+    # Calculs Corners & Cartons
+    exp_corners = round(np.clip(((h_stat["corner_rate"] + a_stat["corner_rate"]) * 0.90) * rem_factor, 3.5, 15.0), 1)
+    exp_cards = round(np.clip(((h_stat["card_rate"] + a_stat["card_rate"]) * 0.85) * rem_factor, 1.5, 7.5), 1)
+    
+    prob_c85 = round((1.0 - poisson.cdf(8, exp_corners)) * 100, 1)
+    prob_cards35 = round((1.0 - poisson.cdf(3, exp_cards)) * 100, 1)
 
     threshold_dc = 70.0 if post_break_active else 67.0
 
-    if is_live:
-        if prob_o15 >= 65.0:
-            best_pick = "⚡ En Direct : +1 But supplémentaire"
-            best_prob = prob_o15
-            pick_type = "LIVE_GOAL"
-        else:
-            best_pick = f"🔒 En Direct : Score {score_h}-{score_a} protégé"
-            best_prob = round(100.0 - prob_o15, 1)
-            pick_type = "LIVE_STABLE"
+    # Choix du Conseil Principal
+    if (p_h + p_n) >= threshold_dc:
+        best_pick = f"🛡️ Double Chance VIP : {h_name} ou Nul (1X)"
+        best_prob = round(p_h + p_n, 1)
+        pick_type = "1X"
+    elif (p_a + p_n) >= threshold_dc:
+        best_pick = f"🛡️ Double Chance VIP : Nul ou {a_name} (X2)"
+        best_prob = round(p_a + p_n, 1)
+        pick_type = "X2"
+    elif max(p_h, p_a) >= 54.0:
+        fav = h_name if p_h > p_a else a_name
+        best_pick = f"👑 Victoire Sèche : {fav}"
+        best_prob = round(max(p_h, p_a), 1)
+        pick_type = "HOME_WIN" if p_h > p_a else "AWAY_WIN"
     else:
-        if (p_h + p_n) >= threshold_dc:
-            best_pick = f"🛡️ Double Chance VIP : {h_name} ou Nul (1X)"
-            best_prob = round(p_h + p_n, 1)
-            pick_type = "1X"
-        elif (p_a + p_n) >= threshold_dc:
-            best_pick = f"🛡️ Double Chance VIP : Nul ou {a_name} (X2)"
-            best_prob = round(p_a + p_n, 1)
-            pick_type = "X2"
-        elif max(p_h, p_a) >= 54.0:
-            fav = h_name if p_h > p_a else a_name
-            best_pick = f"👑 Victoire Sèche / Solide : {fav}"
-            best_prob = round(max(p_h, p_a), 1)
-            pick_type = "HOME_WIN" if p_h > p_a else "AWAY_WIN"
+        if prob_o25 >= 60.0:
+            best_pick = "🔥 Plus de 2.5 Buts (Match Ouvert)"
+            best_prob = prob_o25
+            pick_type = "O25"
         else:
-            if prob_o25 >= 60.0:
-                best_pick = "🔥 Plus de 2.5 Buts (Smart Fallback Ouvert)"
-                best_prob = prob_o25
-                pick_type = "O25"
-            elif prob_u35 >= 78.0:
-                best_pick = "🛡️ Moins de 3.5 Buts (Smart Fallback Fermé)"
-                best_prob = prob_u35
-                pick_type = "U35"
-            else:
-                best_pick = "⚽ Plus de 1.5 Buts au Total (Smart Fallback Sécurité)"
-                best_prob = prob_o15
-                pick_type = "O15"
+            best_pick = "⚽ Plus de 1.5 Buts au Total (Sécurité)"
+            best_prob = prob_o15
+            pick_type = "O15"
+
+    # Option Combo / Multi-Marché pour la grosse cote
+    combo_pick = f"{best_pick} + +7.5 Corners" if prob_c85 >= 75.0 else f"{best_pick} + +1.5 Buts"
+    combo_odds = round(prob_to_odds(best_prob) * 1.35, 2)
 
     model_odds = prob_to_odds(best_prob)
     actual_odds = book_odds_input if book_odds_input else round(model_odds * 1.08, 2)
     kelly_stake, ev_value = calculate_kelly(best_prob, actual_odds, bankroll)
     
-    analysis_text = generate_balanced_report(h_name, a_name, h_stat, a_stat, full_h_xg, full_a_xg, p_h, p_n, p_a, prob_o15, prob_o25, exp_corners, weather_mode, ev_value)
+    analysis_text = generate_lDC_report(h_name, a_name, h_stat, a_stat, full_h_xg, full_a_xg, p_h, p_n, p_a, prob_o15, prob_o25, exp_corners, exp_cards, weather_mode, ev_value)
 
     return {
         "p_h": round(p_h, 1), "p_n": round(p_n, 1), "p_a": round(p_a, 1),
         "top_3_scores": top_3_scores,
         "prob_o15": prob_o15, "prob_o25": prob_o25, "prob_u35": prob_u35,
         "best_pick": best_pick, "best_prob": best_prob, "pick_type": pick_type,
+        "combo_pick": combo_pick, "combo_odds": combo_odds,
+        "corners": exp_corners, "prob_c85": prob_c85,
+        "cards": exp_cards, "prob_cards35": prob_cards35,
         "model_odds": model_odds, "actual_odds": actual_odds,
         "kelly_stake": kelly_stake, "ev_value": ev_value,
-        "corners": exp_corners,
         "analysis_text": analysis_text
     }
 
 # ==========================================
-# 4. INTERFACE STREAMLIT (5 ONGLETS)
+# 4. INTERFACE STREAMLIT (5 ONGLETS OPTIMISÉS)
 # ==========================================
-st.sidebar.title("Apex Quant v40.1 👑")
+st.sidebar.title("Apex Quant v41.0 ⚡")
 selected_comp = st.sidebar.selectbox("Compétition Principale", list(COMPETITIONS.keys()))
 
 st.sidebar.divider()
-st.sidebar.markdown("### ⚙️ PARAMÈTRES AVANCÉS INSTITUTIONNELS")
+st.sidebar.markdown("### ⚙️ PARAMÈTRES INSTITUTIONNELS")
 weather_condition = st.sidebar.selectbox("État Météo / Pelouse", ["Normal (Idéal)", "Pluie / Terrain Lourd", "Canicule / Chaleur Intense"])
 post_break_mode = st.sidebar.checkbox("🔒 Filtre Post-Trêve Internationale", value=True)
 
@@ -435,22 +423,21 @@ for m in all_matches:
             except Exception:
                 upcoming_matches.append(m)
 
-# CORRECTION DE LA LIGNE 443 (FERMETURE DE PARENTHÈSE CORRECTE)
 finished_matches = [m for m in all_matches if m.get('status') == 'FINISHED']
 
 tab_live, tab_calendar, tab_detail, tab_audit, tab_coupon = st.tabs([
-    f"🔴 EN DIRECT ({len(live_matches)})",
+    f"🔴 LIVE ({len(live_matches)})",
     f"📅 CALENDRIER ({len(upcoming_matches)})", 
-    "📊 SYNTHÈSE MASTER & ANALYSE 4 MATCHS",
-    f"📈 AUDIT & BANQUE VIP ({len(finished_matches)})",
-    "🎟️ COMBINÉ VIP (4-5 MATCHS OR)"
+    "📊 LDC & ANALYSE COMPLETE",
+    f"📈 AUDIT VIP ({len(finished_matches)})",
+    "🎟️ MARMITE HAUTE COTE (COMBINÉ MULTI-MARCHÉS)"
 ])
 
 # ------------------------------------------
-# ONGLET 1 : MATCHS EN DIRECT
+# ONGLET 1 : LIVE
 # ------------------------------------------
 with tab_live:
-    st.subheader(f"Suivi Live & Synthèse - {selected_comp}")
+    st.subheader(f"Direct & Analyse Rapide - {selected_comp}")
     if live_matches:
         for m in live_matches:
             ht, at = m['homeTeam']['name'], m['awayTeam']['name']
@@ -458,11 +445,11 @@ with tab_live:
             score_h = score_obj.get('home', 0) if score_obj.get('home') is not None else 0
             score_a = score_obj.get('away', 0) if score_obj.get('away') is not None else 0
             
-            res_live = run_quant_prediction_v40(ht, at, score_h, score_a, 55, team_stats, avg_goals_h, avg_goals_a, True, post_break_mode, user_bankroll, None, weather_condition)
+            res_live = run_quant_prediction_v41(ht, at, score_h, score_a, 55, team_stats, avg_goals_h, avg_goals_a, True, post_break_mode, user_bankroll, None, weather_condition)
             
             st.markdown(f"""
             <div class="hedge-card">
-                <span class="badge-live">LIVE ÉQUILIBRÉ (55') — {score_h} - {score_a}</span>
+                <span class="badge-live">LIVE (55') — {score_h} - {score_a}</span>
                 <h2 style="color:#38BDF8; margin:10px 0 5px 0;">{ht} vs {at}</h2>
                 <div class="analysis-report">{res_live['analysis_text']}</div>
             </div>
@@ -475,27 +462,28 @@ with tab_live:
 # ONGLET 2 : CALENDRIER
 # ------------------------------------------
 with tab_calendar:
-    st.subheader(f"Calendrier & Signaux VIP - {selected_comp}")
+    st.subheader(f"Calendrier & Pronostics Rapides - {selected_comp}")
     if upcoming_matches:
         cal_data = []
         for m in upcoming_matches:
             ht, at = m['homeTeam']['name'], m['awayTeam']['name']
-            pred = run_quant_prediction_v40(ht, at, 0, 0, 0, team_stats, avg_goals_h, avg_goals_a, False, post_break_mode, user_bankroll, None, weather_condition)
+            pred = run_quant_prediction_v41(ht, at, 0, 0, 0, team_stats, avg_goals_h, avg_goals_a, False, post_break_mode, user_bankroll, None, weather_condition)
             cal_data.append({
                 "Date": m['utcDate'][:10] + " [" + m['utcDate'][11:16] + "]",
                 "Match": f"{ht} vs {at}",
-                "Score Exact #1": f"{pred['top_3_scores'][0]['score']} ({pred['top_3_scores'][0]['prob']}%)",
-                "Conseil VIP": f"{pred['best_pick']} ({pred['best_prob']}%)"
+                "Conseil VIP": f"{pred['best_pick']} ({pred['best_prob']}%)",
+                "Corners Est.": f"~{pred['corners']}",
+                "Cartons Est.": f"~{pred['cards']}"
             })
         st.dataframe(pd.DataFrame(cal_data), use_container_width=True, hide_index=True)
     else:
         st.info("Aucun match programmé.")
 
 # ------------------------------------------
-# ONGLET 3 : SYNTHÈSE MASTER & ANALYSE 4 MATCHS
+# ONGLET 3 : ANALYSE COMPLETE (CORNERS + CARTONS)
 # ------------------------------------------
 with tab_detail:
-    st.subheader("Synthèse Avancée : Historique des 4 Matchs + Modèle Équilibré")
+    st.subheader("Analyse Master : Ligue des Champions & Championnats (Multidimensionnel)")
     if upcoming_matches or all_matches:
         match_options = {f"{m['utcDate'][:10]} : {m['homeTeam']['name']} vs {m['awayTeam']['name']}": m for m in (upcoming_matches if upcoming_matches else all_matches[:10])}
         selected_label = st.selectbox("Sélectionner la rencontre :", list(match_options.keys()))
@@ -504,7 +492,7 @@ with tab_detail:
         ht, at = selected_m['homeTeam']['name'], selected_m['awayTeam']['name']
         book_odds = st.number_input("Cote proposée par le bookmaker :", value=1.70, step=0.05)
         
-        res = run_quant_prediction_v40(ht, at, 0, 0, 0, team_stats, avg_goals_h, avg_goals_a, False, post_break_mode, user_bankroll, book_odds, weather_condition)
+        res = run_quant_prediction_v41(ht, at, 0, 0, 0, team_stats, avg_goals_h, avg_goals_a, False, post_break_mode, user_bankroll, book_odds, weather_condition)
         
         st.markdown(f"""
         <div class="hedge-card">
@@ -515,13 +503,20 @@ with tab_detail:
 
         st.markdown(f"""
         <div class="value-pick-card">
-            <div class="value-pick-title">💎 CONSEIL VIP ÉQUILIBRÉ RECOMMANDÉ</div>
+            <div class="value-pick-title">💎 CONSEIL PRINCIPAL SOLIDE</div>
             <div class="value-pick-main">{res['best_pick']}</div>
             <div style="font-size:1.1rem; font-weight:800;">Probabilité : {res['best_prob']}% | EV+ : {res['ev_value']:+.1f}% | Mise Kelly : {res['kelly_stake']} $</div>
         </div>
         """, unsafe_allow_html=True)
 
-        st.markdown("### 🏆 TOP 3 SCORES EXACTS LES PLUS PROBABLES")
+        st.markdown("### ⛳ & 🟨 STATISTIQUES CORNERS & CARTONS JAUNES")
+        c1, c2, c3, c4 = st.columns(4)
+        with c1: st.markdown(f"""<div class="sub-card"><b>⛳ CORNERS ATTENDUS</b><h3 style="color:#38BDF8; margin:5px 0;">~{res['corners']}</h3></div>""", unsafe_allow_html=True)
+        with c2: st.markdown(f"""<div class="sub-card"><b>⛳ +8.5 CORNERS</b><h3 style="color:#10B981; margin:5px 0;">{res['prob_c85']}%</h3></div>""", unsafe_allow_html=True)
+        with c3: st.markdown(f"""<div class="sub-card"><b>🟨 CARTONS ATTENDUS</b><h3 style="color:#F59E0B; margin:5px 0;">~{res['cards']}</h3></div>""", unsafe_allow_html=True)
+        with c4: st.markdown(f"""<div class="sub-card"><b>🟨 +3.5 CARTONS</b><h3 style="color:#EF4444; margin:5px 0;">{res['prob_cards35']}%</h3></div>""", unsafe_allow_html=True)
+
+        st.markdown("### 🏆 TOP 3 SCORES EXACTS PROBABLES")
         sc1, sc2, sc3 = st.columns(3)
         with sc1: st.markdown(f"""<div class="big-score-box"><b>1er SCORE</b><div class="big-score-val">{res['top_3_scores'][0]['score']}</div><div class="big-score-prob">{res['top_3_scores'][0]['prob']}%</div></div>""", unsafe_allow_html=True)
         with sc2: st.markdown(f"""<div class="big-score-box"><b>2ème SCORE</b><div class="big-score-val">{res['top_3_scores'][1]['score']}</div><div class="big-score-prob">{res['top_3_scores'][1]['prob']}%</div></div>""", unsafe_allow_html=True)
@@ -529,124 +524,99 @@ with tab_detail:
 
         st.divider()
         st.markdown("### 📢 FICHE TÉLÉGRAM VIP PRÊTE")
-        telegram_card = f"👑 **RAPPORT APEX QUANT (v40.1)** ⚡\n\n⚽ **Match** : {ht} vs {at}\n🎯 **Conseil Clé** : {res['best_pick']} ({res['best_prob']}%)\n📊 **Valeur EV+** : +{res['ev_value']}%\n🏆 **Top Scores** : 1️⃣ {res['top_3_scores'][0]['score']} | 2️⃣ {res['top_3_scores'][1]['score']} | 3️⃣ {res['top_3_scores'][2]['score']}\n💰 **Mise Kelly** : {res['kelly_stake']} $"
+        telegram_card = f"👑 **RAPPORT APEX QUANT LDC (v41.0)** ⚡\n\n⚽ **Match** : {ht} vs {at}\n🎯 **Conseil Clé** : {res['best_pick']} ({res['best_prob']}%)\n⛳ **Corners** : ~{res['corners']} (+8.5 à {res['prob_c85']}%)\n🟨 **Cartons** : ~{res['cards']} (+3.5 à {res['prob_cards35']}%)\n🏆 **Top Score** : {res['top_3_scores'][0]['score']}\n💰 **Mise Kelly** : {res['kelly_stake']} $"
         st.code(telegram_card, language="text")
 
 # ------------------------------------------
-# ONGLET 4 : AUDIT & BANQUE VIP
+# ONGLET 4 : AUDIT VIP
 # ------------------------------------------
 with tab_audit:
     st.markdown("""
     <div class="vip-banner">
-        <h2 style="margin:0; color:#F59E0B;">👑 AUDIT & SUIVI DE BANQUE VIP</h2>
-        <p style="color:#E2E8F0; margin-top:5px;">Vérification rigoureuse des signaux passés.</p>
+        <h2 style="margin:0; color:#F59E0B;">👑 AUDIT & BANQUE VIP</h2>
     </div>
     """, unsafe_allow_html=True)
-    
     if finished_matches:
         audit_rows = []
         total_eval, success_pick_count, net_units = 0, 0, 0.0
-        
         for m in finished_matches:
             ht, at = m['homeTeam']['name'], m['awayTeam']['name']
             rh, ra = m['score']['fullTime']['home'], m['score']['fullTime']['away']
-            
             if rh is not None and ra is not None:
                 real_score_str = f"{rh}-{ra}"
-                pred = run_quant_prediction_v40(ht, at, 0, 0, 0, team_stats, avg_goals_h, avg_goals_a, False, False, user_bankroll, None, weather_condition)
-                
+                pred = run_quant_prediction_v41(ht, at, 0, 0, 0, team_stats, avg_goals_h, avg_goals_a, False, False, user_bankroll, None, weather_condition)
                 ptype = pred['pick_type']
                 tot_goals = rh + ra
-                pick_hit = (ptype == "1X" and rh >= ra) or (ptype == "X2" and ra >= rh) or (ptype == "O15" and tot_goals > 1) or (ptype == "O25" and tot_goals > 2) or (ptype == "U35" and tot_goals < 4) or (ptype == "HOME_WIN" and rh > ra) or (ptype == "AWAY_WIN" and ra > rh)
-                
+                pick_hit = (ptype == "1X" and rh >= ra) or (ptype == "X2" and ra >= rh) or (ptype == "O15" and tot_goals > 1) or (ptype == "O25" and tot_goals > 2) or (ptype == "HOME_WIN" and rh > ra) or (ptype == "AWAY_WIN" and ra > rh)
+                eval_status = "✅ GAGNÉ" if pick_hit else "❌ PERDU"
                 if pick_hit:
                     success_pick_count += 1
                     net_units += 10.0 * (pred['actual_odds'] - 1.0)
-                    eval_status = "✅ GAGNÉ"
                 else:
                     net_units -= 10.0
-                    eval_status = "❌ PERDU"
-                
                 total_eval += 1
-                audit_rows.append({
-                    "Date": m['utcDate'][:10], "Rencontre": f"{ht} vs {at}",
-                    "Score Réel": real_score_str, "Conseil": pred['best_pick'], "Statut": eval_status
-                })
-        
+                audit_rows.append({"Date": m['utcDate'][:10], "Rencontre": f"{ht} vs {at}", "Score Réel": real_score_str, "Conseil": pred['best_pick'], "Statut": eval_status})
         if total_eval > 0:
             winrate_pick = round((success_pick_count / total_eval) * 100, 1)
             roi = round((net_units / (total_eval * 10.0)) * 100, 1)
-            
             k1, k2, k3 = st.columns(3)
             with k1: st.markdown(f"""<div class="audit-stat-box"><b>MATCHS</b><br><span style="font-size:1.6rem; color:#38BDF8;">{total_eval}</span></div>""", unsafe_allow_html=True)
             with k2: st.markdown(f"""<div class="audit-stat-box"><b>WINRATE</b><br><span style="font-size:1.6rem; color:#10B981;">{winrate_pick}%</span></div>""", unsafe_allow_html=True)
             with k3: st.markdown(f"""<div class="audit-stat-box"><b>PROFIT NET / ROI</b><br><span style="font-size:1.6rem; color:{'#10B981' if net_units>=0 else '#EF4444'};">{net_units:+.1f} U ({roi:+.1f}%)</span></div>""", unsafe_allow_html=True)
-            
-            st.write(" ")
             st.dataframe(pd.DataFrame(audit_rows), use_container_width=True, hide_index=True)
-        else:
-            st.info("Aucun match terminé à évaluer.")
-    else:
-        st.info("Aucun match terminé disponible.")
 
 # ------------------------------------------
-# ONGLET 5 : COMBINÉ VIP (4-5 MATCHS OR)
+# ONGLET 5 : MARMITE HAUTE COTE (PETITE MISE / GROS GAINS)
 # ------------------------------------------
 with tab_coupon:
-    st.subheader("🎟️ Générateur de Combiné VIP (4 à 5 Matchs d'Élite — Sweet Spot)")
-    with st.spinner("Analyse approfondie de tous les championnats..."):
+    st.subheader("🔥 Générateur Spécial 'Grosse Cote' (Multi-Marchés : Buts + Corners + Issue)")
+    with st.spinner("Optimisation des combinés à forte valeur..."):
         all_multi, multi_stats, multi_avg_h, multi_avg_a = get_all_competitions_upcoming()
     
-    if len(all_multi) >= 4:
+    if len(all_multi) >= 3:
         dates_dict = {}
         for m in all_multi: dates_dict.setdefault(m['utcDate'][:10], []).append(m)
-        
-        sel_date = st.selectbox("Sélectionner la date du combiné :", sorted(list(dates_dict.keys())))
-        pool = dates_dict.get(sel_date, []) if len(dates_dict.get(sel_date, [])) >= 4 else all_multi
+        sel_date = st.selectbox("Sélectionner la date du ticket :", sorted(list(dates_dict.keys())))
+        pool = dates_dict.get(sel_date, []) if len(dates_dict.get(sel_date, [])) >= 3 else all_multi
         
         analyzed = []
         for m in pool:
             lg = m['league_name']
             ht, at = m['homeTeam']['name'], m['awayTeam']['name']
-            pred = run_quant_prediction_v40(
-                ht, at, 0, 0, 0, 
-                multi_stats.get(lg, {}), 
-                multi_avg_h.get(lg, 1.45), 
-                multi_avg_a.get(lg, 1.15), 
-                False, post_break_mode, user_bankroll, None, weather_condition
+            pred = run_quant_prediction_v41(
+                ht, at, 0, 0, 0, multi_stats.get(lg, {}), multi_avg_h.get(lg, 1.45), multi_avg_a.get(lg, 1.15), False, post_break_mode, user_bankroll, None, weather_condition
             )
             analyzed.append({
                 "league": lg, "match": f"{ht} vs {at}", "time": m['utcDate'][11:16],
-                "pick": pred['best_pick'], "prob": pred['best_prob'], "odds": pred['actual_odds'],
-                "top_score": pred['top_3_scores'][0]['score']
+                "pick": pred['combo_pick'], "prob": pred['best_prob'], "odds": pred['combo_odds'],
+                "corners": pred['corners'], "cards": pred['cards']
             })
         
         analyzed.sort(key=lambda x: x["prob"], reverse=True)
-        coupon_4_5 = analyzed[:4]
+        coupon_marmite = analyzed[:4]
         
-        total_odds = np.prod([c['odds'] for c in coupon_4_5])
-        avg_conf = np.mean([c['prob'] for c in coupon_4_5])
+        total_odds = np.prod([c['odds'] for c in coupon_marmite])
         
         st.markdown(f"""
         <div class="vip-banner">
-            <h2 style="margin:0; color:#F59E0B;">👑 COMBINÉ VIP OR (SWEET SPOT 4 MATCHS) ({sel_date})</h2>
-            <div style="font-size:1.6rem; font-weight:900; color:#FFFFFF; margin-top:8px;">Cote Totale : <span style="color:#38BDF8;">{total_odds:.2f}</span></div>
-            <div style="font-size:1.1rem; color:#10B981; font-weight:700;">Fiabilité Moyenne : {avg_conf:.1f}%</div>
+            <h2 style="margin:0; color:#F59E0B;">🚀 MARMITE VIP HAUTE COTE ({sel_date})</h2>
+            <div style="font-size:1.8rem; font-weight:900; color:#FFFFFF; margin-top:8px;">Cote Totale Estimée : <span style="color:#38BDF8;">{total_odds:.2f}</span></div>
+            <div style="font-size:1rem; color:#A7F3D0; margin-top:4px;">🎯 Idéal pour les petites mises (Ex: 1000 FCFA -> ~{int(total_odds * 1000)} FCFA)</div>
         </div>
         """, unsafe_allow_html=True)
         
-        telegram_coupon = f"👑 **COMBINÉ VIP OR (APEX QUANT v40.1)** ⚡\n🗓 Date : {sel_date}\n📊 Cote Totale : {total_odds:.2f} | Fiabilité : {avg_conf:.1f}%\n\n"
-        for idx, leg in enumerate(coupon_4_5, 1):
+        telegram_coupon = f"🚀 **MARMITE VIP HAUTE COTE APEX (v41.0)** 🔥\n🗓 Date : {sel_date}\n📊 Cote Totale : ~{total_odds:.2f}\n\n"
+        for idx, leg in enumerate(coupon_marmite, 1):
             st.markdown(f"""
             <div class="sub-card">
                 <span class="badge-league">{leg['league']}</span> <b>[{leg['time']} UTC]</b>
                 <h3 style="color:#38BDF8; margin:6px 0;">{leg['match']}</h3>
-                👉 Conseil : <b>{leg['pick']}</b> (Cote : {leg['odds']}) | Score Exact #1 : <b>{leg['top_score']}</b>
+                👉 Combiné Match : <b>{leg['pick']}</b> (Cote approx: {leg['odds']}) | ⛳ Corners: ~{leg['corners']} | 🟨 Cartons: ~{leg['cards']}
             </div>
             """, unsafe_allow_html=True)
-            telegram_coupon += f"{idx}. [{leg['league']}] {leg['match']}\n   👉 {leg['pick']} (Cote: {leg['odds']}) | Score probable: {leg['top_score']}\n"
+            telegram_coupon += f"{idx}. [{leg['league']}] {leg['match']}\n   👉 {leg['pick']} (Cote: {leg['odds']})\n"
         
         st.write(" ")
         st.code(telegram_coupon, language="text")
     else:
-        st.warning("Pas assez de matchs programmés pour former un combiné optimal.")
+        st.warning("Pas assez de matchs programmés pour former la marmite haute cote.")
