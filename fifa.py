@@ -6,10 +6,10 @@ import pandas as pd
 from datetime import datetime, timedelta
 
 # ==========================================
-# 1. CONFIGURATION & DESIGN V41.0 (HYPER-SPEED)
+# 1. CONFIGURATION & DESIGN V41.1
 # ==========================================
 st.set_page_config(
-    page_title="Apex Quant v41.0 - LDC Ultra Engine",
+    page_title="Apex Quant v41.1 - LDC Ultra Engine",
     page_icon="⚡",
     layout="wide"
 )
@@ -57,20 +57,20 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 2. API & CACHE STRATÉGIQUE (FLUIDITÉ TOTALE)
+# 2. API & CACHE STRATEGIQUE
 # ==========================================
 API_KEY = "1e9518e7585349f9abe6d5a29ddb83b1"
 BASE_URL = "https://api.football-data.org/v4/"
 
 COMPETITIONS = {
-    "Ligue des Champions 🏆": "CL",
-    "Premier League 🦁": "PL",
-    "La Liga 🇪🇸": "PD",
-    "Ligue 1 🇫🇷": "FL1",
-    "Serie A 🇮🇹": "SA",
-    "Bundesliga 🇩🇪": "BL1",
-    "UEFA Europa League 🇪🇺": "EL",
-    "Championship 🏴󠁧󠁢󠁥󠁮󠁧󠁿": "ELC"
+    "Ligue des Champions": "CL",
+    "Premier League": "PL",
+    "La Liga": "PD",
+    "Ligue 1": "FL1",
+    "Serie A": "SA",
+    "Bundesliga": "BL1",
+    "UEFA Europa League": "EL",
+    "Championship": "ELC"
 }
 
 @st.cache_data(ttl=300)
@@ -218,7 +218,7 @@ def get_all_competitions_upcoming():
     return all_upcoming, league_stats_dict, league_avg_h_dict, league_avg_a_dict
 
 # ==========================================
-# 3. MOTEUR MATHÉMATIQUE V41.0 (MULTI-MARCHÉS)
+# 3. MOTEUR MATHEMATIQUE V41.1
 # ==========================================
 def dixon_coles_adjustment(x, y, h_xg, a_xg, rho=-0.08):
     if x == 0 and y == 0: return max(0.01, 1.0 - (h_xg * a_xg * rho))
@@ -244,27 +244,27 @@ def calculate_kelly(prob_pct, bookmaker_odds, bankroll, kelly_fraction=0.25, max
 
 def format_last_4_summary(last_4_list):
     if not last_4_list:
-        return "Données récentes non disponibles."
+        return "Donnees recentes non disponibles."
     res_str = []
     for item in last_4_list:
-        icon = "✅" if item['result'] == 'W' else ("🤝" if item['result'] == 'D' else "❌")
-        res_str.append(f"{icon} {item['venue']} vs {item['opponent']} ({item['score']})")
+        icon = "W" if item['result'] == 'W' else ("D" if item['result'] == 'D' else "L")
+        res_str.append(f"[{icon}] {item['venue']} vs {item['opponent']} ({item['score']})")
     return " | ".join(res_str)
 
 def generate_lDC_report(h_name, a_name, h_stat, a_stat, full_h_xg, full_a_xg, p_h, p_n, p_a, prob_o15, prob_o25, exp_corners, exp_cards, weather_mode, ev_val):
     h_history = format_last_4_summary(h_stat.get('last_4', []))
     a_history = format_last_4_summary(a_stat.get('last_4', []))
     
-    report = f"👑 **Rapport d'Élite Ligue des Champions / Pro (v41.0)** :<br>"
-    report += f"• 🏠 **Dynamique Récente {h_name}** : {h_history}<br>"
-    report += f"• ✈️ **Dynamique Récente {a_name}** : {a_history}<br>"
-    report += f"• 📊 **Modèle Quant & xG** : xG Domicile = <b>{full_h_xg:.2f}</b> | xG Extérieur = <b>{full_a_xg:.2f}</b>.<br>"
-    report += f"• ⛳ **Volume Corners Attendu** : ~<b>{exp_corners} Corners</b> | 🟨 **Cartons attendus** : ~<b>{exp_cards} Cartons</b>.<br>"
-    report += f"• 💰 **Indicateur de Valeur (EV+)** : Surcote estimée à <b>{ev_val:+.1f}%</b>.<br>"
-    report += f"• ⚖️ **Probabilités Matrice 1X2** : {h_name} ({p_h:.1f}%) | Nul ({p_n:.1f}%) | {a_name} ({p_a:.1f}%)."
+    report = f"<b>Rapport d'Elite Ligue des Champions / Pro (v41.1)</b> :<br>"
+    report += f"• <b>Dynamique Recente {h_name}</b> : {h_history}<br>"
+    report += f"• <b>Dynamique Recente {a_name}</b> : {a_history}<br>"
+    report += f"• <b>Modele Quant & xG</b> : xG Domicile = <b>{full_h_xg:.2f}</b> | xG Exterieur = <b>{full_a_xg:.2f}</b>.<br>"
+    report += f"• <b>Volume Corners Attendu</b> : ~<b>{exp_corners} Corners</b> | <b>Cartons attendus</b> : ~<b>{exp_cards} Cartons</b>.<br>"
+    report += f"• <b>Indicateur de Valeur (EV+)</b> : Surcote estimee a <b>{ev_val:+.1f}%</b>.<br>"
+    report += f"• <b>Probabilites Matrice 1X2</b> : {h_name} ({p_h:.1f}%) | Nul ({p_n:.1f}%) | {a_name} ({p_a:.1f}%)."
     return report
 
-def run_quant_prediction_v41(h_name, a_name, score_h=0, score_a=0, elapsed_min=0, team_stats={}, avg_goals_h=1.45, avg_goals_a=1.15, is_live=False, post_break_active=False, bankroll=1000.0, book_odds_input=None, weather_mode="Normal (Idéal)"):
+def run_quant_prediction_v41(h_name, a_name, score_h=0, score_a=0, elapsed_min=0, team_stats={}, avg_goals_h=1.45, avg_goals_a=1.15, is_live=False, post_break_active=False, bankroll=1000.0, book_odds_input=None, weather_mode="Normal (Ideal)"):
     default_stat = {
         "played": 10, "pts": 15, "gf": 12, "ga": 12,
         "home_gf_pg": 1.45, "home_ga_pg": 1.10, "away_gf_pg": 1.15, "away_ga_pg": 1.35,
@@ -331,7 +331,6 @@ def run_quant_prediction_v41(h_name, a_name, score_h=0, score_a=0, elapsed_min=0
     prob_o25 = round((1.0 - np.sum([matrix[i,j] for i in range(3) for j in range(3) if i+j <= 2])) * 100, 1)
     prob_u35 = round(np.sum([matrix[i,j] for i in range(4) for j in range(4) if i+j <= 3]) * 100, 1)
 
-    # Calculs Corners & Cartons
     exp_corners = round(np.clip(((h_stat["corner_rate"] + a_stat["corner_rate"]) * 0.90) * rem_factor, 3.5, 15.0), 1)
     exp_cards = round(np.clip(((h_stat["card_rate"] + a_stat["card_rate"]) * 0.85) * rem_factor, 1.5, 7.5), 1)
     
@@ -340,31 +339,29 @@ def run_quant_prediction_v41(h_name, a_name, score_h=0, score_a=0, elapsed_min=0
 
     threshold_dc = 70.0 if post_break_active else 67.0
 
-    # Choix du Conseil Principal
     if (p_h + p_n) >= threshold_dc:
-        best_pick = f"🛡️ Double Chance VIP : {h_name} ou Nul (1X)"
+        best_pick = f"Double Chance VIP : {h_name} ou Nul (1X)"
         best_prob = round(p_h + p_n, 1)
         pick_type = "1X"
     elif (p_a + p_n) >= threshold_dc:
-        best_pick = f"🛡️ Double Chance VIP : Nul ou {a_name} (X2)"
+        best_pick = f"Double Chance VIP : Nul ou {a_name} (X2)"
         best_prob = round(p_a + p_n, 1)
         pick_type = "X2"
     elif max(p_h, p_a) >= 54.0:
         fav = h_name if p_h > p_a else a_name
-        best_pick = f"👑 Victoire Sèche : {fav}"
+        best_pick = f"Victoire Seche : {fav}"
         best_prob = round(max(p_h, p_a), 1)
         pick_type = "HOME_WIN" if p_h > p_a else "AWAY_WIN"
     else:
         if prob_o25 >= 60.0:
-            best_pick = "🔥 Plus de 2.5 Buts (Match Ouvert)"
+            best_pick = "Plus de 2.5 Buts (Match Ouvert)"
             best_prob = prob_o25
             pick_type = "O25"
         else:
-            best_pick = "⚽ Plus de 1.5 Buts au Total (Sécurité)"
+            best_pick = "Plus de 1.5 Buts au Total (Securite)"
             best_prob = prob_o15
             pick_type = "O15"
 
-    # Option Combo / Multi-Marché pour la grosse cote
     combo_pick = f"{best_pick} + +7.5 Corners" if prob_c85 >= 75.0 else f"{best_pick} + +1.5 Buts"
     combo_odds = round(prob_to_odds(best_prob) * 1.35, 2)
 
@@ -388,18 +385,18 @@ def run_quant_prediction_v41(h_name, a_name, score_h=0, score_a=0, elapsed_min=0
     }
 
 # ==========================================
-# 4. INTERFACE STREAMLIT (5 ONGLETS OPTIMISÉS)
+# 4. INTERFACE STREAMLIT
 # ==========================================
-st.sidebar.title("Apex Quant v41.0 ⚡")
-selected_comp = st.sidebar.selectbox("Compétition Principale", list(COMPETITIONS.keys()))
+st.sidebar.title("Apex Quant v41.1")
+selected_comp = st.sidebar.selectbox("Competition Principale", list(COMPETITIONS.keys()))
 
 st.sidebar.divider()
-st.sidebar.markdown("### ⚙️ PARAMÈTRES INSTITUTIONNELS")
-weather_condition = st.sidebar.selectbox("État Météo / Pelouse", ["Normal (Idéal)", "Pluie / Terrain Lourd", "Canicule / Chaleur Intense"])
-post_break_mode = st.sidebar.checkbox("🔒 Filtre Post-Trêve Internationale", value=True)
+st.sidebar.markdown("### PARAMETRES INSTITUTIONNELS")
+weather_condition = st.sidebar.selectbox("Etat Meteo / Pelouse", ["Normal (Ideal)", "Pluie / Terrain Lourd", "Canicule / Chaleur Intense"])
+post_break_mode = st.sidebar.checkbox("Filtre Post-Treve Internationale", value=True)
 
 st.sidebar.divider()
-st.sidebar.markdown("### 💰 GESTION DE BANKROLL KELLY")
+st.sidebar.markdown("### GESTION DE BANKROLL KELLY")
 user_bankroll = st.sidebar.number_input("Bankroll Totale ($ / FCFA)", value=1000.0, step=50.0)
 
 league_code = COMPETITIONS[selected_comp]
@@ -426,11 +423,11 @@ for m in all_matches:
 finished_matches = [m for m in all_matches if m.get('status') == 'FINISHED']
 
 tab_live, tab_calendar, tab_detail, tab_audit, tab_coupon = st.tabs([
-    f"🔴 LIVE ({len(live_matches)})",
-    f"📅 CALENDRIER ({len(upcoming_matches)})", 
-    "📊 LDC & ANALYSE COMPLETE",
-    f"📈 AUDIT VIP ({len(finished_matches)})",
-    "🎟️ MARMITE HAUTE COTE (COMBINÉ MULTI-MARCHÉS)"
+    f"LIVE ({len(live_matches)})",
+    f"CALENDRIER ({len(upcoming_matches)})", 
+    "LDC & ANALYSE COMPLETE",
+    f"AUDIT VIP ({len(finished_matches)})",
+    "MARMITE HAUTE COTE"
 ])
 
 # ------------------------------------------
@@ -449,7 +446,7 @@ with tab_live:
             
             st.markdown(f"""
             <div class="hedge-card">
-                <span class="badge-live">LIVE (55') — {score_h} - {score_a}</span>
+                <span class="badge-live">LIVE (55') - {score_h} - {score_a}</span>
                 <h2 style="color:#38BDF8; margin:10px 0 5px 0;">{ht} vs {at}</h2>
                 <div class="analysis-report">{res_live['analysis_text']}</div>
             </div>
@@ -477,20 +474,20 @@ with tab_calendar:
             })
         st.dataframe(pd.DataFrame(cal_data), use_container_width=True, hide_index=True)
     else:
-        st.info("Aucun match programmé.")
+        st.info("Aucun match programme.")
 
 # ------------------------------------------
-# ONGLET 3 : ANALYSE COMPLETE (CORNERS + CARTONS)
+# ONGLET 3 : ANALYSE COMPLETE
 # ------------------------------------------
 with tab_detail:
-    st.subheader("Analyse Master : Ligue des Champions & Championnats (Multidimensionnel)")
+    st.subheader("Analyse Master : Ligue des Champions & Championnats")
     if upcoming_matches or all_matches:
         match_options = {f"{m['utcDate'][:10]} : {m['homeTeam']['name']} vs {m['awayTeam']['name']}": m for m in (upcoming_matches if upcoming_matches else all_matches[:10])}
-        selected_label = st.selectbox("Sélectionner la rencontre :", list(match_options.keys()))
+        selected_label = st.selectbox("Selectionner la rencontre :", list(match_options.keys()))
         selected_m = match_options[selected_label]
         
         ht, at = selected_m['homeTeam']['name'], selected_m['awayTeam']['name']
-        book_odds = st.number_input("Cote proposée par le bookmaker :", value=1.70, step=0.05)
+        book_odds = st.number_input("Cote proposee par le bookmaker :", value=1.70, step=0.05)
         
         res = run_quant_prediction_v41(ht, at, 0, 0, 0, team_stats, avg_goals_h, avg_goals_a, False, post_break_mode, user_bankroll, book_odds, weather_condition)
         
@@ -503,28 +500,28 @@ with tab_detail:
 
         st.markdown(f"""
         <div class="value-pick-card">
-            <div class="value-pick-title">💎 CONSEIL PRINCIPAL SOLIDE</div>
+            <div class="value-pick-title">CONSEIL PRINCIPAL SOLIDE</div>
             <div class="value-pick-main">{res['best_pick']}</div>
-            <div style="font-size:1.1rem; font-weight:800;">Probabilité : {res['best_prob']}% | EV+ : {res['ev_value']:+.1f}% | Mise Kelly : {res['kelly_stake']} $</div>
+            <div style="font-size:1.1rem; font-weight:800;">Probabilite : {res['best_prob']}% | EV+ : {res['ev_value']:+.1f}% | Mise Kelly : {res['kelly_stake']} $</div>
         </div>
         """, unsafe_allow_html=True)
 
-        st.markdown("### ⛳ & 🟨 STATISTIQUES CORNERS & CARTONS JAUNES")
+        st.markdown("### STATISTIQUES CORNERS & CARTONS JAUNES")
         c1, c2, c3, c4 = st.columns(4)
-        with c1: st.markdown(f"""<div class="sub-card"><b>⛳ CORNERS ATTENDUS</b><h3 style="color:#38BDF8; margin:5px 0;">~{res['corners']}</h3></div>""", unsafe_allow_html=True)
-        with c2: st.markdown(f"""<div class="sub-card"><b>⛳ +8.5 CORNERS</b><h3 style="color:#10B981; margin:5px 0;">{res['prob_c85']}%</h3></div>""", unsafe_allow_html=True)
-        with c3: st.markdown(f"""<div class="sub-card"><b>🟨 CARTONS ATTENDUS</b><h3 style="color:#F59E0B; margin:5px 0;">~{res['cards']}</h3></div>""", unsafe_allow_html=True)
-        with c4: st.markdown(f"""<div class="sub-card"><b>🟨 +3.5 CARTONS</b><h3 style="color:#EF4444; margin:5px 0;">{res['prob_cards35']}%</h3></div>""", unsafe_allow_html=True)
+        with c1: st.markdown(f"""<div class="sub-card"><b>CORNERS ATTENDUS</b><h3 style="color:#38BDF8; margin:5px 0;">~{res['corners']}</h3></div>""", unsafe_allow_html=True)
+        with c2: st.markdown(f"""<div class="sub-card"><b>+8.5 CORNERS</b><h3 style="color:#10B981; margin:5px 0;">{res['prob_c85']}%</h3></div>""", unsafe_allow_html=True)
+        with c3: st.markdown(f"""<div class="sub-card"><b>CARTONS ATTENDUS</b><h3 style="color:#F59E0B; margin:5px 0;">~{res['cards']}</h3></div>""", unsafe_allow_html=True)
+        with c4: st.markdown(f"""<div class="sub-card"><b>+3.5 CARTONS</b><h3 style="color:#EF4444; margin:5px 0;">{res['prob_cards35']}%</h3></div>""", unsafe_allow_html=True)
 
-        st.markdown("### 🏆 TOP 3 SCORES EXACTS PROBABLES")
+        st.markdown("### TOP 3 SCORES EXACTS PROBABLES")
         sc1, sc2, sc3 = st.columns(3)
         with sc1: st.markdown(f"""<div class="big-score-box"><b>1er SCORE</b><div class="big-score-val">{res['top_3_scores'][0]['score']}</div><div class="big-score-prob">{res['top_3_scores'][0]['prob']}%</div></div>""", unsafe_allow_html=True)
-        with sc2: st.markdown(f"""<div class="big-score-box"><b>2ème SCORE</b><div class="big-score-val">{res['top_3_scores'][1]['score']}</div><div class="big-score-prob">{res['top_3_scores'][1]['prob']}%</div></div>""", unsafe_allow_html=True)
-        with sc3: st.markdown(f"""<div class="big-score-box"><b>3ème SCORE</b><div class="big-score-val">{res['top_3_scores'][2]['score']}</div><div class="big-score-prob">{res['top_3_scores'][2]['prob']}%</div></div>""", unsafe_allow_html=True)
+        with sc2: st.markdown(f"""<div class="big-score-box"><b>2eme SCORE</b><div class="big-score-val">{res['top_3_scores'][1]['score']}</div><div class="big-score-prob">{res['top_3_scores'][1]['prob']}%</div></div>""", unsafe_allow_html=True)
+        with sc3: st.markdown(f"""<div class="big-score-box"><b>3eme SCORE</b><div class="big-score-val">{res['top_3_scores'][2]['score']}</div><div class="big-score-prob">{res['top_3_scores'][2]['prob']}%</div></div>""", unsafe_allow_html=True)
 
         st.divider()
-        st.markdown("### 📢 FICHE TÉLÉGRAM VIP PRÊTE")
-        telegram_card = f"👑 **RAPPORT APEX QUANT LDC (v41.0)** ⚡\n\n⚽ **Match** : {ht} vs {at}\n🎯 **Conseil Clé** : {res['best_pick']} ({res['best_prob']}%)\n⛳ **Corners** : ~{res['corners']} (+8.5 à {res['prob_c85']}%)\n🟨 **Cartons** : ~{res['cards']} (+3.5 à {res['prob_cards35']}%)\n🏆 **Top Score** : {res['top_3_scores'][0]['score']}\n💰 **Mise Kelly** : {res['kelly_stake']} $"
+        st.markdown("### FICHE TELEGRAM VIP PRETE")
+        telegram_card = f"RAPPORT APEX QUANT LDC (v41.1)\n\nMatch : {ht} vs {at}\nConseil Cle : {res['best_pick']} ({res['best_prob']}%)\nCorners : ~{res['corners']} (+8.5 a {res['prob_c85']}%)\nCartons : ~{res['cards']} (+3.5 a {res['prob_cards35']}%)\nTop Score : {res['top_3_scores'][0]['score']}\nMise Kelly : {res['kelly_stake']} $"
         st.code(telegram_card, language="text")
 
 # ------------------------------------------
@@ -533,7 +530,7 @@ with tab_detail:
 with tab_audit:
     st.markdown("""
     <div class="vip-banner">
-        <h2 style="margin:0; color:#F59E0B;">👑 AUDIT & BANQUE VIP</h2>
+        <h2 style="margin:0; color:#F59E0B;">AUDIT & BANQUE VIP</h2>
     </div>
     """, unsafe_allow_html=True)
     if finished_matches:
@@ -548,14 +545,14 @@ with tab_audit:
                 ptype = pred['pick_type']
                 tot_goals = rh + ra
                 pick_hit = (ptype == "1X" and rh >= ra) or (ptype == "X2" and ra >= rh) or (ptype == "O15" and tot_goals > 1) or (ptype == "O25" and tot_goals > 2) or (ptype == "HOME_WIN" and rh > ra) or (ptype == "AWAY_WIN" and ra > rh)
-                eval_status = "✅ GAGNÉ" if pick_hit else "❌ PERDU"
+                eval_status = "GAGNE" if pick_hit else "PERDU"
                 if pick_hit:
                     success_pick_count += 1
                     net_units += 10.0 * (pred['actual_odds'] - 1.0)
                 else:
                     net_units -= 10.0
                 total_eval += 1
-                audit_rows.append({"Date": m['utcDate'][:10], "Rencontre": f"{ht} vs {at}", "Score Réel": real_score_str, "Conseil": pred['best_pick'], "Statut": eval_status})
+                audit_rows.append({"Date": m['utcDate'][:10], "Rencontre": f"{ht} vs {at}", "Score Reel": real_score_str, "Conseil": pred['best_pick'], "Statut": eval_status})
         if total_eval > 0:
             winrate_pick = round((success_pick_count / total_eval) * 100, 1)
             roi = round((net_units / (total_eval * 10.0)) * 100, 1)
@@ -566,17 +563,17 @@ with tab_audit:
             st.dataframe(pd.DataFrame(audit_rows), use_container_width=True, hide_index=True)
 
 # ------------------------------------------
-# ONGLET 5 : MARMITE HAUTE COTE (PETITE MISE / GROS GAINS)
+# ONGLET 5 : MARMITE HAUTE COTE
 # ------------------------------------------
 with tab_coupon:
-    st.subheader("🔥 Générateur Spécial 'Grosse Cote' (Multi-Marchés : Buts + Corners + Issue)")
-    with st.spinner("Optimisation des combinés à forte valeur..."):
+    st.subheader("Generateur Special Grosse Cote (Multi-Marches)")
+    with st.spinner("Optimisation des combines a forte valeur..."):
         all_multi, multi_stats, multi_avg_h, multi_avg_a = get_all_competitions_upcoming()
     
     if len(all_multi) >= 3:
         dates_dict = {}
         for m in all_multi: dates_dict.setdefault(m['utcDate'][:10], []).append(m)
-        sel_date = st.selectbox("Sélectionner la date du ticket :", sorted(list(dates_dict.keys())))
+        sel_date = st.selectbox("Selectionner la date du ticket :", sorted(list(dates_dict.keys())))
         pool = dates_dict.get(sel_date, []) if len(dates_dict.get(sel_date, [])) >= 3 else all_multi
         
         analyzed = []
@@ -599,19 +596,18 @@ with tab_coupon:
         
         st.markdown(f"""
         <div class="vip-banner">
-            <h2 style="margin:0; color:#F59E0B;">🚀 MARMITE VIP HAUTE COTE ({sel_date})</h2>
-            <div style="font-size:1.8rem; font-weight:900; color:#FFFFFF; margin-top:8px;">Cote Totale Estimée : <span style="color:#38BDF8;">{total_odds:.2f}</span></div>
-            <div style="font-size:1rem; color:#A7F3D0; margin-top:4px;">🎯 Idéal pour les petites mises (Ex: 1000 FCFA -> ~{int(total_odds * 1000)} FCFA)</div>
+            <h2 style="margin:0; color:#F59E0B;">MARMITE VIP HAUTE COTE ({sel_date})</h2>
+            <div style="font-size:1.8rem; font-weight:900; color:#FFFFFF; margin-top:8px;">Cote Totale Estimee : <span style="color:#38BDF8;">{total_odds:.2f}</span></div>
         </div>
         """, unsafe_allow_html=True)
         
-        telegram_coupon = f"🚀 **MARMITE VIP HAUTE COTE APEX (v41.0)** 🔥\n🗓 Date : {sel_date}\n📊 Cote Totale : ~{total_odds:.2f}\n\n"
+        telegram_coupon = f"MARMITE VIP HAUTE COTE APEX (v41.1)\nDate : {sel_date}\nCote Totale : ~{total_odds:.2f}\n\n"
         for idx, leg in enumerate(coupon_marmite, 1):
             st.markdown(f"""
             <div class="sub-card">
                 <span class="badge-league">{leg['league']}</span> <b>[{leg['time']} UTC]</b>
                 <h3 style="color:#38BDF8; margin:6px 0;">{leg['match']}</h3>
-                👉 Combiné Match : <b>{leg['pick']}</b> (Cote approx: {leg['odds']}) | ⛳ Corners: ~{leg['corners']} | 🟨 Cartons: ~{leg['cards']}
+                👉 Combine Match : <b>{leg['pick']}</b> (Cote approx: {leg['odds']}) | Corners: ~{leg['corners']} | Cartons: ~{leg['cards']}
             </div>
             """, unsafe_allow_html=True)
             telegram_coupon += f"{idx}. [{leg['league']}] {leg['match']}\n   👉 {leg['pick']} (Cote: {leg['odds']})\n"
@@ -619,4 +615,4 @@ with tab_coupon:
         st.write(" ")
         st.code(telegram_coupon, language="text")
     else:
-        st.warning("Pas assez de matchs programmés pour former la marmite haute cote.")
+        st.warning("Pas assez de matchs programmes pour former la marmite haute cote.")
