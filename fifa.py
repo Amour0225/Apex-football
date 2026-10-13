@@ -6,10 +6,10 @@ import pandas as pd
 from datetime import datetime, timedelta
 
 # ==========================================
-# 1. CONFIGURATION & DESIGN V40.0
+# 1. CONFIGURATION & DESIGN V40.1
 # ==========================================
 st.set_page_config(
-    page_title="Apex Quant v40.0 - Balanced Institutional Engine",
+    page_title="Apex Quant v40.1 - Balanced Institutional Engine",
     page_icon="👑",
     layout="wide"
 )
@@ -220,7 +220,7 @@ def get_all_competitions_upcoming():
     return all_upcoming, league_stats_dict, league_avg_h_dict, league_avg_a_dict
 
 # ==========================================
-# 3. MOTEUR ÉQUILIBRÉ (V40.0)
+# 3. MOTEUR ÉQUILIBRÉ (V40.1)
 # ==========================================
 def dixon_coles_adjustment(x, y, h_xg, a_xg, rho=-0.08):
     if x == 0 and y == 0: return max(0.01, 1.0 - (h_xg * a_xg * rho))
@@ -257,7 +257,7 @@ def generate_balanced_report(h_name, a_name, h_stat, a_stat, full_h_xg, full_a_x
     h_history = format_last_4_summary(h_stat.get('last_4', []))
     a_history = format_last_4_summary(a_stat.get('last_4', []))
     
-    report = f"👑 **Rapport Équilibré Apex (v40.0)** :<br>"
+    report = f"👑 **Rapport Équilibré Apex (v40.1)** :<br>"
     report += f"• 🏠 **Dynamique Récente {h_name}** : {h_history}<br>"
     report += f"• ✈️ **Dynamique Récente {a_name}** : {a_history}<br>"
     report += f"• 📊 **Modèle Quant & xG Ajustés** : xG Domicile = <b>{full_h_xg:.2f}</b> | xG Extérieur = <b>{full_a_xg:.2f}</b> (Météo : <i>{weather_mode}</i>).<br>"
@@ -345,10 +345,6 @@ def run_quant_prediction_v40(h_name, a_name, score_h=0, score_a=0, elapsed_min=0
 
     threshold_dc = 70.0 if post_break_active else 67.0
 
-    # ==========================================
-    # HIERARCHIE ÉQUILIBRÉE (PRIORITÉ 1 : 1X2 / DOUBLE CHANCE SOLIDE)
-    # SI LE MATCH EST INCERTAIN -> SMART FALLBACK SUR LES BUTS
-    # ==========================================
     if is_live:
         if prob_o15 >= 65.0:
             best_pick = "⚡ En Direct : +1 But supplémentaire"
@@ -373,7 +369,6 @@ def run_quant_prediction_v40(h_name, a_name, score_h=0, score_a=0, elapsed_min=0
             best_prob = round(max(p_h, p_a), 1)
             pick_type = "HOME_WIN" if p_h > p_a else "AWAY_WIN"
         else:
-            # Smart Fallback (Match serré / incertain -> Bascule sur les buts)
             if prob_o25 >= 60.0:
                 best_pick = "🔥 Plus de 2.5 Buts (Smart Fallback Ouvert)"
                 best_prob = prob_o25
@@ -407,7 +402,7 @@ def run_quant_prediction_v40(h_name, a_name, score_h=0, score_a=0, elapsed_min=0
 # ==========================================
 # 4. INTERFACE STREAMLIT (5 ONGLETS)
 # ==========================================
-st.sidebar.title("Apex Quant v40.0 👑")
+st.sidebar.title("Apex Quant v40.1 👑")
 selected_comp = st.sidebar.selectbox("Compétition Principale", list(COMPETITIONS.keys()))
 
 st.sidebar.divider()
@@ -440,7 +435,8 @@ for m in all_matches:
             except Exception:
                 upcoming_matches.append(m)
 
-finished_matches = [m for m in all_matches if m.get('status'] == 'FINISHED']
+# CORRECTION DE LA LIGNE 443 (FERMETURE DE PARENTHÈSE CORRECTE)
+finished_matches = [m for m in all_matches if m.get('status') == 'FINISHED']
 
 tab_live, tab_calendar, tab_detail, tab_audit, tab_coupon = st.tabs([
     f"🔴 EN DIRECT ({len(live_matches)})",
@@ -533,7 +529,7 @@ with tab_detail:
 
         st.divider()
         st.markdown("### 📢 FICHE TÉLÉGRAM VIP PRÊTE")
-        telegram_card = f"👑 **RAPPORT APEX QUANT (v40.0)** ⚡\n\n⚽ **Match** : {ht} vs {at}\n🎯 **Conseil Clé** : {res['best_pick']} ({res['best_prob']}%)\n📊 **Valeur EV+** : +{res['ev_value']}%\n🏆 **Top Scores** : 1️⃣ {res['top_3_scores'][0]['score']} | 2️⃣ {res['top_3_scores'][1]['score']} | 3️⃣ {res['top_3_scores'][2]['score']}\n💰 **Mise Kelly** : {res['kelly_stake']} $"
+        telegram_card = f"👑 **RAPPORT APEX QUANT (v40.1)** ⚡\n\n⚽ **Match** : {ht} vs {at}\n🎯 **Conseil Clé** : {res['best_pick']} ({res['best_prob']}%)\n📊 **Valeur EV+** : +{res['ev_value']}%\n🏆 **Top Scores** : 1️⃣ {res['top_3_scores'][0]['score']} | 2️⃣ {res['top_3_scores'][1]['score']} | 3️⃣ {res['top_3_scores'][2]['score']}\n💰 **Mise Kelly** : {res['kelly_stake']} $"
         st.code(telegram_card, language="text")
 
 # ------------------------------------------
@@ -639,7 +635,7 @@ with tab_coupon:
         </div>
         """, unsafe_allow_html=True)
         
-        telegram_coupon = f"👑 **COMBINÉ VIP OR (APEX QUANT v40.0)** ⚡\n🗓 Date : {sel_date}\n📊 Cote Totale : {total_odds:.2f} | Fiabilité : {avg_conf:.1f}%\n\n"
+        telegram_coupon = f"👑 **COMBINÉ VIP OR (APEX QUANT v40.1)** ⚡\n🗓 Date : {sel_date}\n📊 Cote Totale : {total_odds:.2f} | Fiabilité : {avg_conf:.1f}%\n\n"
         for idx, leg in enumerate(coupon_4_5, 1):
             st.markdown(f"""
             <div class="sub-card">
