@@ -6,10 +6,10 @@ import pandas as pd
 from datetime import datetime, timedelta
 
 # ==========================================
-# 1. CONFIGURATION & DESIGN V37.0
+# 1. CONFIGURATION & DESIGN V39.0
 # ==========================================
 st.set_page_config(
-    page_title="Apex Quant v37.0 - Master Synthesis Engine",
+    page_title="Apex Quant v39.0 - Institutional Engine",
     page_icon="👑",
     layout="wide"
 )
@@ -57,7 +57,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 2. API & EXTRACTION DES DONNÉES SYNTHÉTIQUES
+# 2. API & CONNEXION DES DONNÉES
 # ==========================================
 API_KEY = "1e9518e7585349f9abe6d5a29ddb83b1"
 BASE_URL = "https://api.football-data.org/v4/"
@@ -220,7 +220,7 @@ def get_all_competitions_upcoming():
     return all_upcoming, league_stats_dict, league_avg_h_dict, league_avg_a_dict
 
 # ==========================================
-# 3. MOTEUR MATHÉMATIQUE SYNTHÉTIQUE (V37.0)
+# 3. MOTEUR INSTITUTIONNEL (V39.0)
 # ==========================================
 def dixon_coles_adjustment(x, y, h_xg, a_xg, rho=-0.08):
     if x == 0 and y == 0: return max(0.01, 1.0 - (h_xg * a_xg * rho))
@@ -253,19 +253,19 @@ def format_last_4_summary(last_4_list):
         res_str.append(f"{icon} {item['venue']} vs {item['opponent']} ({item['score']})")
     return " | ".join(res_str)
 
-def generate_master_synthesis_report(h_name, a_name, h_stat, a_stat, full_h_xg, full_a_xg, p_h, p_n, p_a, prob_o15, prob_o25, exp_corners):
+def generate_institutional_report(h_name, a_name, h_stat, a_stat, full_h_xg, full_a_xg, p_h, p_n, p_a, prob_o15, prob_o25, exp_corners, weather_mode, ev_val):
     h_history = format_last_4_summary(h_stat.get('last_4', []))
     a_history = format_last_4_summary(a_stat.get('last_4', []))
     
-    report = f"👑 **Rapport de Synthèse Master Apex (v37.0)** :<br>"
+    report = f"👑 **Rapport Institutionnel Apex (v39.0)** :<br>"
     report += f"• 🏠 **Dynamique Récente {h_name}** : {h_history}<br>"
     report += f"• ✈️ **Dynamique Récente {a_name}** : {a_history}<br>"
-    report += f"• 📊 **Modèle Quant & xG Global** : xG Domicile = <b>{full_h_xg:.2f}</b> | xG Extérieur = <b>{full_a_xg:.2f}</b> (Écart ELO : <code>{h_stat['elo'] - a_stat['elo']:+.0f} pts</code>).<br>"
-    report += f"• ⚽ **Indicateurs Buts & Rythme** : Over 1.5 estimé à <b>{prob_o15}%</b> | Over 2.5 à <b>{prob_o25}%</b> | Volume Corners Attendu : ~<b>{exp_corners}</b>.<br>"
+    report += f"• 📊 **Modèle Quant & xG Ajustés** : xG Domicile = <b>{full_h_xg:.2f}</b> | xG Extérieur = <b>{full_a_xg:.2f}</b> (Météo : <i>{weather_mode}</i>).<br>"
+    report += f"• 💰 **Indicateur de Valeur (EV+)** : Taux de surcote estimé à <b>{ev_val:+.1f}%</b> par rapport au marché.<br>"
     report += f"• ⚖️ **Probabilités Matrice 1X2** : {h_name} ({p_h:.1f}%) | Nul ({p_n:.1f}%) | {a_name} ({p_a:.1f}%)."
     return report
 
-def run_quant_prediction_v37(h_name, a_name, score_h=0, score_a=0, elapsed_min=0, team_stats={}, avg_goals_h=1.45, avg_goals_a=1.15, is_live=False, post_break_active=False, bankroll=1000.0, book_odds_input=None):
+def run_quant_prediction_v39(h_name, a_name, score_h=0, score_a=0, elapsed_min=0, team_stats={}, avg_goals_h=1.45, avg_goals_a=1.15, is_live=False, post_break_active=False, bankroll=1000.0, book_odds_input=None, weather_mode="Normal (Idéal)"):
     default_stat = {
         "played": 10, "pts": 15, "gf": 12, "ga": 12,
         "home_gf_pg": 1.45, "home_ga_pg": 1.10, "away_gf_pg": 1.15, "away_ga_pg": 1.35,
@@ -284,6 +284,13 @@ def run_quant_prediction_v37(h_name, a_name, score_h=0, score_a=0, elapsed_min=0
     raw_h_xg = att_h * def_a * avg_goals_h
     raw_a_xg = att_a * def_h * avg_goals_a
     
+    # Facteur Météo et Pelouse
+    weather_multiplier = 1.0
+    if "Pluie" in weather_mode or "Lourd" in weather_mode:
+        weather_multiplier = 0.88 # Ralentit le jeu, réduit légèrement les buts
+    elif "Canicule" in weather_mode:
+        weather_multiplier = 0.92 # Baisse d'intensité physique
+        
     elo_diff = h_stat["elo"] - a_stat["elo"]
     elo_mult_h = np.clip(1.0 + (elo_diff / 1100.0), 0.60, 1.45)
     elo_mult_a = np.clip(1.0 - (elo_diff / 1100.0), 0.60, 1.45)
@@ -297,8 +304,8 @@ def run_quant_prediction_v37(h_name, a_name, score_h=0, score_a=0, elapsed_min=0
         effective_form_a = a_stat["form_factor"]
         dampener = 1.0
 
-    full_h_xg = float(np.clip(raw_h_xg * elo_mult_h * effective_form_h * dampener, 0.25, 3.80))
-    full_a_xg = float(np.clip(raw_a_xg * elo_mult_a * effective_form_a * dampener, 0.25, 3.20))
+    full_h_xg = float(np.clip(raw_h_xg * elo_mult_h * effective_form_h * dampener * weather_multiplier, 0.25, 3.80))
+    full_a_xg = float(np.clip(raw_a_xg * elo_mult_a * effective_form_a * dampener * weather_multiplier, 0.25, 3.20))
 
     rem_factor = max(0.05, (90.0 - float(elapsed_min)) / 90.0) if is_live and elapsed_min > 0 else 1.0
     rem_h_xg = full_h_xg * rem_factor
@@ -334,6 +341,7 @@ def run_quant_prediction_v37(h_name, a_name, score_h=0, score_a=0, elapsed_min=0
 
     prob_o15 = round((1.0 - (matrix[0,0] + matrix[1,0] + matrix[0,1])) * 100, 1)
     prob_o25 = round((1.0 - np.sum([matrix[i,j] for i in range(3) for j in range(3) if i+j <= 2])) * 100, 1)
+    prob_u35 = round(np.sum([matrix[i,j] for i in range(4) for j in range(4) if i+j <= 3]) * 100, 1)
 
     attack_drive = (full_h_xg + full_a_xg) / 2.3
     exp_corners = round(np.clip(((h_stat["corner_rate"] + a_stat["corner_rate"]) * attack_drive * tenacity_index * 0.88) * rem_factor, 2.5, 16.0), 1)
@@ -341,7 +349,7 @@ def run_quant_prediction_v37(h_name, a_name, score_h=0, score_a=0, elapsed_min=0
     threshold_dc = 72.0 if post_break_active else 69.0
 
     # ==========================================
-    # RÈGLE D'OR : CONSEILS PRINCIPAUX SOLIDES ET ROYAUX (PAS DE MARCHÉS SECONDAIRES LOUCHES)
+    # SMART FALLBACK (SANS AUCUN "NO-BET")
     # ==========================================
     if is_live:
         if prob_o15 >= 65.0:
@@ -353,8 +361,15 @@ def run_quant_prediction_v37(h_name, a_name, score_h=0, score_a=0, elapsed_min=0
             best_prob = round(100.0 - prob_o15, 1)
             pick_type = "LIVE_STABLE"
     else:
-        # Priorité aux options majeures de pro : Double Chance VIP ou Victoire / Over 1.5 combiné
-        if (p_h + p_n) >= threshold_dc:
+        if prob_o15 >= 78.0:
+            best_pick = "⚽ Plus de 1.5 Buts au Total (Smart Fallback Buts)"
+            best_prob = prob_o15
+            pick_type = "O15"
+        elif prob_u35 >= 82.0:
+            best_pick = "🛡️ Moins de 3.5 Buts au Total (Smart Fallback Fermé)"
+            best_prob = prob_u35
+            pick_type = "U35"
+        elif (p_h + p_n) >= threshold_dc:
             best_pick = f"🛡️ Double Chance VIP : {h_name} ou Nul (1X)"
             best_prob = round(p_h + p_n, 1)
             pick_type = "1X"
@@ -362,11 +377,7 @@ def run_quant_prediction_v37(h_name, a_name, score_h=0, score_a=0, elapsed_min=0
             best_pick = f"🛡️ Double Chance VIP : Nul ou {a_name} (X2)"
             best_prob = round(p_a + p_n, 1)
             pick_type = "X2"
-        elif prob_o15 >= 75.0:
-            best_pick = "⚽ Plus de 1.5 Buts au Total (Sécurité Match Ouvert)"
-            best_prob = prob_o15
-            pick_type = "O15"
-        elif prob_o25 >= 62.0:
+        elif prob_o25 >= 65.0:
             best_pick = "🔥 Plus de 2.5 Buts (Tendance Offensive Forte)"
             best_prob = prob_o25
             pick_type = "O25"
@@ -380,12 +391,12 @@ def run_quant_prediction_v37(h_name, a_name, score_h=0, score_a=0, elapsed_min=0
     actual_odds = book_odds_input if book_odds_input else round(model_odds * 1.08, 2)
     kelly_stake, ev_value = calculate_kelly(best_prob, actual_odds, bankroll)
     
-    analysis_text = generate_master_synthesis_report(h_name, a_name, h_stat, a_stat, full_h_xg, full_a_xg, p_h, p_n, p_a, prob_o15, prob_o25, exp_corners)
+    analysis_text = generate_institutional_report(h_name, a_name, h_stat, a_stat, full_h_xg, full_a_xg, p_h, p_n, p_a, prob_o15, prob_o25, exp_corners, weather_mode, ev_value)
 
     return {
         "p_h": round(p_h, 1), "p_n": round(p_n, 1), "p_a": round(p_a, 1),
         "top_3_scores": top_3_scores,
-        "prob_o15": prob_o15, "prob_o25": prob_o25,
+        "prob_o15": prob_o15, "prob_o25": prob_o25, "prob_u35": prob_u35,
         "best_pick": best_pick, "best_prob": best_prob, "pick_type": pick_type,
         "model_odds": model_odds, "actual_odds": actual_odds,
         "kelly_stake": kelly_stake, "ev_value": ev_value,
@@ -396,13 +407,17 @@ def run_quant_prediction_v37(h_name, a_name, score_h=0, score_a=0, elapsed_min=0
 # ==========================================
 # 4. INTERFACE STREAMLIT (5 ONGLETS)
 # ==========================================
-st.sidebar.title("Apex Quant v37.0 👑")
+st.sidebar.title("Apex Quant v39.0 👑")
 selected_comp = st.sidebar.selectbox("Compétition Principale", list(COMPETITIONS.keys()))
+
+st.sidebar.divider()
+st.sidebar.markdown("### ⚙️ PARAMÈTRES AVANCÉS INSTITUTIONNELS")
+weather_condition = st.sidebar.selectbox("État Météo / Pelouse", ["Normal (Idéal)", "Pluie / Terrain Lourd", "Canicule / Chaleur Intense"])
+post_break_mode = st.sidebar.checkbox("🔒 Filtre Post-Trêve Internationale", value=True)
 
 st.sidebar.divider()
 st.sidebar.markdown("### 💰 GESTION DE BANKROLL KELLY")
 user_bankroll = st.sidebar.number_input("Bankroll Totale ($ / FCFA)", value=1000.0, step=50.0)
-post_break_mode = st.sidebar.checkbox("🔒 Filtre Post-Trêve Internationale", value=True)
 
 league_code = COMPETITIONS[selected_comp]
 team_stats, avg_goals_h, avg_goals_a = get_advanced_league_stats(league_code)
@@ -447,11 +462,11 @@ with tab_live:
             score_h = score_obj.get('home', 0) if score_obj.get('home') is not None else 0
             score_a = score_obj.get('away', 0) if score_obj.get('away') is not None else 0
             
-            res_live = run_quant_prediction_v37(ht, at, score_h, score_a, 55, team_stats, avg_goals_h, avg_goals_a, True, post_break_mode, user_bankroll)
+            res_live = run_quant_prediction_v39(ht, at, score_h, score_a, 55, team_stats, avg_goals_h, avg_goals_a, True, post_break_mode, user_bankroll, None, weather_condition)
             
             st.markdown(f"""
             <div class="hedge-card">
-                <span class="badge-live">LIVE MASTER (55') — {score_h} - {score_a}</span>
+                <span class="badge-live">LIVE INSTITUTIONNEL (55') — {score_h} - {score_a}</span>
                 <h2 style="color:#38BDF8; margin:10px 0 5px 0;">{ht} vs {at}</h2>
                 <div class="analysis-report">{res_live['analysis_text']}</div>
             </div>
@@ -469,7 +484,7 @@ with tab_calendar:
         cal_data = []
         for m in upcoming_matches:
             ht, at = m['homeTeam']['name'], m['awayTeam']['name']
-            pred = run_quant_prediction_v37(ht, at, 0, 0, 0, team_stats, avg_goals_h, avg_goals_a, False, post_break_mode, user_bankroll)
+            pred = run_quant_prediction_v39(ht, at, 0, 0, 0, team_stats, avg_goals_h, avg_goals_a, False, post_break_mode, user_bankroll, None, weather_condition)
             cal_data.append({
                 "Date": m['utcDate'][:10] + " [" + m['utcDate'][11:16] + "]",
                 "Match": f"{ht} vs {at}",
@@ -484,7 +499,7 @@ with tab_calendar:
 # ONGLET 3 : SYNTHÈSE MASTER & ANALYSE 4 MATCHS
 # ------------------------------------------
 with tab_detail:
-    st.subheader("Synthèse Avancée : Historique des 4 Matchs + Modèle Quant & Buts")
+    st.subheader("Synthèse Avancée : Historique des 4 Matchs + Modèle Quant & Valeur EV+")
     if upcoming_matches or all_matches:
         match_options = {f"{m['utcDate'][:10]} : {m['homeTeam']['name']} vs {m['awayTeam']['name']}": m for m in (upcoming_matches if upcoming_matches else all_matches[:10])}
         selected_label = st.selectbox("Sélectionner la rencontre :", list(match_options.keys()))
@@ -493,7 +508,7 @@ with tab_detail:
         ht, at = selected_m['homeTeam']['name'], selected_m['awayTeam']['name']
         book_odds = st.number_input("Cote proposée par le bookmaker :", value=1.70, step=0.05)
         
-        res = run_quant_prediction_v37(ht, at, 0, 0, 0, team_stats, avg_goals_h, avg_goals_a, False, post_break_mode, user_bankroll, book_odds)
+        res = run_quant_prediction_v39(ht, at, 0, 0, 0, team_stats, avg_goals_h, avg_goals_a, False, post_break_mode, user_bankroll, book_odds, weather_condition)
         
         st.markdown(f"""
         <div class="hedge-card">
@@ -504,7 +519,7 @@ with tab_detail:
 
         st.markdown(f"""
         <div class="value-pick-card">
-            <div class="value-pick-title">💎 CONSEIL VIP MASTER RECOMMANDÉ</div>
+            <div class="value-pick-title">💎 CONSEIL VIP INSTITUTIONNEL RECOMMANDÉ</div>
             <div class="value-pick-main">{res['best_pick']}</div>
             <div style="font-size:1.1rem; font-weight:800;">Probabilité : {res['best_prob']}% | EV+ : {res['ev_value']:+.1f}% | Mise Kelly : {res['kelly_stake']} $</div>
         </div>
@@ -518,7 +533,7 @@ with tab_detail:
 
         st.divider()
         st.markdown("### 📢 FICHE TÉLÉGRAM VIP PRÊTE")
-        telegram_card = f"👑 **RAPPORT MASTER APEX (v37.0)** ⚡\n\n⚽ **Match** : {ht} vs {at}\n🎯 **Conseil Clé** : {res['best_pick']} ({res['best_prob']}%)\n📊 **Buts** : +1.5 ({res['prob_o15']}%) | +2.5 ({res['prob_o25']}%)\n🏆 **Top Scores** : 1️⃣ {res['top_3_scores'][0]['score']} | 2️⃣ {res['top_3_scores'][1]['score']} | 3️⃣ {res['top_3_scores'][2]['score']}\n💰 **Mise Kelly** : {res['kelly_stake']} $"
+        telegram_card = f"👑 **RAPPORT APEX QUANT (v39.0)** ⚡\n\n⚽ **Match** : {ht} vs {at}\n🎯 **Conseil Clé** : {res['best_pick']} ({res['best_prob']}%)\n📊 **Valeur EV+** : +{res['ev_value']}%\n🏆 **Top Scores** : 1️⃣ {res['top_3_scores'][0]['score']} | 2️⃣ {res['top_3_scores'][1]['score']} | 3️⃣ {res['top_3_scores'][2]['score']}\n💰 **Mise Kelly** : {res['kelly_stake']} $"
         st.code(telegram_card, language="text")
 
 # ------------------------------------------
@@ -542,11 +557,11 @@ with tab_audit:
             
             if rh is not None and ra is not None:
                 real_score_str = f"{rh}-{ra}"
-                pred = run_quant_prediction_v37(ht, at, 0, 0, 0, team_stats, avg_goals_h, avg_goals_a, False, False, user_bankroll)
+                pred = run_quant_prediction_v39(ht, at, 0, 0, 0, team_stats, avg_goals_h, avg_goals_a, False, False, user_bankroll, None, weather_condition)
                 
                 ptype = pred['pick_type']
                 tot_goals = rh + ra
-                pick_hit = (ptype == "1X" and rh >= ra) or (ptype == "X2" and ra >= rh) or (ptype == "O15" and tot_goals > 1) or (ptype == "O25" and tot_goals > 2) or (ptype == "HOME_WIN" and rh > ra) or (ptype == "AWAY_WIN" and ra > rh)
+                pick_hit = (ptype == "1X" and rh >= ra) or (ptype == "X2" and ra >= rh) or (ptype == "O15" and tot_goals > 1) or (ptype == "O25" and tot_goals > 2) or (ptype == "U35" and tot_goals < 4) or (ptype == "HOME_WIN" and rh > ra) or (ptype == "AWAY_WIN" and ra > rh)
                 
                 if pick_hit:
                     success_pick_count += 1
@@ -597,12 +612,12 @@ with tab_coupon:
         for m in pool:
             lg = m['league_name']
             ht, at = m['homeTeam']['name'], m['awayTeam']['name']
-            pred = run_quant_prediction_v37(
+            pred = run_quant_prediction_v39(
                 ht, at, 0, 0, 0, 
                 multi_stats.get(lg, {}), 
                 multi_avg_h.get(lg, 1.45), 
                 multi_avg_a.get(lg, 1.15), 
-                False, post_break_mode, user_bankroll
+                False, post_break_mode, user_bankroll, None, weather_condition
             )
             analyzed.append({
                 "league": lg, "match": f"{ht} vs {at}", "time": m['utcDate'][11:16],
@@ -624,7 +639,7 @@ with tab_coupon:
         </div>
         """, unsafe_allow_html=True)
         
-        telegram_coupon = f"👑 **COMBINÉ VIP OR (APEX QUANT v37.0)** ⚡\n🗓 Date : {sel_date}\n📊 Cote Totale : {total_odds:.2f} | Fiabilité : {avg_conf:.1f}%\n\n"
+        telegram_coupon = f"👑 **COMBINÉ VIP OR (APEX QUANT v39.0)** ⚡\n🗓 Date : {sel_date}\n📊 Cote Totale : {total_odds:.2f} | Fiabilité : {avg_conf:.1f}%\n\n"
         for idx, leg in enumerate(coupon_4_5, 1):
             st.markdown(f"""
             <div class="sub-card">
