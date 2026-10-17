@@ -6,7 +6,7 @@ import pandas as pd
 from datetime import datetime, timedelta
 
 # ==========================================
-# 1. CONFIGURATION & DESIGN V43.0 (PRO SOFASCORE STYLE)
+# 1. CONFIGURATION & DESIGN V43.0
 # ==========================================
 st.set_page_config(
     page_title="Apex Quant v43.0 - Pro Analytics Engine",
@@ -52,28 +52,27 @@ st.markdown("""
         background-color: #1E293B; border: 2px solid #3B82F6; border-radius: 12px; padding: 15px; text-align: center;
     }
     
-    /* Heatmap Grid Style */
     .matrix-table { width: 100%; border-collapse: collapse; text-align: center; margin-top: 10px; }
     .matrix-cell { padding: 8px; border: 1px solid #1E293B; font-weight: 700; border-radius: 4px; }
     </style>
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 2. API & CACHE STRATÉGIQUE
+# 2. API & CACHE STRATEGIQUE
 # ==========================================
 API_KEY = "1e9518e7585349f9abe6d5a29ddb83b1"
 BASE_URL = "https://api.football-data.org/v4/"
 
 COMPETITIONS = {
-    "Toutes les Compétitions 🌐": "ALL",
-    "Ligue des Champions 🏆": "CL",
-    "Premier League 🦁": "PL",
-    "La Liga 🇪🇸": "PD",
-    "Ligue 1 🇫🇷": "FL1",
-    "Serie A 🇮🇹": "SA",
-    "Bundesliga 🇩🇪": "BL1",
-    "UEFA Europa League 🇪🇺": "EL",
-    "Championship 🏴󠁧󠁢󠁥󠁮󠁧󠁿": "ELC"
+    "Toutes les Competitions": "ALL",
+    "Ligue des Champions": "CL",
+    "Premier League": "PL",
+    "La Liga": "PD",
+    "Ligue 1": "FL1",
+    "Serie A": "SA",
+    "Bundesliga": "BL1",
+    "UEFA Europa League": "EL",
+    "Championship": "ELC"
 }
 
 @st.cache_data(ttl=300)
@@ -103,7 +102,6 @@ def get_team_last_4_matches_history(team_name, all_matches):
                     ga = sa if is_home else sh
                     res_char = 'W' if gf > ga else ('D' if gf == ga else 'L')
                     
-                    # Halftime scoring
                     ht_sc = m.get('score', {}).get('halfTime', {})
                     ht_gf = (ht_sc.get('home', 0) if is_home else ht_sc.get('away', 0)) or 0
                     ht_ga = (ht_sc.get('away', 0) if is_home else ht_sc.get('home', 0)) or 0
@@ -129,10 +127,10 @@ def calculate_dynamic_momentum(last_4_list):
         if item['result'] == 'W': score_points += 3
         elif item['result'] == 'D': score_points += 1
         
-    if score_points >= 10: return 1.15, "🔥 En Pleine Confiance"
-    elif score_points >= 7: return 1.05, "✅ Stable / Positif"
-    elif score_points >= 4: return 0.92, "⚠️ Instable / En Doute"
-    else: return 0.80, "🚨 Zone de Crise Active"
+    if score_points >= 10: return 1.15, "En Pleine Confiance"
+    elif score_points >= 7: return 1.05, "Stable / Positif"
+    elif score_points >= 4: return 0.92, "Instable / En Doute"
+    else: return 0.80, "Zone de Crise Active"
 
 @st.cache_data(ttl=1800)
 def get_advanced_league_stats(league_code):
@@ -179,14 +177,10 @@ def get_advanced_league_stats(league_code):
             seed_val = sum(ord(c) for c in name)
             card_rate = float(np.clip(2.0 + (seed_val % 8) * 0.25 + (ga / played) * 0.35, 2.0, 5.5))
             corner_rate = float(np.clip(4.2 + (seed_val % 10) * 0.30 + (gf / played) * 0.55, 4.0, 8.5))
-            
-            # Module Arbitrage & Tension Indice
             aggression_index = float(np.clip((ga / played) * 1.8 + (seed_val % 5) * 0.4, 1.0, 5.0))
             
             last_4 = get_team_last_4_matches_history(name, all_comp_matches)
             mom_factor, mom_status = calculate_dynamic_momentum(last_4)
-            
-            # Dynamique Mi-temps (HT vs FT)
             ht_goals_avg = np.mean([(m['ht_gf'] + m['ht_ga']) for m in last_4]) if last_4 else 1.0
             
             stats[name] = {
@@ -271,26 +265,26 @@ def calculate_kelly(prob_pct, bookmaker_odds, bankroll, kelly_fraction=0.25, max
     return stake_amount, ev_pct
 
 def format_last_4_summary(last_4_list):
-    if not last_4_list: return "Données récentes non disponibles."
+    if not last_4_list: return "Donnees recentes non disponibles."
     res_str = []
     for item in last_4_list:
-        icon = "✅" if item['result'] == 'W' else ("🤝" if item['result'] == 'D' else "❌")
-        res_str.append(f"{icon} {item['venue']} vs {item['opponent']} ({item['score']})")
+        icon = "W" if item['result'] == 'W' else ("D" if item['result'] == 'D' else "L")
+        res_str.append(f"[{icon}] {item['venue']} vs {item['opponent']} ({item['score']})")
     return " | ".join(res_str)
 
 def generate_tactical_report(h_name, a_name, h_stat, a_stat, full_h_xg, full_a_xg, p_h, p_n, p_a, ref_strictness, red_card_risk, btts_prob, ht_ft_trend):
     h_history = format_last_4_summary(h_stat.get('last_4', []))
     a_history = format_last_4_summary(a_stat.get('last_4', []))
     
-    report = f"🔥 **Facteurs Clés Tactiques & Momentum (v43.0)** :<br>"
-    report += f"• 🏠 **{h_name}** | Momentum : <b>{h_stat['momentum_status']}</b><br>   └ Forme récente : {h_history}<br>"
-    report += f"• ✈️ **{a_name}** | Momentum : <b>{a_stat['momentum_status']}</b><br>   └ Forme récente : {a_history}<br>"
-    report += f"• 🎯 **Probabilité BTTS (Les Deux Équipes Marquent)** : <b>{btts_prob}%</b> | xG : <b>{full_h_xg:.2f}</b> - <b>{full_a_xg:.2f}</b>.<br>"
-    report += f"• 🟨 **Facteur Arbitrage & Cartons** : Profil Arbitre Strictness = <b>{ref_strictness}/5</b> | Risque Carton Rouge/Pénalty = <b>{red_card_risk}</b>.<br>"
-    report += f"• ⏱️ **Tendance Mi-temps vs Fin de Match** : <b>{ht_ft_trend}</b>."
+    report = f"<b>Facteurs Cles Tactiques & Momentum (v43.0)</b> :<br>"
+    report += f"• <b>{h_name}</b> | Momentum : <b>{h_stat['momentum_status']}</b><br>   └ Forme recente : {h_history}<br>"
+    report += f"• <b>{a_name}</b> | Momentum : <b>{a_stat['momentum_status']}</b><br>   └ Forme recente : {a_history}<br>"
+    report += f"• <b>Probabilite BTTS (Les Deux Equipes Marquent)</b> : <b>{btts_prob}%</b> | xG : <b>{full_h_xg:.2f}</b> - <b>{full_a_xg:.2f}</b>.<br>"
+    report += f"• <b>Facteur Arbitrage & Cartons</b> : Profil Arbitre Strictness = <b>{ref_strictness}/5</b> | Risque Carton Rouge/Penalty = <b>{red_card_risk}</b>.<br>"
+    report += f"• <b>Tendance Mi-temps vs Fin de Match</b> : <b>{ht_ft_trend}</b>."
     return report
 
-def run_quant_prediction_v43(h_name, a_name, score_h=0, score_a=0, elapsed_min=0, team_stats={}, avg_goals_h=1.45, avg_goals_a=1.15, is_live=False, post_break_active=False, bankroll=1000.0, book_odds_input=None, weather_mode="Normal (Idéal)", ref_strictness=3.0):
+def run_quant_prediction_v43(h_name, a_name, score_h=0, score_a=0, elapsed_min=0, team_stats={}, avg_goals_h=1.45, avg_goals_a=1.15, is_live=False, post_break_active=False, bankroll=1000.0, book_odds_input=None, weather_mode="Normal (Ideal)", ref_strictness=3.0):
     default_stat = {
         "played": 10, "pts": 15, "gf": 12, "ga": 12,
         "home_gf_pg": 1.45, "home_ga_pg": 1.10, "away_gf_pg": 1.15, "away_ga_pg": 1.35,
@@ -348,20 +342,18 @@ def run_quant_prediction_v43(h_name, a_name, score_h=0, score_a=0, elapsed_min=0
     prob_o15 = round((1.0 - (matrix[0,0] + matrix[1,0] + matrix[0,1])) * 100, 1)
     prob_o25 = round((1.0 - np.sum([matrix[i,j] for i in range(3) for j in range(3) if i+j <= 2])) * 100, 1)
     
-    # IA Anomalies : BTTS, Cartons Rouges, HT vs FT
     btts_prob = round((1.0 - np.sum(matrix[0, :]) - np.sum(matrix[:, 0]) + matrix[0,0]) * 100, 1)
     
     combined_aggression = (h_stat["aggression_index"] + a_stat["aggression_index"]) / 2.0
     cards_expected = round(np.clip(((h_stat["card_rate"] + a_stat["card_rate"]) * 0.45) * (ref_strictness / 3.0), 1.5, 7.5), 1)
-    red_card_risk = "Élevé (Derby / Tension)" if (combined_aggression >= 3.5 and ref_strictness >= 4.0) else "Modéré"
+    red_card_risk = "Eleve (Derby / Tension)" if (combined_aggression >= 3.5 and ref_strictness >= 4.0) else "Modere"
     
     exp_corners = round(np.clip(((h_stat["corner_rate"] + a_stat["corner_rate"]) * 0.90) * rem_factor, 3.5, 15.0), 1)
     prob_c85 = round((1.0 - poisson.cdf(8, exp_corners)) * 100, 1)
 
     ht_trend_val = (h_stat["ht_goals_avg"] + a_stat["ht_goals_avg"]) / 2.0
-    ht_ft_trend = "Plus de buts en 2nde Mi-Temps (2nd Half > 1st Half)" if ht_trend_val < 1.2 else "Départ Canon (1st Half > 2nd Half)"
+    ht_ft_trend = "Plus de buts en 2nde Mi-Temps" if ht_trend_val < 1.2 else "Depart Canon (1er MT)"
 
-    # Sélection Banker (100% Sécurité) vs Standard
     threshold_dc = 72.0
     if (p_h + p_n) >= threshold_dc:
         best_pick = f"Double Chance : {h_name} ou Nul (1X)"
@@ -377,7 +369,7 @@ def run_quant_prediction_v43(h_name, a_name, score_h=0, score_a=0, elapsed_min=0
         pick_type = "O15"
     elif max(p_h, p_a) >= 55.0:
         fav = h_name if p_h > p_a else a_name
-        best_pick = f"Victoire Sèche : {fav}"
+        best_pick = f"Victoire Seche : {fav}"
         best_prob = round(max(p_h, p_a), 1)
         pick_type = "HOME_WIN" if p_h > p_a else "AWAY_WIN"
     else:
@@ -411,16 +403,16 @@ def run_quant_prediction_v43(h_name, a_name, score_h=0, score_a=0, elapsed_min=0
 # ==========================================
 # 4. INTERFACE STREAMLIT
 # ==========================================
-st.sidebar.title("Apex Quant v43.0 ⚡")
-selected_comp = st.sidebar.selectbox("Compétition", list(COMPETITIONS.keys()))
+st.sidebar.title("Apex Quant v43.0")
+selected_comp = st.sidebar.selectbox("Competition", list(COMPETITIONS.keys()))
 
 st.sidebar.divider()
-st.sidebar.markdown("### 🟨 ARBITRAGE & ENVIRONNEMENT")
-referee_strict = st.sidebar.slider("Sévérité de l'Arbitre Désigné", 1.0, 5.0, 3.0, 0.5)
-weather_condition = st.sidebar.selectbox("Météo", ["Normal (Idéal)", "Pluie / Terrain Lourd", "Canicule"])
+st.sidebar.markdown("### ARBITRAGE & ENVIRONNEMENT")
+referee_strict = st.sidebar.slider("Severite de l'Arbitre Designe", 1.0, 5.0, 3.0, 0.5)
+weather_condition = st.sidebar.selectbox("Meteo", ["Normal (Ideal)", "Pluie / Terrain Lourd", "Canicule"])
 
 st.sidebar.divider()
-st.sidebar.markdown("### 💰 BANKROLL KELLY")
+st.sidebar.markdown("### BANKROLL KELLY")
 user_bankroll = st.sidebar.number_input("Bankroll ($ / FCFA)", value=1000.0, step=50.0)
 
 league_code = COMPETITIONS[selected_comp]
@@ -439,10 +431,10 @@ else:
     finished_matches = [m for m in all_m if m.get('status') == 'FINISHED']
 
 tab_live, tab_calendar, tab_detail, tab_coupons = st.tabs([
-    f"🔴 LIVE ({len(live_matches)})",
-    f"📅 CALENDRIER ({len(upcoming_matches)})", 
-    "📊 ANALYSE SOFASCORE-STYLE",
-    "🎟️ MES 2 COUPONS SURS"
+    f"LIVE ({len(live_matches)})",
+    f"CALENDRIER ({len(upcoming_matches)})", 
+    "ANALYSE SOFASCORE-STYLE",
+    "MES 2 COUPONS SURS"
 ])
 
 # ------------------------------------------
@@ -471,7 +463,7 @@ with tab_live:
 # ONGLET 2 : CALENDRIER
 # ------------------------------------------
 with tab_calendar:
-    st.subheader("Calendrier Général")
+    st.subheader("Calendrier General")
     if upcoming_matches:
         cal_data = []
         for m in upcoming_matches[:20]:
@@ -490,10 +482,10 @@ with tab_calendar:
 # ONGLET 3 : MATRICE VISUELLE SOFASCORE
 # ------------------------------------------
 with tab_detail:
-    st.subheader("Analyse Détaillée & Matrice Thermique des Scores Exacts")
+    st.subheader("Analyse Detaille & Matrice Thermique des Scores Exacts")
     if upcoming_matches:
         match_options = {f"{m['utcDate'][:10]} : {m['homeTeam']['name']} vs {m['awayTeam']['name']}": m for m in upcoming_matches[:15]}
-        selected_label = st.selectbox("Sélectionner le match :", list(match_options.keys()))
+        selected_label = st.selectbox("Selectionner le match :", list(match_options.keys()))
         selected_m = match_options[selected_label]
         
         ht, at = selected_m['homeTeam']['name'], selected_m['awayTeam']['name']
@@ -506,7 +498,7 @@ with tab_detail:
         </div>
         """, unsafe_allow_html=True)
 
-        st.markdown("### 🟩 MATRICE VISUELLE DE SCORES EXACTS (SOFASCORE STYLE)")
+        st.markdown("### MATRICE VISUELLE DE SCORES EXACTS")
         matrix = res['matrix']
         matrix_html = "<table class='matrix-table'><tr><th>Goals</th>"
         for a_g in range(5): matrix_html += f"<th>{a_g} ({at})</th>"
@@ -523,10 +515,10 @@ with tab_detail:
         st.markdown(matrix_html, unsafe_allow_html=True)
 
 # ------------------------------------------
-# ONGLET 4 : LES 2 COUPONS SURS (BANKER & MONSTER)
+# ONGLET 4 : LES 2 COUPONS SURS
 # ------------------------------------------
 with tab_coupons:
-    st.subheader("🎟️ Générateur de Coupons Optimisés v43.0")
+    st.subheader("Generateur de Coupons Optimises v43.0")
     
     with st.spinner("Analyse approfondie de tous les matchs disponibles..."):
         if league_code == "ALL":
@@ -557,13 +549,12 @@ with tab_coupons:
 
         col_b, col_m = st.columns(2)
 
-        # COUPON 1 : BANKER 5 MATCHS (100% SÉCURITÉ)
         with col_b:
             st.markdown("""
             <div class="vip-banner" style="background: linear-gradient(135deg, #064E3B 0%, #047857 100%); border-color:#10B981;">
                 <span class="badge-banker">COUPON 1</span>
-                <h2 style="margin:5px 0; color:#FFFFFF;">🛡️ BANKER SÉCURITÉ (5 MATCHS)</h2>
-                <div style="font-size:0.9rem; color:#A7F3D0;">Fiabilité maximale sur le Momentum</div>
+                <h2 style="margin:5px 0; color:#FFFFFF;">BANKER SECURITE (5 MATCHS)</h2>
+                <div style="font-size:0.9rem; color:#A7F3D0;">Fiabilite maximale sur le Momentum</div>
             </div>
             """, unsafe_allow_html=True)
             
@@ -572,24 +563,23 @@ with tab_coupons:
             
             st.markdown(f"### Cote Totale : <span style='color:#10B981; font-weight:900;'>{total_odds_b:.2f}</span>", unsafe_allow_html=True)
             
-            telegram_b = f"🛡️ **COUPON BANKER APEX (v43.0)** 🛡️\nCote Totale : ~{total_odds_b:.2f}\n\n"
+            telegram_b = f"COUPON BANKER APEX (v43.0)\nCote Totale : ~{total_odds_b:.2f}\n\n"
             for idx, item in enumerate(banker_5, 1):
                 st.markdown(f"""
                 <div class="sub-card">
                     <b>{idx}. {item['match']}</b><br>
-                    👉 Pick : <b style="color:#10B981;">{item['pick']}</b> (Prob: {item['prob']}% | Cote: {item['odds']})
+                    Pick : <b style="color:#10B981;">{item['pick']}</b> (Prob: {item['prob']}% | Cote: {item['odds']})
                 </div>
                 """, unsafe_allow_html=True)
-                telegram_b += f"{idx}. {item['match']} ➔ {item['pick']} (Cote: {item['odds']})\n"
+                telegram_b += f"{idx}. {item['match']} -> {item['pick']} (Cote: {item['odds']})\n"
             
             st.code(telegram_b, language="text")
 
-        # COUPON 2 : MONSTER (10 A 15 MATCHS GROSSE COTE)
         with col_m:
             st.markdown("""
             <div class="vip-banner" style="background: linear-gradient(135deg, #78350F 0%, #B45309 100%); border-color:#F59E0B;">
                 <span class="badge-monster">COUPON 2</span>
-                <h2 style="margin:5px 0; color:#FFFFFF;">🚀 MONSTER GROSSE COTE (10-15 MATCHS)</h2>
+                <h2 style="margin:5px 0; color:#FFFFFF;">MONSTER GROSSE COTE (10-15 MATCHS)</h2>
                 <div style="font-size:0.9rem; color:#FDE68A;">IA d'Anomalies (BTTS, HT/FT, Cartons)</div>
             </div>
             """, unsafe_allow_html=True)
@@ -599,17 +589,17 @@ with tab_coupons:
             
             st.markdown(f"### Cote Totale : <span style='color:#F59E0B; font-weight:900;'>{total_odds_m:.2f}</span>", unsafe_allow_html=True)
             
-            telegram_m = f"🚀 **MONSTER COUPON APEX (v43.0)** 🔥\nCote Totale : ~{total_odds_m:.2f}\n\n"
+            telegram_m = f"MONSTER COUPON APEX (v43.0)\nCote Totale : ~{total_odds_m:.2f}\n\n"
             for idx, item in enumerate(monster_12, 1):
                 st.markdown(f"""
                 <div class="sub-card">
                     <b>{idx}. {item['match']}</b><br>
-                    👉 Combiné : <b style="color:#F59E0B;">{item['combo']}</b> (Cote: {item['combo_odds']})<br>
+                    Combine : <b style="color:#F59E0B;">{item['combo']}</b> (Cote: {item['combo_odds']})<br>
                     <small>Tendance : {item['ht_trend']}</small>
                 </div>
                 """, unsafe_allow_html=True)
-                telegram_m += f"{idx}. {item['match']} ➔ {item['combo']} (Cote: {item['combo_odds']})\n"
+                telegram_m += f"{idx}. {item['match']} -> {item['combo']} (Cote: {item['combo_odds']})\n"
             
             st.code(telegram_m, language="text")
     else:
-        st.warning("Pas assez de matchs programmés pour générer les coupons.")
+        st.warning("Pas assez de matchs programmes pour generer les coupons.")
