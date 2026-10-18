@@ -418,7 +418,7 @@ else:
     all_m = raw_matches.get("matches", []) if raw_matches else []
     live_matches = [m for m in all_m if m.get('status') in ['IN_PLAY', 'LIVE', 'PAUSED']]
     upcoming_matches = [m for m in all_m if m.get('status') in ['SCHEDULED', 'TIMED']]
-    finished_matches = [m for m in all_m if m.get('status'] == 'FINISHED']
+    finished_matches = [m for m in all_m if m.get('status') == 'FINISHED']
 
 tab_live, tab_calendar, tab_detail, tab_coupons = st.tabs([
     f"LIVE ({len(live_matches)})",
@@ -488,7 +488,6 @@ with tab_detail:
         </div>
         """, unsafe_allow_html=True)
 
-        # Extraction des 3 meilleurs scores pour affichage clair
         matrix = res['matrix']
         flat_indices = np.argsort(matrix.ravel())[::-1]
         top_scores = []
@@ -533,7 +532,6 @@ with tab_coupons:
             pool_avg_a = {selected_comp: avg_goals_a}
 
     if all_pool:
-        # Extraction des dates disponibles
         dates_list = sorted(list(set([m['utcDate'][:10] for m in all_pool])))
         selected_date = st.selectbox("Sélectionner la date du coupon (Jour par Jour) :", dates_list)
         
@@ -562,7 +560,6 @@ with tab_coupons:
 
             col_b, col_m = st.columns(2)
 
-            # COUPON 1 : BANKER DU JOUR (5 MATCHS)
             with col_b:
                 st.markdown(f"""
                 <div class="vip-banner" style="background: linear-gradient(135deg, #064E3B 0%, #047857 100%); border-color:#10B981;">
@@ -589,7 +586,6 @@ with tab_coupons:
                 
                 st.code(telegram_b, language="text")
 
-            # COUPON 2 : MONSTER GROSSE COTE DU JOUR (10-15 MATCHS)
             with col_m:
                 st.markdown(f"""
                 <div class="vip-banner" style="background: linear-gradient(135deg, #78350F 0%, #B45309 100%); border-color:#F59E0B;">
