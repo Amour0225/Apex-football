@@ -6,10 +6,10 @@ import pandas as pd
 from datetime import datetime, timedelta
 
 # ==========================================
-# 1. CONFIGURATION & DESIGN V43.0
+# 1. CONFIGURATION & DESIGN V44.0
 # ==========================================
 st.set_page_config(
-    page_title="Apex Quant v43.0 - Pro Analytics Engine",
+    page_title="Apex Quant v44.0 - Daily Pro Engine",
     page_icon="⚡",
     layout="wide"
 )
@@ -37,23 +37,12 @@ st.markdown("""
     .badge-banker { background-color: #10B981; color: white; padding: 4px 10px; border-radius: 6px; font-weight: 800; font-size: 0.85rem; }
     .badge-monster { background-color: #F59E0B; color: black; padding: 4px 10px; border-radius: 6px; font-weight: 800; font-size: 0.85rem; }
 
-    .value-pick-card {
-        background: linear-gradient(135deg, #064E3B 0%, #047857 100%);
-        border: 2px solid #10B981; border-radius: 14px; padding: 16px; color: #FFFFFF; text-align: center; margin-bottom: 20px;
-    }
-    .value-pick-title { font-size: 0.9rem; font-weight: 800; text-transform: uppercase; color: #A7F3D0; }
-    .value-pick-main { font-size: 1.6rem; font-weight: 900; color: #FFFFFF; margin: 4px 0; }
-
+    .matrix-table { width: 100%; border-collapse: collapse; text-align: center; margin-top: 10px; }
+    .matrix-cell { padding: 8px; border: 1px solid #1E293B; font-weight: 700; border-radius: 4px; }
+    
     .analysis-report {
         background-color: #0B0F19; border-left: 4px solid #38BDF8; padding: 15px; border-radius: 0 12px 12px 0; margin: 15px 0; font-size: 0.95rem; line-height: 1.6; color: #CBD5E1;
     }
-
-    .audit-stat-box {
-        background-color: #1E293B; border: 2px solid #3B82F6; border-radius: 12px; padding: 15px; text-align: center;
-    }
-    
-    .matrix-table { width: 100%; border-collapse: collapse; text-align: center; margin-top: 10px; }
-    .matrix-cell { padding: 8px; border: 1px solid #1E293B; font-weight: 700; border-radius: 4px; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -132,7 +121,7 @@ def calculate_dynamic_momentum(last_4_list):
     elif score_points >= 4: return 0.92, "Instable / En Doute"
     else: return 0.80, "Zone de Crise Active"
 
-@st.cache_data(ttl=1800)
+@st.cache_data(ttl=300)
 def get_advanced_league_stats(league_code):
     if league_code == "ALL":
         return {}, 1.45, 1.15
@@ -204,7 +193,7 @@ def get_advanced_league_stats(league_code):
             
     return stats, avg_goals_home, avg_goals_away
 
-@st.cache_data(ttl=600)
+@st.cache_data(ttl=300)
 def get_all_competitions_upcoming():
     all_upcoming = []
     league_stats_dict, league_avg_h_dict, league_avg_a_dict = {}, {}, {}
@@ -240,7 +229,7 @@ def get_all_competitions_upcoming():
     return all_upcoming, league_stats_dict, league_avg_h_dict, league_avg_a_dict
 
 # ==========================================
-# 3. MOTEUR QUANTITATIF V43.0
+# 3. MOTEUR QUANTITATIF V44.0
 # ==========================================
 def dixon_coles_adjustment(x, y, h_xg, a_xg, rho=-0.08):
     if x == 0 and y == 0: return max(0.01, 1.0 - (h_xg * a_xg * rho))
@@ -272,19 +261,20 @@ def format_last_4_summary(last_4_list):
         res_str.append(f"[{icon}] {item['venue']} vs {item['opponent']} ({item['score']})")
     return " | ".join(res_str)
 
-def generate_tactical_report(h_name, a_name, h_stat, a_stat, full_h_xg, full_a_xg, p_h, p_n, p_a, ref_strictness, red_card_risk, btts_prob, ht_ft_trend):
+def generate_tactical_report(h_name, a_name, h_stat, a_stat, full_h_xg, full_a_xg, p_h, p_n, p_a, ref_strictness, red_card_risk, btts_prob, ht_ft_trend, exp_corners, cards_expected):
     h_history = format_last_4_summary(h_stat.get('last_4', []))
     a_history = format_last_4_summary(a_stat.get('last_4', []))
     
-    report = f"<b>Facteurs Cles Tactiques & Momentum (v43.0)</b> :<br>"
+    report = f"<b>Facteurs Cles Tactiques & Momentum (v44.0)</b> :<br>"
     report += f"• <b>{h_name}</b> | Momentum : <b>{h_stat['momentum_status']}</b><br>   └ Forme recente : {h_history}<br>"
     report += f"• <b>{a_name}</b> | Momentum : <b>{a_stat['momentum_status']}</b><br>   └ Forme recente : {a_history}<br>"
-    report += f"• <b>Probabilite BTTS (Les Deux Equipes Marquent)</b> : <b>{btts_prob}%</b> | xG : <b>{full_h_xg:.2f}</b> - <b>{full_a_xg:.2f}</b>.<br>"
-    report += f"• <b>Facteur Arbitrage & Cartons</b> : Profil Arbitre Strictness = <b>{ref_strictness}/5</b> | Risque Carton Rouge/Penalty = <b>{red_card_risk}</b>.<br>"
+    report += f"• <b>xG Ajustes</b> : {h_name} ({full_h_xg:.2f}) | {a_name} ({full_a_xg:.2f}) | BTTS : <b>{btts_prob}%</b><br>"
+    report += f"• <b>Corners & Cartons Estimes</b> : ~{exp_corners} Corners | ~{cards_expected} Cartons Jaunes<br>"
+    report += f"• <b>Anomalie & VAR / Penalties</b> : Sévérité Arbitre = {ref_strictness}/5 | Risque Carton Rouge/VAR = <b>{red_card_risk}</b><br>"
     report += f"• <b>Tendance Mi-temps vs Fin de Match</b> : <b>{ht_ft_trend}</b>."
     return report
 
-def run_quant_prediction_v43(h_name, a_name, score_h=0, score_a=0, elapsed_min=0, team_stats={}, avg_goals_h=1.45, avg_goals_a=1.15, is_live=False, post_break_active=False, bankroll=1000.0, book_odds_input=None, weather_mode="Normal (Ideal)", ref_strictness=3.0):
+def run_quant_prediction_v44(h_name, a_name, score_h=0, score_a=0, elapsed_min=0, team_stats={}, avg_goals_h=1.45, avg_goals_a=1.15, is_live=False, post_break_active=False, bankroll=1000.0, book_odds_input=None, weather_mode="Normal (Ideal)", ref_strictness=3.0):
     default_stat = {
         "played": 10, "pts": 15, "gf": 12, "ga": 12,
         "home_gf_pg": 1.45, "home_ga_pg": 1.10, "away_gf_pg": 1.15, "away_ga_pg": 1.35,
@@ -346,13 +336,13 @@ def run_quant_prediction_v43(h_name, a_name, score_h=0, score_a=0, elapsed_min=0
     
     combined_aggression = (h_stat["aggression_index"] + a_stat["aggression_index"]) / 2.0
     cards_expected = round(np.clip(((h_stat["card_rate"] + a_stat["card_rate"]) * 0.45) * (ref_strictness / 3.0), 1.5, 7.5), 1)
-    red_card_risk = "Eleve (Derby / Tension)" if (combined_aggression >= 3.5 and ref_strictness >= 4.0) else "Modere"
+    red_card_risk = "Eleve (Risque VAR / Penalty)" if (combined_aggression >= 3.3 and ref_strictness >= 3.5) else "Modere"
     
     exp_corners = round(np.clip(((h_stat["corner_rate"] + a_stat["corner_rate"]) * 0.90) * rem_factor, 3.5, 15.0), 1)
     prob_c85 = round((1.0 - poisson.cdf(8, exp_corners)) * 100, 1)
 
     ht_trend_val = (h_stat["ht_goals_avg"] + a_stat["ht_goals_avg"]) / 2.0
-    ht_ft_trend = "Plus de buts en 2nde Mi-Temps" if ht_trend_val < 1.2 else "Depart Canon (1er MT)"
+    ht_ft_trend = "Plus de buts en 2nde Mi-Temps (2nd > 1st)" if ht_trend_val < 1.2 else "Depart Canon (1er MT > 2nd)"
 
     threshold_dc = 72.0
     if (p_h + p_n) >= threshold_dc:
@@ -377,14 +367,14 @@ def run_quant_prediction_v43(h_name, a_name, score_h=0, score_a=0, elapsed_min=0
         best_prob = max(65.0, prob_o15)
         pick_type = "O15"
 
-    combo_pick = f"{best_pick} + +7.5 Corners" if prob_c85 >= 75.0 else f"{best_pick} + BTTS"
+    combo_pick = f"{best_pick} + ~{exp_corners} Corners" if prob_c85 >= 75.0 else f"{best_pick} + BTTS"
     combo_odds = round(prob_to_odds(best_prob) * 1.30, 2)
 
     model_odds = prob_to_odds(best_prob)
     actual_odds = book_odds_input if book_odds_input else round(model_odds * 1.08, 2)
     kelly_stake, ev_value = calculate_kelly(best_prob, actual_odds, bankroll)
     
-    analysis_text = generate_tactical_report(h_name, a_name, h_stat, a_stat, full_h_xg, full_a_xg, p_h, p_n, p_a, ref_strictness, red_card_risk, btts_prob, ht_ft_trend)
+    analysis_text = generate_tactical_report(h_name, a_name, h_stat, a_stat, full_h_xg, full_a_xg, p_h, p_n, p_a, ref_strictness, red_card_risk, btts_prob, ht_ft_trend, exp_corners, cards_expected)
 
     return {
         "p_h": round(p_h, 1), "p_n": round(p_n, 1), "p_a": round(p_a, 1),
@@ -403,13 +393,13 @@ def run_quant_prediction_v43(h_name, a_name, score_h=0, score_a=0, elapsed_min=0
 # ==========================================
 # 4. INTERFACE STREAMLIT
 # ==========================================
-st.sidebar.title("Apex Quant v43.0")
+st.sidebar.title("Apex Quant v44.0")
 selected_comp = st.sidebar.selectbox("Competition", list(COMPETITIONS.keys()))
 
 st.sidebar.divider()
 st.sidebar.markdown("### ARBITRAGE & ENVIRONNEMENT")
 referee_strict = st.sidebar.slider("Severite de l'Arbitre Designe", 1.0, 5.0, 3.0, 0.5)
-weather_condition = st.sidebar.selectbox("Meteo", ["Normal (Ideal)", "Pluie / Terrain Lourd", "Canicule"])
+weather_condition = st.sidebar.selectbox("Meteo (Manuel)", ["Normal (Ideal)", "Pluie / Terrain Lourd", "Canicule"])
 
 st.sidebar.divider()
 st.sidebar.markdown("### BANKROLL KELLY")
@@ -428,13 +418,13 @@ else:
     all_m = raw_matches.get("matches", []) if raw_matches else []
     live_matches = [m for m in all_m if m.get('status') in ['IN_PLAY', 'LIVE', 'PAUSED']]
     upcoming_matches = [m for m in all_m if m.get('status') in ['SCHEDULED', 'TIMED']]
-    finished_matches = [m for m in all_m if m.get('status') == 'FINISHED']
+    finished_matches = [m for m in all_m if m.get('status'] == 'FINISHED']
 
 tab_live, tab_calendar, tab_detail, tab_coupons = st.tabs([
     f"LIVE ({len(live_matches)})",
     f"CALENDRIER ({len(upcoming_matches)})", 
-    "ANALYSE SOFASCORE-STYLE",
-    "MES 2 COUPONS SURS"
+    "ANALYSE PRO (SOFASCORE STYLE)",
+    "🎟️ COUPONS DU JOUR"
 ])
 
 # ------------------------------------------
@@ -448,7 +438,7 @@ with tab_live:
             score_obj = m.get('score', {}).get('fullTime', {})
             score_h = score_obj.get('home', 0) or 0
             score_a = score_obj.get('away', 0) or 0
-            res_live = run_quant_prediction_v43(ht, at, score_h, score_a, 55, team_stats, avg_goals_h, avg_goals_a, True, False, user_bankroll, None, weather_condition, referee_strict)
+            res_live = run_quant_prediction_v44(ht, at, score_h, score_a, 55, team_stats, avg_goals_h, avg_goals_a, True, False, user_bankroll, None, weather_condition, referee_strict)
             st.markdown(f"""
             <div class="hedge-card">
                 <span class="badge-live">LIVE (55') - {score_h} - {score_a}</span>
@@ -466,30 +456,30 @@ with tab_calendar:
     st.subheader("Calendrier General")
     if upcoming_matches:
         cal_data = []
-        for m in upcoming_matches[:20]:
+        for m in upcoming_matches[:25]:
             ht, at = m['homeTeam']['name'], m['awayTeam']['name']
-            pred = run_quant_prediction_v43(ht, at, 0, 0, 0, team_stats, avg_goals_h, avg_goals_a, False, False, user_bankroll, None, weather_condition, referee_strict)
+            pred = run_quant_prediction_v44(ht, at, 0, 0, 0, team_stats, avg_goals_h, avg_goals_a, False, False, user_bankroll, None, weather_condition, referee_strict)
             cal_data.append({
                 "Date": m['utcDate'][:10] + " [" + m['utcDate'][11:16] + "]",
                 "Match": f"{ht} vs {at}",
-                "Conseil VIP": f"{pred['best_pick']} ({pred['best_prob']}%)",
-                "BTTS": f"{pred['btts_prob']}%",
-                "Cartons Est.": f"~{pred['cards']}"
+                "Conseil": f"{pred['best_pick']} ({pred['best_prob']}%)",
+                "Corners": f"~{pred['corners']}",
+                "Cartons": f"~{pred['cards']}"
             })
         st.dataframe(pd.DataFrame(cal_data), use_container_width=True, hide_index=True)
 
 # ------------------------------------------
-# ONGLET 3 : MATRICE VISUELLE SOFASCORE
+# ONGLET 3 : ANALYSE PRO & MATRICE LISIBLE
 # ------------------------------------------
 with tab_detail:
-    st.subheader("Analyse Detaille & Matrice Thermique des Scores Exacts")
+    st.subheader("Analyse Detaille & Matrice des Scores Exacts")
     if upcoming_matches:
         match_options = {f"{m['utcDate'][:10]} : {m['homeTeam']['name']} vs {m['awayTeam']['name']}": m for m in upcoming_matches[:15]}
         selected_label = st.selectbox("Selectionner le match :", list(match_options.keys()))
         selected_m = match_options[selected_label]
         
         ht, at = selected_m['homeTeam']['name'], selected_m['awayTeam']['name']
-        res = run_quant_prediction_v43(ht, at, 0, 0, 0, team_stats, avg_goals_h, avg_goals_a, False, False, user_bankroll, None, weather_condition, referee_strict)
+        res = run_quant_prediction_v44(ht, at, 0, 0, 0, team_stats, avg_goals_h, avg_goals_a, False, False, user_bankroll, None, weather_condition, referee_strict)
         
         st.markdown(f"""
         <div class="hedge-card">
@@ -498,9 +488,22 @@ with tab_detail:
         </div>
         """, unsafe_allow_html=True)
 
-        st.markdown("### MATRICE VISUELLE DE SCORES EXACTS")
+        # Extraction des 3 meilleurs scores pour affichage clair
         matrix = res['matrix']
-        matrix_html = "<table class='matrix-table'><tr><th>Goals</th>"
+        flat_indices = np.argsort(matrix.ravel())[::-1]
+        top_scores = []
+        for idx in flat_indices[:3]:
+            gh, ga = np.unravel_index(idx, matrix.shape)
+            top_scores.append((f"{gh}-{ga}", round(matrix[gh, ga] * 100, 1)))
+
+        st.markdown("### 🏆 PODIUM DES SCORES EXACTS LES PLUS PROBABLES")
+        sc1, sc2, sc3 = st.columns(3)
+        with sc1: st.markdown(f"""<div class='sub-card' style='text-align:center;'><b>1er CHOIX</b><h2 style='color:#38BDF8; margin:5px 0;'>{top_scores[0][0]}</h2><span style='color:#10B981; font-weight:700;'>{top_scores[0][1]}%</span></div>""", unsafe_allow_html=True)
+        with sc2: st.markdown(f"""<div class='sub-card' style='text-align:center;'><b>2e CHOIX</b><h2 style='color:#38BDF8; margin:5px 0;'>{top_scores[1][0]}</h2><span style='color:#10B981; font-weight:700;'>{top_scores[1][1]}%</span></div>""", unsafe_allow_html=True)
+        with sc3: st.markdown(f"""<div class='sub-card' style='text-align:center;'><b>3e CHOIX</b><h2 style='color:#38BDF8; margin:5px 0;'>{top_scores[2][0]}</h2><span style='color:#10B981; font-weight:700;'>{top_scores[2][1]}%</span></div>""", unsafe_allow_html=True)
+
+        st.markdown("### 📊 MATRICE THERMIQUE GLOBALE")
+        matrix_html = "<table class='matrix-table'><tr><th>Buts</th>"
         for a_g in range(5): matrix_html += f"<th>{a_g} ({at})</th>"
         matrix_html += "</tr>"
         
@@ -515,12 +518,12 @@ with tab_detail:
         st.markdown(matrix_html, unsafe_allow_html=True)
 
 # ------------------------------------------
-# ONGLET 4 : LES 2 COUPONS SURS
+# ONGLET 4 : COUPONS DU JOUR (PAR DATE STRICTE)
 # ------------------------------------------
 with tab_coupons:
-    st.subheader("Generateur de Coupons Optimises v43.0")
+    st.subheader("🎟️ Générateur de Coupons du Jour (Par Date)")
     
-    with st.spinner("Analyse approfondie de tous les matchs disponibles..."):
+    with st.spinner("Analyse des matchs du jour..."):
         if league_code == "ALL":
             all_pool, pool_stats, pool_avg_h, pool_avg_a = all_upcoming, multi_stats, multi_avg_h, multi_avg_a
         else:
@@ -529,77 +532,91 @@ with tab_coupons:
             pool_avg_h = {selected_comp: avg_goals_h}
             pool_avg_a = {selected_comp: avg_goals_a}
 
-    if len(all_pool) >= 5:
-        analyzed_pool = []
-        for m in all_pool:
-            lg = m.get('league_name', selected_comp)
-            ht, at = m['homeTeam']['name'], m['awayTeam']['name']
-            pred = run_quant_prediction_v43(
-                ht, at, 0, 0, 0, pool_stats.get(lg, {}), pool_avg_h.get(lg, 1.45), pool_avg_a.get(lg, 1.15),
-                False, False, user_bankroll, None, weather_condition, referee_strict
-            )
-            analyzed_pool.append({
-                "league": lg, "match": f"{ht} vs {at}", "time": m['utcDate'][11:16],
-                "pick": pred['best_pick'], "prob": pred['best_prob'], "odds": pred['model_odds'],
-                "combo": pred['combo_pick'], "combo_odds": pred['combo_odds'],
-                "cards": pred['cards'], "ht_trend": pred['ht_ft_trend']
-            })
+    if all_pool:
+        # Extraction des dates disponibles
+        dates_list = sorted(list(set([m['utcDate'][:10] for m in all_pool])))
+        selected_date = st.selectbox("Sélectionner la date du coupon (Jour par Jour) :", dates_list)
+        
+        day_pool = [m for m in all_pool if m['utcDate'][:10] == selected_date]
+        
+        st.info(f"📅 {len(day_pool)} match(s) détecté(s) pour la date du {selected_date}.")
+        
+        if len(day_pool) >= 3:
+            analyzed_day = []
+            for m in day_pool:
+                lg = m.get('league_name', selected_comp)
+                ht, at = m['homeTeam']['name'], m['awayTeam']['name']
+                pred = run_quant_prediction_v44(
+                    ht, at, 0, 0, 0, pool_stats.get(lg, {}), pool_avg_h.get(lg, 1.45), pool_avg_a.get(lg, 1.15),
+                    False, False, user_bankroll, None, weather_condition, referee_strict
+                )
+                analyzed_day.append({
+                    "league": lg, "match": f"{ht} vs {at}", "time": m['utcDate'][11:16],
+                    "pick": pred['best_pick'], "prob": pred['best_prob'], "odds": pred['model_odds'],
+                    "combo": pred['combo_pick'], "combo_odds": pred['combo_odds'],
+                    "corners": pred['corners'], "cards": pred['cards'], "risk": pred['red_card_risk'],
+                    "ht_trend": pred['ht_ft_trend']
+                })
 
-        analyzed_pool.sort(key=lambda x: x["prob"], reverse=True)
+            analyzed_day.sort(key=lambda x: x["prob"], reverse=True)
 
-        col_b, col_m = st.columns(2)
+            col_b, col_m = st.columns(2)
 
-        with col_b:
-            st.markdown("""
-            <div class="vip-banner" style="background: linear-gradient(135deg, #064E3B 0%, #047857 100%); border-color:#10B981;">
-                <span class="badge-banker">COUPON 1</span>
-                <h2 style="margin:5px 0; color:#FFFFFF;">BANKER SECURITE (5 MATCHS)</h2>
-                <div style="font-size:0.9rem; color:#A7F3D0;">Fiabilite maximale sur le Momentum</div>
-            </div>
-            """, unsafe_allow_html=True)
-            
-            banker_5 = analyzed_pool[:5]
-            total_odds_b = np.prod([item['odds'] for item in banker_5])
-            
-            st.markdown(f"### Cote Totale : <span style='color:#10B981; font-weight:900;'>{total_odds_b:.2f}</span>", unsafe_allow_html=True)
-            
-            telegram_b = f"COUPON BANKER APEX (v43.0)\nCote Totale : ~{total_odds_b:.2f}\n\n"
-            for idx, item in enumerate(banker_5, 1):
+            # COUPON 1 : BANKER DU JOUR (5 MATCHS)
+            with col_b:
                 st.markdown(f"""
-                <div class="sub-card">
-                    <b>{idx}. {item['match']}</b><br>
-                    Pick : <b style="color:#10B981;">{item['pick']}</b> (Prob: {item['prob']}% | Cote: {item['odds']})
+                <div class="vip-banner" style="background: linear-gradient(135deg, #064E3B 0%, #047857 100%); border-color:#10B981;">
+                    <span class="badge-banker">COUPON DU JOUR</span>
+                    <h2 style="margin:5px 0; color:#FFFFFF;">🛡️ BANKER SÉCURITÉ ({selected_date})</h2>
+                    <div style="font-size:0.9rem; color:#A7F3D0;">Max de fiabilité sur le Momentum</div>
                 </div>
                 """, unsafe_allow_html=True)
-                telegram_b += f"{idx}. {item['match']} -> {item['pick']} (Cote: {item['odds']})\n"
-            
-            st.code(telegram_b, language="text")
+                
+                banker_day = analyzed_day[:min(5, len(analyzed_day))]
+                total_odds_b = np.prod([item['odds'] for item in banker_day])
+                
+                st.markdown(f"### Cote Totale : <span style='color:#10B981; font-weight:900;'>{total_odds_b:.2f}</span>", unsafe_allow_html=True)
+                
+                telegram_b = f"🛡️ **COUPON BANKER APEX ({selected_date})** 🛡️\nCote Totale : ~{total_odds_b:.2f}\n\n"
+                for idx, item in enumerate(banker_day, 1):
+                    st.markdown(f"""
+                    <div class="sub-card">
+                        <b>{idx}. [{item['league']}] {item['match']}</b> ({item['time']})<br>
+                        👉 Pick : <b style="color:#10B981;">{item['pick']}</b> (Prob: {item['prob']}% | Cote: {item['odds']})
+                    </div>
+                    """, unsafe_allow_html=True)
+                    telegram_b += f"{idx}. {item['match']} ➔ {item['pick']} (Cote: {item['odds']})\n"
+                
+                st.code(telegram_b, language="text")
 
-        with col_m:
-            st.markdown("""
-            <div class="vip-banner" style="background: linear-gradient(135deg, #78350F 0%, #B45309 100%); border-color:#F59E0B;">
-                <span class="badge-monster">COUPON 2</span>
-                <h2 style="margin:5px 0; color:#FFFFFF;">MONSTER GROSSE COTE (10-15 MATCHS)</h2>
-                <div style="font-size:0.9rem; color:#FDE68A;">IA d'Anomalies (BTTS, HT/FT, Cartons)</div>
-            </div>
-            """, unsafe_allow_html=True)
-            
-            monster_12 = analyzed_pool[:min(12, len(analyzed_pool))]
-            total_odds_m = np.prod([item['combo_odds'] for item in monster_12])
-            
-            st.markdown(f"### Cote Totale : <span style='color:#F59E0B; font-weight:900;'>{total_odds_m:.2f}</span>", unsafe_allow_html=True)
-            
-            telegram_m = f"MONSTER COUPON APEX (v43.0)\nCote Totale : ~{total_odds_m:.2f}\n\n"
-            for idx, item in enumerate(monster_12, 1):
+            # COUPON 2 : MONSTER GROSSE COTE DU JOUR (10-15 MATCHS)
+            with col_m:
                 st.markdown(f"""
-                <div class="sub-card">
-                    <b>{idx}. {item['match']}</b><br>
-                    Combine : <b style="color:#F59E0B;">{item['combo']}</b> (Cote: {item['combo_odds']})<br>
-                    <small>Tendance : {item['ht_trend']}</small>
+                <div class="vip-banner" style="background: linear-gradient(135deg, #78350F 0%, #B45309 100%); border-color:#F59E0B;">
+                    <span class="badge-monster">COUPON DU JOUR</span>
+                    <h2 style="margin:5px 0; color:#FFFFFF;">🚀 MONSTER GROSSE COTE ({selected_date})</h2>
+                    <div style="font-size:0.9rem; color:#FDE68A;">Buts, Corners (~{analyzed_day[0]['corners']}), Cartons (~{analyzed_day[0]['cards']}), VAR</div>
                 </div>
                 """, unsafe_allow_html=True)
-                telegram_m += f"{idx}. {item['match']} -> {item['combo']} (Cote: {item['combo_odds']})\n"
-            
-            st.code(telegram_m, language="text")
+                
+                monster_day = analyzed_day[:min(15, len(analyzed_day))]
+                total_odds_m = np.prod([item['combo_odds'] for item in monster_day])
+                
+                st.markdown(f"### Cote Totale : <span style='color:#F59E0B; font-weight:900;'>{total_odds_m:.2f}</span>", unsafe_allow_html=True)
+                
+                telegram_m = f"🚀 **MONSTER COUPON APEX ({selected_date})** 🔥\nCote Totale : ~{total_odds_m:.2f}\n\n"
+                for idx, item in enumerate(monster_day, 1):
+                    st.markdown(f"""
+                    <div class="sub-card">
+                        <b>{idx}. [{item['league']}] {item['match']}</b> ({item['time']})<br>
+                        👉 Combiné : <b style="color:#F59E0B;">{item['combo']}</b> (Cote: {item['combo_odds']})<br>
+                        <small>Corners: ~{item['corners']} | Cartons: ~{item['cards']} | Risque VAR: {item['risk']}</small>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    telegram_m += f"{idx}. {item['match']} ➔ {item['combo']} (Cote: {item['combo_odds']})\n"
+                
+                st.code(telegram_m, language="text")
+        else:
+            st.warning(f"Pas assez de matchs ({len(day_pool)}) pour cette date pour former un coupon complet. Essaie une autre date ou 'Toutes les Compétitions'.")
     else:
-        st.warning("Pas assez de matchs programmes pour generer les coupons.")
+        st.warning("Aucun match planifié disponible.")
