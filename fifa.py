@@ -6,10 +6,10 @@ import pandas as pd
 from datetime import datetime, timedelta
 
 # ==========================================
-# 1. CONFIGURATION & DESIGN V47.4
+# 1. CONFIGURATION & DESIGN V47.5
 # ==========================================
 st.set_page_config(
-    page_title="Apex Quant v47.4 - Multi-Market Combos",
+    page_title="Apex Quant v47.5 - Fixed Multi-Market Engine",
     page_icon="⚡",
     layout="wide"
 )
@@ -231,7 +231,7 @@ def get_all_competitions_upcoming():
     return all_upcoming, league_stats_dict, league_avg_h_dict, league_avg_a_dict
 
 # ==========================================
-# 3. MOTEUR QUANTITATIF V47.4 (COMBINÉS DIVERSIFIÉS)
+# 3. MOTEUR QUANTITATIF V47.5 (CORRIGÉ & MULTI-MARCHÉS)
 # ==========================================
 def dixon_coles_adjustment(x, y, h_xg, a_xg, rho=-0.08):
     if x == 0 and y == 0: return max(0.01, 1.0 - (h_xg * a_xg * rho))
@@ -267,7 +267,7 @@ def generate_tactical_report(h_name, a_name, h_stat, a_stat, full_h_xg, full_a_x
     h_history = format_last_4_summary(h_stat.get('last_4', []))
     a_history = format_last_4_summary(a_stat.get('last_4', []))
     
-    report = f"<b>Facteurs Clés Tactiques & Sanitaires (v47.4)</b> :<br>"
+    report = f"<b>Facteurs Clés Tactiques & Sanitaires (v47.5)</b> :<br>"
     report += f"• <b>{h_name}</b> | Momentum : <b>{h_stat['momentum_status']}</b><br>   └ Forme recente : {h_history}<br>"
     report += f"• <b>{a_name}</b> | Momentum : <b>{a_stat['momentum_status']}</b><br>   └ Forme recente : {a_history}<br>"
     report += f"• <b>xG Normalisés</b> : {h_name} ({full_h_xg:.2f}) | {a_name} ({full_a_xg:.2f})<br>"
@@ -275,7 +275,7 @@ def generate_tactical_report(h_name, a_name, h_stat, a_stat, full_h_xg, full_a_x
     report += f"• <b>Stats Estimées</b> : ~{exp_corners} Corners | ~{cards_expected} Cartons"
     return report
 
-def run_quant_prediction_v474(h_name, a_name, score_h=0, score_a=0, elapsed_min=0, team_stats={}, avg_goals_h=1.45, avg_goals_a=1.15, is_live=False, bankroll=1000.0, book_odds_input=None):
+def run_quant_prediction_v475(h_name, a_name, score_h=0, score_a=0, elapsed_min=0, team_stats={}, avg_goals_h=1.45, avg_goals_a=1.15, is_live=False, bankroll=1000.0, book_odds_input=None):
     default_stat = {
         "played": 10, "pts": 15, "gf": 12, "ga": 12,
         "home_gf_pg": 1.45, "home_ga_pg": 1.10, "away_gf_pg": 1.15, "away_ga_pg": 1.35,
@@ -347,7 +347,7 @@ def run_quant_prediction_v474(h_name, a_name, score_h=0, score_a=0, elapsed_min=
         best_pick = f"Handicap Asiatique +1.5 sur {a_name if p_h >= p_a else h_name}"
         best_prob = round(max(p_h, p_a) + 16.0, 1)
 
-    # 🔄 SYSTÈME DE ROTATION MULTI-MARCHÉS POUR LE MONSTER (FIN DU MONO-CORNER)
+    # 🔄 ROTATION MULTI-MARCHÉS SÉCURISÉE (PLUS DE 100% CORNERS)
     combo_options = [
         f"{best_pick} + Plus de 1.5 Buts",
         f"{best_pick} + Les deux équipes marquent (BTTS)",
@@ -355,7 +355,6 @@ def run_quant_prediction_v474(h_name, a_name, score_h=0, score_a=0, elapsed_min=
         f"{best_pick} + Plus de 7.5 Corners",
         f"{best_pick} + 1ère Mi-Temps Plus de 0.5 But"
     ]
-    # Sélection automatique unique par match basée sur les noms pour varier les combinés
     combo_idx = (len(h_name) + len(a_name)) % len(combo_options)
     combo_pick = combo_options[combo_idx]
     combo_odds = round(prob_to_odds(best_prob) * 1.30, 2)
@@ -380,7 +379,7 @@ def run_quant_prediction_v474(h_name, a_name, score_h=0, score_a=0, elapsed_min=
 # ==========================================
 # 4. INTERFACE STREAMLIT
 # ==========================================
-st.sidebar.title("Apex Quant v47.4")
+st.sidebar.title("Apex Quant v47.5")
 selected_comp = st.sidebar.selectbox("Competition", list(COMPETITIONS.keys()))
 
 st.sidebar.divider()
@@ -400,7 +399,7 @@ else:
     all_m = raw_matches.get("matches", []) if raw_matches else []
     live_matches = [m for m in all_m if m.get('status') in ['IN_PLAY', 'LIVE', 'PAUSED']]
     upcoming_matches = [m for m in all_m if m.get('status') in ['SCHEDULED', 'TIMED']]
-    finished_matches = [m for m in all_m if m.get('status'] == 'FINISHED']
+    finished_matches = [m for m in all_m if m.get('status') == 'FINISHED']  # CORRIGÉ ICI
 
 tab_live, tab_calendar, tab_detail, tab_coupons = st.tabs([
     f"LIVE ({len(live_matches)})",
@@ -420,7 +419,7 @@ with tab_live:
             score_obj = m.get('score', {}).get('fullTime', {})
             score_h = score_obj.get('home', 0) or 0
             score_a = score_obj.get('away', 0) or 0
-            res_live = run_quant_prediction_v474(ht, at, score_h, score_a, 55, team_stats, avg_goals_h, avg_goals_a, True, user_bankroll, None)
+            res_live = run_quant_prediction_v475(ht, at, score_h, score_a, 55, team_stats, avg_goals_h, avg_goals_a, True, user_bankroll, None)
             st.markdown(f"""
             <div class="hedge-card">
                 <span class="badge-live">LIVE (55') - {score_h} - {score_a}</span>
@@ -440,7 +439,7 @@ with tab_calendar:
         cal_data = []
         for m in upcoming_matches[:25]:
             ht, at = m['homeTeam']['name'], m['awayTeam']['name']
-            pred = run_quant_prediction_v474(ht, at, 0, 0, 0, team_stats, avg_goals_h, avg_goals_a, False, user_bankroll, None)
+            pred = run_quant_prediction_v475(ht, at, 0, 0, 0, team_stats, avg_goals_h, avg_goals_a, False, user_bankroll, None)
             cal_data.append({
                 "Date": m['utcDate'][:10] + " [" + m['utcDate'][11:16] + "]",
                 "Match": f"{ht} vs {at}",
@@ -461,7 +460,7 @@ with tab_detail:
         selected_m = match_options[selected_label]
         
         ht, at = selected_m['homeTeam']['name'], selected_m['awayTeam']['name']
-        res = run_quant_prediction_v474(ht, at, 0, 0, 0, team_stats, avg_goals_h, avg_goals_a, False, user_bankroll, None)
+        res = run_quant_prediction_v475(ht, at, 0, 0, 0, team_stats, avg_goals_h, avg_goals_a, False, user_bankroll, None)
         
         st.markdown(f"""
         <div class="hedge-card">
@@ -526,7 +525,7 @@ with tab_coupons:
             for m in day_pool:
                 lg = m.get('league_name', selected_comp)
                 ht, at = m['homeTeam']['name'], m['awayTeam']['name']
-                pred = run_quant_prediction_v474(
+                pred = run_quant_prediction_v475(
                     ht, at, 0, 0, 0, pool_stats.get(lg, {}), pool_avg_h.get(lg, 1.45), pool_avg_a.get(lg, 1.15),
                     False, user_bankroll, None
                 )
