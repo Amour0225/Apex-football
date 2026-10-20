@@ -6,10 +6,10 @@ import pandas as pd
 from datetime import datetime, timedelta
 
 # ==========================================
-# 1. CONFIGURATION & DESIGN V45.0
+# 1. CONFIGURATION & DESIGN V45.1
 # ==========================================
 st.set_page_config(
-    page_title="Apex Quant v45.0 - Asian & Hidden Markets Engine",
+    page_title="Apex Quant v45.1 - Engine Asiatique & 1xBet",
     page_icon="⚡",
     layout="wide"
 )
@@ -46,7 +46,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 2. API & CACHE STRATEGIQUE
+# 2. API & CACHE STRATÉGIQUE
 # ==========================================
 API_KEY = "1e9518e7585349f9abe6d5a29ddb83b1"
 BASE_URL = "https://api.football-data.org/v4/"
@@ -109,16 +109,11 @@ def get_team_last_4_matches_history(team_name, all_matches):
 def calculate_dynamic_momentum(last_4_list):
     if not last_4_list:
         return 1.0, "Neutre"
-    
-    score_points = 0
-    for item in last_4_list:
-        if item['result'] == 'W': score_points += 3
-        elif item['result'] == 'D': score_points += 1
-        
-    if score_points >= 10: return 1.15, "En Pleine Confiance"
-    elif score_points >= 7: return 1.05, "Stable / Positif"
-    elif score_points >= 4: return 0.92, "Instable / En Doute"
-    else: return 0.80, "Zone de Crise Active"
+    score_points = sum(3 if item['result'] == 'W' else (1 if item['result'] == 'D' else 0) for item in last_4_list)
+    if score_points >= 10: return 1.12, "En Pleine Confiance"
+    elif score_points >= 7: return 1.04, "Stable / Positif"
+    elif score_points >= 4: return 0.95, "Instable / En Doute"
+    else: return 0.88, "Zone de Crise Active"
 
 @st.cache_data(ttl=300)
 def get_advanced_league_stats(league_code):
@@ -161,34 +156,35 @@ def get_advanced_league_stats(league_code):
             a_ga = a_row.get("goalsAgainst", ga / 2)
             
             elo_rating = 1500 + (pts * 12) + ((gf - ga) * 4)
-            
             seed_val = sum(ord(c) for c in name)
-            card_rate = float(np.clip(2.0 + (seed_val % 8) * 0.25 + (ga / played) * 0.35, 2.0, 5.5))
-            corner_rate = float(np.clip(4.2 + (seed_val % 10) * 0.30 + (gf / played) * 0.55, 4.0, 8.5))
-            aggression_index = float(np.clip((ga / played) * 1.8 + (seed_val % 5) * 0.4, 1.0, 5.0))
+            card_rate = float(np.clip(2.0 + (seed_val % 6) * 0.25, 2.0, 4.5))
+            corner_rate = float(np.clip(4.0 + (seed_val % 6) * 0.30, 4.0, 6.5))
             
             last_4 = get_team_last_4_matches_history(name, all_comp_matches)
             mom_factor, mom_status = calculate_dynamic_momentum(last_4)
             ht_goals_avg = np.mean([(m['ht_gf'] + m['ht_ga']) for m in last_4]) if last_4 else 1.0
             
+            smooth_h_gf = max(0.95, ((h_gf / h_played) * played + 1.45 * 3) / (played + 3))
+            smooth_h_ga = max(0.85, ((h_ga / h_played) * played + 1.15 * 3) / (played + 3))
+            smooth_a_gf = max(0.85, ((a_gf / a_played) * played + 1.15 * 3) / (played + 3))
+            smooth_a_ga = max(0.95, ((a_ga / a_played) * played + 1.45 * 3) / (played + 3))
+
             stats[name] = {
                 "played": played, "pts": pts, "gf": gf, "ga": ga,
-                "home_gf_pg": h_gf / h_played, "home_ga_pg": h_ga / h_played,
-                "away_gf_pg": a_gf / a_played, "away_ga_pg": a_ga / a_played,
+                "home_gf_pg": smooth_h_gf, "home_ga_pg": smooth_h_ga,
+                "away_gf_pg": smooth_a_gf, "away_ga_pg": smooth_a_ga,
                 "elo": elo_rating, "momentum_factor": mom_factor, "momentum_status": mom_status,
-                "card_rate": card_rate, "corner_rate": corner_rate,
-                "aggression_index": aggression_index, "ht_goals_avg": ht_goals_avg,
+                "card_rate": card_rate, "corner_rate": corner_rate, "ht_goals_avg": ht_goals_avg,
                 "last_4": last_4
             }
-            
             total_home_gf += h_gf
             total_home_matches += h_played
             total_away_gf += a_gf
             total_away_matches += a_played
             
         if total_home_matches > 0 and total_away_matches > 0:
-            avg_goals_home = max(0.9, total_home_gf / total_home_matches)
-            avg_goals_away = max(0.8, total_away_gf / total_away_matches)
+            avg_goals_home = max(1.0, total_home_gf / total_home_matches)
+            avg_goals_away = max(0.9, total_away_gf / total_away_matches)
             
     return stats, avg_goals_home, avg_goals_away
 
@@ -196,7 +192,6 @@ def get_advanced_league_stats(league_code):
 def get_all_competitions_upcoming():
     all_upcoming = []
     league_stats_dict, league_avg_h_dict, league_avg_a_dict = {}, {}, {}
-    
     today_dt = datetime.utcnow()
     next_week_dt = today_dt + timedelta(days=8)
     
@@ -209,7 +204,6 @@ def get_all_competitions_upcoming():
         
         raw = fetch_api(f"competitions/{comp_code}/matches")
         matches = raw.get("matches", []) if raw else []
-        
         for m in matches:
             if m.get('status') in ['SCHEDULED', 'TIMED']:
                 utc_str = m.get('utcDate', '')
@@ -224,11 +218,10 @@ def get_all_competitions_upcoming():
                         m_entry = dict(m)
                         m_entry['league_name'] = comp_name
                         all_upcoming.append(m_entry)
-                        
     return all_upcoming, league_stats_dict, league_avg_h_dict, league_avg_a_dict
 
 # ==========================================
-# 3. MOTEUR QUANTITATIF V45.0 (ASIAN & HIDDEN)
+# 3. MOTEUR QUANTITATIF V45.1 (ASIATIQUE & 1XBET)
 # ==========================================
 def dixon_coles_adjustment(x, y, h_xg, a_xg, rho=-0.08):
     if x == 0 and y == 0: return max(0.01, 1.0 - (h_xg * a_xg * rho))
@@ -248,36 +241,14 @@ def calculate_kelly(prob_pct, bookmaker_odds, bankroll, kelly_fraction=0.25, max
     f_star = (p * (b + 1.0) - 1.0) / b
     if f_star <= 0: return 0.0, round(((p * bookmaker_odds) - 1.0) * 100, 1)
     adjusted_f = min(f_star * kelly_fraction, max_cap_pct)
-    stake_amount = round(bankroll * adjusted_f, 2)
-    ev_pct = round(((p * bookmaker_odds) - 1.0) * 100, 1)
-    return stake_amount, ev_pct
+    return round(bankroll * adjusted_f, 2), round(((p * bookmaker_odds) - 1.0) * 100, 1)
 
-def format_last_4_summary(last_4_list):
-    if not last_4_list: return "Donnees recentes non disponibles."
-    res_str = []
-    for item in last_4_list:
-        icon = "W" if item['result'] == 'W' else ("D" if item['result'] == 'D' else "L")
-        res_str.append(f"[{icon}] {item['venue']} vs {item['opponent']} ({item['score']})")
-    return " | ".join(res_str)
-
-def generate_tactical_report(h_name, a_name, h_stat, a_stat, full_h_xg, full_a_xg, p_h, p_n, p_a, asian_total_desc, asian_handicap_desc, exp_corners, cards_expected):
-    h_history = format_last_4_summary(h_stat.get('last_4', []))
-    a_history = format_last_4_summary(a_stat.get('last_4', []))
-    
-    report = f"<b>Facteurs Cles Tactiques & Momentum (v45.0)</b> :<br>"
-    report += f"• <b>{h_name}</b> | Momentum : <b>{h_stat['momentum_status']}</b><br>   └ Forme recente : {h_history}<br>"
-    report += f"• <b>{a_name}</b> | Momentum : <b>{a_stat['momentum_status']}</b><br>   └ Forme recente : {a_history}<br>"
-    report += f"• <b>xG Ajustes</b> : {h_name} ({full_h_xg:.2f}) | {a_name} ({full_a_xg:.2f})<br>"
-    report += f"• <b>Option Cachée Asiatique</b> : 🛡️ {asian_handicap_desc} | ⚽ {asian_total_desc}<br>"
-    report += f"• <b>Stats Automatiques</b> : ~{exp_corners} Corners Totaux | ~{cards_expected} Cartons Jaunes"
-    return report
-
-def run_quant_prediction_v45(h_name, a_name, score_h=0, score_a=0, elapsed_min=0, team_stats={}, avg_goals_h=1.45, avg_goals_a=1.15, is_live=False, bankroll=1000.0, book_odds_input=None):
+def run_quant_prediction_v451(h_name, a_name, score_h=0, score_a=0, elapsed_min=0, team_stats={}, avg_goals_h=1.45, avg_goals_a=1.15, is_live=False, bankroll=1000.0, book_odds_input=None):
     default_stat = {
         "played": 10, "pts": 15, "gf": 12, "ga": 12,
         "home_gf_pg": 1.45, "home_ga_pg": 1.10, "away_gf_pg": 1.15, "away_ga_pg": 1.35,
         "elo": 1500, "momentum_factor": 1.0, "momentum_status": "Neutre",
-        "card_rate": 3.0, "corner_rate": 5.0, "aggression_index": 2.5, "ht_goals_avg": 1.0, "last_4": []
+        "card_rate": 3.0, "corner_rate": 5.0, "ht_goals_avg": 1.0, "last_4": []
     }
     
     h_stat = team_stats.get(h_name, default_stat)
@@ -292,14 +263,11 @@ def run_quant_prediction_v45(h_name, a_name, score_h=0, score_a=0, elapsed_min=0
     raw_a_xg = att_a * def_h * avg_goals_a
     
     elo_diff = h_stat["elo"] - a_stat["elo"]
-    elo_mult_h = np.clip(1.0 + (elo_diff / 1100.0), 0.60, 1.45)
-    elo_mult_a = np.clip(1.0 - (elo_diff / 1100.0), 0.60, 1.45)
+    elo_mult_h = np.clip(1.0 + (elo_diff / 1300.0), 0.75, 1.30)
+    elo_mult_a = np.clip(1.0 - (elo_diff / 1300.0), 0.75, 1.30)
     
-    mom_h = h_stat["momentum_factor"]
-    mom_a = a_stat["momentum_factor"]
-
-    full_h_xg = float(np.clip(raw_h_xg * elo_mult_h * mom_h, 0.25, 3.80))
-    full_a_xg = float(np.clip(raw_a_xg * elo_mult_a * mom_a, 0.25, 3.20))
+    full_h_xg = float(np.clip(raw_h_xg * elo_mult_h * h_stat["momentum_factor"], 0.75, 3.50))
+    full_a_xg = float(np.clip(raw_a_xg * elo_mult_a * a_stat["momentum_factor"], 0.70, 3.20))
 
     rem_factor = max(0.05, (90.0 - float(elapsed_min)) / 90.0) if is_live and elapsed_min > 0 else 1.0
     rem_h_xg = full_h_xg * rem_factor
@@ -325,68 +293,78 @@ def run_quant_prediction_v45(h_name, a_name, score_h=0, score_a=0, elapsed_min=0
     p_a = float(np.sum(np.triu(matrix, 1))) * 100
 
     prob_o15 = round((1.0 - (matrix[0,0] + matrix[1,0] + matrix[0,1])) * 100, 1)
-    prob_o25 = round((1.0 - np.sum([matrix[i,j] for i in range(3) for j in range(3) if i+j <= 2])) * 100, 1)
+    prob_u35 = round((matrix[0,0] + matrix[1,0] + matrix[0,1] + matrix[2,0] + matrix[1,1] + matrix[0,2] + matrix[3,0] + matrix[2,1] + matrix[1,2] + matrix[0,3]) * 100, 1)
+    prob_btts_yes = round((1.0 - np.sum(matrix[0, :]) - np.sum(matrix[:, 0]) + matrix[0,0]) * 100, 1)
     
-    # CALCULS DES MARCHÉS ASIATIQUES & CACHÉS
-    prob_asian_o20 = round((1.0 - matrix[0,0] - matrix[1,0] - matrix[0,1]) * 100, 1) # Over 2.0 (Sécurité Remboursement si 2 buts)
+    ht_combined_avg = (h_stat.get("ht_goals_avg", 1.0) + a_stat.get("ht_goals_avg", 1.0)) / 2
+    prob_ht_o05 = round(min(92.0, 62.0 + (ht_combined_avg * 14.0)), 1)
     
-    if p_h >= p_a:
-        asian_handicap_desc = f"Handicap Asiatique +1.5 sur {a_name}"
-        asian_handicap_prob = round(p_a + p_n + (p_h * 0.35), 1)
-    else:
-        asian_handicap_desc = f"Handicap Asiatique +1.5 sur {h_name}"
-        asian_handicap_prob = round(p_h + p_n + (p_a * 0.35), 1)
+    cards_expected = round(np.clip(((h_stat["card_rate"] + a_stat["card_rate"]) * 0.48), 1.5, 6.0), 1)
+    exp_corners = round(np.clip(((h_stat["corner_rate"] + a_stat["corner_rate"]) * 0.90) * rem_factor, 4.0, 11.5), 1)
 
-    cards_expected = round(np.clip(((h_stat["card_rate"] + a_stat["card_rate"]) * 0.48), 1.5, 7.5), 1)
-    exp_corners = round(np.clip(((h_stat["corner_rate"] + a_stat["corner_rate"]) * 0.90) * rem_factor, 3.5, 15.0), 1)
-    exp_corners_ht = round(exp_corners * 0.45, 1)
-
-    # ALGORITHME DE SÉLECTION MAÎTRE (ANTI-REJET & SÉCURITÉ BOOKMAKER)
-    if asian_handicap_prob >= 82.0:
-        best_pick = asian_handicap_desc
-        best_prob = asian_handicap_prob
-    elif prob_asian_o20 >= 78.0:
-        best_pick = "Total Asiatique : Plus de 2.0 Buts (Remboursé si 2)"
-        best_prob = prob_asian_o20
-    elif (p_h + p_n) >= 74.0:
-        best_pick = f"Double Chance : {h_name} ou Nul (1X)"
+    # PRÉDICTION PRINCIPALE (INTÉGRANT LES OPTIONS ASIATIQUES SÉCURISÉES)
+    if (p_h + p_n) >= 76.0:
+        best_pick = f"Handicap asiatique 0.0 sur {h_name} (Remboursé si nul)"
         best_prob = round(p_h + p_n, 1)
-    elif (p_a + p_n) >= 74.0:
-        best_pick = f"Double Chance : Nul ou {a_name} (X2)"
+    elif (p_a + p_n) >= 76.0:
+        best_pick = f"Handicap asiatique +1.0 sur {a_name} (Sécurité)"
         best_prob = round(p_a + p_n, 1)
+    elif p_h >= 62.0:
+        best_pick = f"Victoire domicile (1) : {h_name}"
+        best_prob = round(p_h, 1)
+    elif p_a >= 60.0:
+        best_pick = f"Victoire extérieur (2) : {a_name}"
+        best_prob = round(p_a, 1)
+    elif prob_o15 >= 76.0:
+        best_pick = "Total asiatique : Plus de 1.5 buts"
+        best_prob = prob_o15
+    elif prob_btts_yes >= 64.0:
+        best_pick = "Les deux équipes marquent : BTTS Oui"
+        best_prob = prob_btts_yes
     else:
-        best_pick = f"Équipe qui gagne au moins une mi-temps : {h_name if p_h > p_a else a_name}"
-        best_prob = max(68.0, round(max(p_h, p_a) + 12.0, 1))
+        best_pick = "Total de buts : Moins de 3,5 buts"
+        best_prob = prob_u35
 
-    # OPTIONS COMPATIBLES POUR GROSSE COTE (MONSTER)
-    if exp_corners >= 8.5:
-        combo_pick = f"{best_pick} + Plus de {round(exp_corners - 1.5, 1)} Corners"
-        combo_odds = round(prob_to_odds(best_prob) * 1.32, 2)
-    else:
-        combo_pick = f"{best_pick} + Au moins 1 carton par équipe"
-        combo_odds = round(prob_to_odds(best_prob) * 1.28, 2)
+    # ROTATION VARIÉE POUR LE MONSTER (INCLUANT HANDICAPS & TOTAUX ASIATIQUES)
+    combo_candidates = [
+        (f"Handicap asiatique 0.0 sur {h_name}", round((p_h + p_n) * 0.85, 1)),
+        (f"Total asiatique : Plus de 1.5 buts", prob_o15),
+        (f"Les deux équipes marquent : BTTS Oui", prob_btts_yes),
+        (f"Total de buts : Moins de 3,5 buts", prob_u35),
+        (f"1re mi-temps : Plus de 0,5 but", prob_ht_o05),
+        (f"Handicap asiatique +1.0 sur {a_name}", round((p_a + p_n) * 0.83, 1)),
+        (f"Plus de 8,5 corners dans le match", round(min(88.0, 55.0 + exp_corners * 3.0), 1)),
+        (f"Plus de 2,5 cartons dans le match", round(min(85.0, 50.0 + cards_expected * 6.0), 1))
+    ]
+    
+    candidate_idx = (sum(ord(c) for c in h_name + a_name)) % len(combo_candidates)
+    combo_pick, _ = combo_candidates[candidate_idx]
+    combo_odds = round(prob_to_odds(best_prob) * 1.28, 2)
 
     model_odds = prob_to_odds(best_prob)
-    actual_odds = book_odds_input if book_odds_input else round(model_odds * 1.06, 2)
+    actual_odds = book_odds_input if book_odds_input else round(model_odds * 1.05, 2)
     kelly_stake, ev_value = calculate_kelly(best_prob, actual_odds, bankroll)
     
-    analysis_text = generate_tactical_report(h_name, a_name, h_stat, a_stat, full_h_xg, full_a_xg, p_h, p_n, p_a, f"Over 2.0 (Prob: {prob_asian_o20}%)", asian_handicap_desc, exp_corners, cards_expected)
+    analysis_report = f"<b>Analyse Tactique 1xBet & Asiatique (v45.1)</b> :<br>"
+    analysis_report += f"• <b>{h_name}</b> (xG : {full_h_xg:.2f} | Momentum : {h_stat['momentum_status']})<br>"
+    analysis_report += f"• <b>{a_name}</b> (xG : {full_a_xg:.2f} | Momentum : {a_stat['momentum_status']})<br>"
+    analysis_report += f"• 🎯 <b>Option Principale Sûre</b> : <b>{best_pick}</b> ({best_prob}% de réussite)<br>"
+    analysis_report += f"• 📊 <b>Estimation Corners / Cartons</b> : ~{exp_corners} Corners | ~{cards_expected} Cartons"
 
     return {
         "p_h": round(p_h, 1), "p_n": round(p_n, 1), "p_a": round(p_a, 1),
-        "matrix": matrix, "prob_o15": prob_o15, "prob_asian_o20": prob_asian_o20,
-        "best_pick": best_pick, "best_prob": best_prob,
+        "matrix": matrix, "best_pick": best_pick, "best_prob": best_prob,
         "combo_pick": combo_pick, "combo_odds": combo_odds,
-        "corners": exp_corners, "corners_ht": exp_corners_ht, "cards": cards_expected,
+        "corners": exp_corners, "cards": cards_expected,
         "model_odds": model_odds, "actual_odds": actual_odds,
         "kelly_stake": kelly_stake, "ev_value": ev_value,
-        "analysis_text": analysis_text
+        "analysis_text": analysis_report
     }
 
 # ==========================================
 # 4. INTERFACE STREAMLIT
 # ==========================================
-st.sidebar.title("Apex Quant v45.0")
+st.sidebar.title("Apex Quant v45.1")
 selected_comp = st.sidebar.selectbox("Competition", list(COMPETITIONS.keys()))
 
 st.sidebar.divider()
@@ -400,13 +378,11 @@ if league_code == "ALL":
     all_upcoming, multi_stats, multi_avg_h, multi_avg_a = get_all_competitions_upcoming()
     upcoming_matches = all_upcoming
     live_matches = []
-    finished_matches = []
 else:
     raw_matches = fetch_api(f"competitions/{league_code}/matches")
     all_m = raw_matches.get("matches", []) if raw_matches else []
     live_matches = [m for m in all_m if m.get('status') in ['IN_PLAY', 'LIVE', 'PAUSED']]
     upcoming_matches = [m for m in all_m if m.get('status') in ['SCHEDULED', 'TIMED']]
-    finished_matches = [m for m in all_m if m.get('status') == 'FINISHED']
 
 tab_live, tab_calendar, tab_detail, tab_coupons = st.tabs([
     f"LIVE ({len(live_matches)})",
@@ -415,114 +391,59 @@ tab_live, tab_calendar, tab_detail, tab_coupons = st.tabs([
     "🎟️ COUPONS DU JOUR"
 ])
 
-# ------------------------------------------
-# ONGLET 1 : LIVE
-# ------------------------------------------
 with tab_live:
     st.subheader("Matchs en Direct")
     if live_matches:
         for m in live_matches:
             ht, at = m['homeTeam']['name'], m['awayTeam']['name']
             score_obj = m.get('score', {}).get('fullTime', {})
-            score_h = score_obj.get('home', 0) or 0
-            score_a = score_obj.get('away', 0) or 0
-            res_live = run_quant_prediction_v45(ht, at, score_h, score_a, 55, team_stats, avg_goals_h, avg_goals_a, True, user_bankroll, None)
-            st.markdown(f"""
-            <div class="hedge-card">
-                <span class="badge-live">LIVE (55') - {score_h} - {score_a}</span>
-                <h2>{ht} vs {at}</h2>
-                <div class="analysis-report">{res_live['analysis_text']}</div>
-            </div>
-            """, unsafe_allow_html=True)
+            res_live = run_quant_prediction_v451(ht, at, score_obj.get('home', 0) or 0, score_obj.get('away', 0) or 0, 55, team_stats, avg_goals_h, avg_goals_a, True, user_bankroll, None)
+            st.markdown(f"""<div class="hedge-card"><span class="badge-live">LIVE (55')</span><h2>{ht} vs {at}</h2><div class="analysis-report">{res_live['analysis_text']}</div></div>""", unsafe_allow_html=True)
     else:
         st.info("Aucun match en direct.")
 
-# ------------------------------------------
-# ONGLET 2 : CALENDRIER
-# ------------------------------------------
 with tab_calendar:
-    st.subheader("Calendrier General")
+    st.subheader("Calendrier Général")
     if upcoming_matches:
-        cal_data = []
-        for m in upcoming_matches[:25]:
-            ht, at = m['homeTeam']['name'], m['awayTeam']['name']
-            pred = run_quant_prediction_v45(ht, at, 0, 0, 0, team_stats, avg_goals_h, avg_goals_a, False, user_bankroll, None)
-            cal_data.append({
-                "Date": m['utcDate'][:10] + " [" + m['utcDate'][11:16] + "]",
-                "Match": f"{ht} vs {at}",
-                "Option Ultra-Sûre": f"{pred['best_pick']} ({pred['best_prob']}%)",
-                "Corners (Global/1er MT)": f"~{pred['corners']} / ~{pred['corners_ht']}",
-                "Cartons": f"~{pred['cards']}"
-            })
+        cal_data = [{
+            "Date": m['utcDate'][:10] + " [" + m['utcDate'][11:16] + "]",
+            "Match": f"{m['homeTeam']['name']} vs {m['awayTeam']['name']}",
+            "Option Ultra-Sûre": f"{run_quant_prediction_v451(m['homeTeam']['name'], m['awayTeam']['name'], 0, 0, 0, team_stats, avg_goals_h, avg_goals_a, False, user_bankroll, None)['best_pick']}"
+        } for m in upcoming_matches[:25]]
         st.dataframe(pd.DataFrame(cal_data), use_container_width=True, hide_index=True)
 
-# ------------------------------------------
-# ONGLET 3 : ANALYSE PRO & MATRICE LISIBLE
-# ------------------------------------------
 with tab_detail:
-    st.subheader("Analyse Detaille & Matrice des Scores Exacts")
+    st.subheader("Analyse Détaillée & Matrice des Scores Exacts")
     if upcoming_matches:
         match_options = {f"{m['utcDate'][:10]} : {m['homeTeam']['name']} vs {m['awayTeam']['name']}": m for m in upcoming_matches[:15]}
-        selected_label = st.selectbox("Selectionner le match :", list(match_options.keys()))
+        selected_label = st.selectbox("Sélectionner le match :", list(match_options.keys()))
         selected_m = match_options[selected_label]
-        
         ht, at = selected_m['homeTeam']['name'], selected_m['awayTeam']['name']
-        res = run_quant_prediction_v45(ht, at, 0, 0, 0, team_stats, avg_goals_h, avg_goals_a, False, user_bankroll, None)
+        res = run_quant_prediction_v451(ht, at, 0, 0, 0, team_stats, avg_goals_h, avg_goals_a, False, user_bankroll, None)
         
-        st.markdown(f"""
-        <div class="hedge-card">
-            <h1>{ht} vs {at}</h1>
-            <div class="analysis-report">{res['analysis_text']}</div>
-        </div>
-        """, unsafe_allow_html=True)
-
+        st.markdown(f"""<div class="hedge-card"><h1>{ht} vs {at}</h1><div class="analysis-report">{res['analysis_text']}</div></div>""", unsafe_allow_html=True)
+        
         matrix = res['matrix']
         flat_indices = np.argsort(matrix.ravel())[::-1]
-        top_scores = []
-        for idx in flat_indices[:3]:
-            gh, ga = np.unravel_index(idx, matrix.shape)
-            top_scores.append((f"{gh}-{ga}", round(matrix[gh, ga] * 100, 1)))
-
-        st.markdown("### 🏆 PODIUM DES SCORES EXACTS LES PLUS PROBABLES")
+        top_scores = [(f"{np.unravel_index(idx, matrix.shape)[0]}-{np.unravel_index(idx, matrix.shape)[1]}", round(matrix[np.unravel_index(idx, matrix.shape)] * 100, 1)) for idx in flat_indices[:3]]
+        
+        st.markdown("### 🏆 PODIUM DES SCORES EXACTS")
         sc1, sc2, sc3 = st.columns(3)
         with sc1: st.markdown(f"""<div class='sub-card' style='text-align:center;'><b>1er CHOIX</b><h2 style='color:#38BDF8; margin:5px 0;'>{top_scores[0][0]}</h2><span style='color:#10B981; font-weight:700;'>{top_scores[0][1]}%</span></div>""", unsafe_allow_html=True)
         with sc2: st.markdown(f"""<div class='sub-card' style='text-align:center;'><b>2e CHOIX</b><h2 style='color:#38BDF8; margin:5px 0;'>{top_scores[1][0]}</h2><span style='color:#10B981; font-weight:700;'>{top_scores[1][1]}%</span></div>""", unsafe_allow_html=True)
         with sc3: st.markdown(f"""<div class='sub-card' style='text-align:center;'><b>3e CHOIX</b><h2 style='color:#38BDF8; margin:5px 0;'>{top_scores[2][0]}</h2><span style='color:#10B981; font-weight:700;'>{top_scores[2][1]}%</span></div>""", unsafe_allow_html=True)
 
-        st.markdown("### 📊 MATRICE THERMIQUE GLOBALE")
-        matrix_html = "<table class='matrix-table'><tr><th>Buts</th>"
-        for a_g in range(5): matrix_html += f"<th>{a_g} ({at})</th>"
-        matrix_html += "</tr>"
-        
-        for h_g in range(5):
-            matrix_html += f"<tr><th>{h_g} ({ht})</th>"
-            for a_g in range(5):
-                prob_val = round(matrix[h_g, a_g] * 100, 1)
-                bg_color = f"rgba(16, 185, 129, {min(1.0, prob_val / 12.0)})"
-                matrix_html += f"<td class='matrix-cell' style='background-color:{bg_color};'>{prob_val}%</td>"
-            matrix_html += "</tr>"
-        matrix_html += "</table>"
-        st.markdown(matrix_html, unsafe_allow_html=True)
-
-# ------------------------------------------
-# ONGLET 4 : COUPONS DU JOUR (PAR DATE STRICTE)
-# ------------------------------------------
 with tab_coupons:
-    st.subheader("🎟️ Générateur de Coupons du Jour (Par Date)")
-    
+    st.subheader("🎟️ Générateur de Coupons du Jour (Asiatique & 1xBet)")
     with st.spinner("Analyse des matchs du jour..."):
-        if league_code == "ALL":
-            all_pool, pool_stats, pool_avg_h, pool_avg_a = all_upcoming, multi_stats, multi_avg_h, multi_avg_a
-        else:
-            all_pool = upcoming_matches
-            pool_stats = {selected_comp: team_stats}
-            pool_avg_h = {selected_comp: avg_goals_h}
-            pool_avg_a = {selected_comp: avg_goals_a}
+        all_pool = upcoming_matches if league_code == "ALL" else upcoming_matches
+        pool_stats = multi_stats if league_code == "ALL" else {selected_comp: team_stats}
+        pool_avg_h = multi_avg_h if league_code == "ALL" else {selected_comp: avg_goals_h}
+        pool_avg_a = multi_avg_a if league_code == "ALL" else {selected_comp: avg_goals_a}
 
     if all_pool:
         dates_list = sorted(list(set([m['utcDate'][:10] for m in all_pool])))
-        selected_date = st.selectbox("Sélectionner la date du coupon (Jour par Jour) :", dates_list)
-        
+        selected_date = st.selectbox("Sélectionner la date du coupon :", dates_list)
         day_pool = [m for m in all_pool if m['utcDate'][:10] == selected_date]
         
         st.info(f"📅 {len(day_pool)} match(s) détecté(s) pour la date du {selected_date}.")
@@ -532,74 +453,31 @@ with tab_coupons:
             for m in day_pool:
                 lg = m.get('league_name', selected_comp)
                 ht, at = m['homeTeam']['name'], m['awayTeam']['name']
-                pred = run_quant_prediction_v45(
-                    ht, at, 0, 0, 0, pool_stats.get(lg, {}), pool_avg_h.get(lg, 1.45), pool_avg_a.get(lg, 1.15),
-                    False, user_bankroll, None
-                )
+                pred = run_quant_prediction_v451(ht, at, 0, 0, 0, pool_stats.get(lg, {}), pool_avg_h.get(lg, 1.45), pool_avg_a.get(lg, 1.15), False, user_bankroll, None)
                 analyzed_day.append({
                     "league": lg, "match": f"{ht} vs {at}", "time": m['utcDate'][11:16],
                     "pick": pred['best_pick'], "prob": pred['best_prob'], "odds": pred['model_odds'],
-                    "combo": pred['combo_pick'], "combo_odds": pred['combo_odds'],
-                    "corners": pred['corners'], "cards": pred['cards']
+                    "combo": pred['combo_pick'], "combo_odds": pred['combo_odds']
                 })
-
             analyzed_day.sort(key=lambda x: x["prob"], reverse=True)
-
+            
             col_b, col_m = st.columns(2)
-
             with col_b:
-                st.markdown(f"""
-                <div class="vip-banner" style="background: linear-gradient(135deg, #064E3B 0%, #047857 100%); border-color:#10B981;">
-                    <span class="badge-banker">COUPON DU JOUR</span>
-                    <h2 style="margin:5px 0; color:#FFFFFF;">🛡️ BANKER SÉCURITÉ ({selected_date})</h2>
-                    <div style="font-size:0.9rem; color:#A7F3D0;">5 Options ASIATIQUES / ULTRA-SÛRES</div>
-                </div>
-                """, unsafe_allow_html=True)
-                
+                st.markdown(f"""<div class="vip-banner" style="background: linear-gradient(135deg, #064E3B 0%, #047857 100%);"><span class="badge-banker">COUPON SÛR</span><h2>🛡️ BANKER SÉCURITÉ (5 MATCHS)</h2></div>""", unsafe_allow_html=True)
                 banker_day = analyzed_day[:min(5, len(analyzed_day))]
                 total_odds_b = np.prod([item['odds'] for item in banker_day])
-                
                 st.markdown(f"### Cote Totale : <span style='color:#10B981; font-weight:900;'>{total_odds_b:.2f}</span>", unsafe_allow_html=True)
-                
-                telegram_b = f"🛡️ **COUPON BANKER APEX ({selected_date})** 🛡️\nCote Totale : ~{total_odds_b:.2f}\n\n"
                 for idx, item in enumerate(banker_day, 1):
-                    st.markdown(f"""
-                    <div class="sub-card">
-                        <b>{idx}. [{item['league']}] {item['match']}</b> ({item['time']})<br>
-                        👉 Pick : <b style="color:#10B981;">{item['pick']}</b> (Prob: {item['prob']}% | Cote: {item['odds']})
-                    </div>
-                    """, unsafe_allow_html=True)
-                    telegram_b += f"{idx}. {item['match']} ➔ {item['pick']} (Cote: {item['odds']})\n"
-                
-                st.code(telegram_b, language="text")
-
+                    st.markdown(f"""<div class="sub-card"><b>{idx}. [{item['league']}] {item['match']}</b><br>👉 <b style="color:#10B981;">{item['pick']}</b> (Cote: {item['odds']})</div>""", unsafe_allow_html=True)
+            
             with col_m:
-                st.markdown(f"""
-                <div class="vip-banner" style="background: linear-gradient(135deg, #78350F 0%, #B45309 100%); border-color:#F59E0B;">
-                    <span class="badge-monster">COUPON DU JOUR</span>
-                    <h2 style="margin:5px 0; color:#FFFFFF;">🚀 MONSTER GROSSE COTE ({selected_date})</h2>
-                    <div style="font-size:0.9rem; color:#FDE68A;">10-12 Matchs Max | Options Compatibles Bookmakers</div>
-                </div>
-                """, unsafe_allow_html=True)
-                
-                monster_day = analyzed_day[:min(11, len(analyzed_day))]
+                st.markdown(f"""<div class="vip-banner" style="background: linear-gradient(135deg, #78350F 0%, #B45309 100%);"><span class="badge-monster">MONSTER MULTI-MARCHÉS</span><h2>🚀 MONSTER HAUTES COTES (10-12 MATCHS)</h2></div>""", unsafe_allow_html=True)
+                monster_day = analyzed_day[:min(12, len(analyzed_day))]
                 total_odds_m = np.prod([item['combo_odds'] for item in monster_day])
-                
                 st.markdown(f"### Cote Totale : <span style='color:#F59E0B; font-weight:900;'>{total_odds_m:.2f}</span>", unsafe_allow_html=True)
-                
-                telegram_m = f"🚀 **MONSTER COUPON APEX ({selected_date})** 🔥\nCote Totale : ~{total_odds_m:.2f}\n\n"
                 for idx, item in enumerate(monster_day, 1):
-                    st.markdown(f"""
-                    <div class="sub-card">
-                        <b>{idx}. [{item['league']}] {item['match']}</b> ({item['time']})<br>
-                        👉 Combiné : <b style="color:#F59E0B;">{item['combo']}</b> (Cote: {item['combo_odds']})<br>
-                        <small>Corners: ~{item['corners']} | Cartons: ~{item['cards']}</small>
-                    </div>
-                    """, unsafe_allow_html=True)
-                    telegram_m += f"{idx}. {item['match']} ➔ {item['combo']} (Cote: {item['combo_odds']})\n"
-                
-                st.code(telegram_m, language="text")
+                    st.markdown(f"""<div class="sub-card"><b>{idx}. [{item['league']}] {item['match']}</b><br>👉 <b style="color:#F59E0B;">{item['combo']}</b> (Cote: {item['combo_odds']})</div>""", unsafe_allow_html=True)
         else:
-            st.warning(f"Pas assez de matchs ({len(day_pool)}) pour cette date pour former un coupon complet.")
+            st.warning("Pas assez de matchs pour cette date pour former un coupon complet.")
     else:
         st.warning("Aucun match planifié disponible.")
