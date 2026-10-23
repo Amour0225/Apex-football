@@ -410,7 +410,6 @@ def run_quant_prediction_v23(h_name, a_name, score_h=0, score_a=0, elapsed_min=0
 def generate_apex_ai_response(user_prompt, team_stats):
     prompt_lower = user_prompt.lower()
     
-    # Recherche d'équipes mentionnées dans le prompt parmi les stats chargées
     matched_teams = [t for t in team_stats.keys() if t.lower() in prompt_lower]
     
     if len(matched_teams) >= 2:
@@ -466,7 +465,7 @@ for m in all_matches:
             except Exception:
                 upcoming_matches.append(m)
 
-finished_matches = [m for m in all_matches if m.get('status'] == 'FINISHED']
+finished_matches = [m for m in all_matches if m.get('status') == 'FINISHED']
 
 tab_live, tab_calendar, tab_detail, tab_audit, tab_coupon, tab_ai = st.tabs([
     f"🔴 EN DIRECT ({len(live_matches)})",
