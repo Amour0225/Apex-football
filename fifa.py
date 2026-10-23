@@ -6,10 +6,10 @@ import pandas as pd
 from datetime import datetime, timedelta
 
 # ==========================================
-# 1. CONFIGURATION ET DESIGN V25.3 PRO
+# 1. CONFIGURATION ET DESIGN V25.4 PRO
 # ==========================================
 st.set_page_config(
-    page_title="Apex Quant v25.3 Pro",
+    page_title="Apex Quant v25.4 Pro",
     page_icon="⚽",
     layout="wide"
 )
@@ -172,7 +172,8 @@ def get_advanced_league_stats(league_code):
                 "away_gf_pg": a_gf / a_played, "away_ga_pg": a_ga / a_played,
                 "elo": elo_rating, "form_factor": 1.0, "recent_results": [],
                 "card_rate": card_rate, "corner_rate": corner_rate,
-                "midfield": midfield_control, "played_total": played
+                "midfield": midfield_control, "played_total": played,
+                "points": pts
             }
 
     if matches_data and "matches" in matches_data:
@@ -262,7 +263,7 @@ def run_quant_prediction_v23(h_name, a_name, score_h=0, score_a=0, elapsed_min=0
     default_stat = {
         "gf_pg": 1.35, "ga_pg": 1.25, "home_gf_pg": 1.45, "home_ga_pg": 1.10, 
         "away_gf_pg": 1.15, "away_ga_pg": 1.35, "elo": 1500, "form_factor": 1.0,
-        "card_rate": 2.3, "corner_rate": 5.0, "midfield": 1.0, "recent_results": []
+        "card_rate": 2.3, "corner_rate": 5.0, "midfield": 1.0, "recent_results": [], "points": 15
     }
     
     h_stat = team_stats.get(h_name, default_stat)
@@ -330,7 +331,6 @@ def run_quant_prediction_v23(h_name, a_name, score_h=0, score_a=0, elapsed_min=0
     prob_k_1_5 = round((1.0 - poisson.cdf(1, exp_k_tot)) * 100, 1) if exp_k_tot > 0 else 0
     prob_k_2_5 = round((1.0 - poisson.cdf(2, exp_k_tot)) * 100, 1) if exp_k_tot > 0 else 0
 
-    # Logique de sélection propre et non-contradictoire
     if p_h >= 62.0:
         best_pick = f"🔥 Victoire Directe : {h_name}"
         best_prob = p_h
@@ -392,6 +392,7 @@ def run_quant_prediction_v23(h_name, a_name, score_h=0, score_a=0, elapsed_min=0
             "tot": exp_k_tot, "p_1_5": prob_k_1_5, "p_2_5": prob_k_2_5,
             "odds_1_5": prob_to_odds(prob_k_1_5), "odds_2_5": prob_to_odds(prob_k_2_5)
         },
+        "h_xg": round(full_h_xg, 2), "a_xg": round(full_a_xg, 2),
         "h_recent": h_stat.get("recent_results", []),
         "a_recent": a_stat.get("recent_results", []),
         "best_pick": best_pick,
@@ -404,9 +405,43 @@ def run_quant_prediction_v23(h_name, a_name, score_h=0, score_a=0, elapsed_min=0
     }
 
 # ==========================================
-# 4. INTERFACE APPLICATIVE V25.3
+# 4. FONCTION ANALYTIQUE DE L'ASSISTANT IA
 # ==========================================
-st.sidebar.title("Apex Quant v25.3 Pro")
+def generate_apex_ai_response(user_prompt, team_stats):
+    prompt_lower = user_prompt.lower()
+    
+    # Recherche d'équipes mentionnées dans le prompt parmi les stats chargées
+    matched_teams = [t for t in team_stats.keys() if t.lower() in prompt_lower]
+    
+    if len(matched_teams) >= 2:
+        t1, t2 = matched_teams[0], matched_teams[1]
+        s1, s2 = team_stats[t1], team_stats[t2]
+        return f"""📊 **Analyse Critique Apex AI pour {t1} vs {t2}** :
+* **{t1}** (Elo: {s1['elo']:.0f} | xG Dom. Estimé: {s1['home_gf_pg']:.2f} | Forme: {''.join(s1['recent_results']) if s1['recent_results'] else 'N/A'})
+* **{t2}** (Elo: {s2['elo']:.0f} | xG Ext. Estimé: {s2['away_gf_pg']:.2f} | Forme: {''.join(s2['recent_results']) if s2['recent_results'] else 'N/A'})
+
+🔍 **Mon avis de débatteur** : D'après les matrices de Poisson et l'écart d'efficacité offensive, attention à ne pas parier les yeux fermés sur une victoire sèche si l'écart Elo est inférieur à 80 points. Un pari sécurisé en Double Chance ou un Total de Buts modéré offre un meilleur profil de risque (EV+). Es-tu sûr de vouloir risquer une grosse cote ici ?"""
+        
+    elif len(matched_teams) == 1:
+        t = matched_teams[0]
+        s = team_stats[t]
+        return f"""📈 **Évaluation de l'équipe : {t}**
+* Classement / Points actuels : {s.get('points', 'N/A')} pts
+* Attaque moyenne : {s['gf_pg']:.2f} buts/match | Défense : {s['ga_pg']:.2f} buts/match
+* Indice de forme récent : {''.join(s['recent_results']) if s['recent_results'] else 'Neutre'}
+
+⚠️ **Analyse critique** : Cette équipe montre des variations de performance. Si tu envisages de l'intégrer dans un combiné, vérifie bien ses statistiques à l'extérieur ou à domicile selon le cas. Ne te fie pas seulement au nom du club !"""
+    
+    else:
+        return f"""🤖 **Assistant Apex AI (Mode Critique)** : 
+J'ai bien reçu ton message (*"{user_prompt}"*). Pour que je puisse te faire une analyse mathématique et tranchante, **mentionne explicitement les noms des deux équipes** du match qui t'intéresse (ex: *Que penses-tu du match entre Arsenal et Chelsea ?*). 
+
+Je suis là pour challenger tes idées, traquer les value bets et t'éviter les paris basés sur l'émotion !"""
+
+# ==========================================
+# 5. INTERFACE APPLICATIVE V25.4
+# ==========================================
+st.sidebar.title("Apex Quant v25.4 Pro")
 selected_comp = st.sidebar.selectbox("Sélectionner la Compétition principale", list(COMPETITIONS.keys()))
 league_code = COMPETITIONS[selected_comp]
 
@@ -431,14 +466,15 @@ for m in all_matches:
             except Exception:
                 upcoming_matches.append(m)
 
-finished_matches = [m for m in all_matches if m.get('status') == 'FINISHED']
+finished_matches = [m for m in all_matches if m.get('status'] == 'FINISHED']
 
-tab_live, tab_calendar, tab_detail, tab_audit, tab_coupon = st.tabs([
+tab_live, tab_calendar, tab_detail, tab_audit, tab_coupon, tab_ai = st.tabs([
     f"🔴 EN DIRECT ({len(live_matches)})",
     f"📅 CALENDRIER ({len(upcoming_matches)})", 
     "📊 ANALYSE DETAILLEE",
     f"📈 AUDIT & VÉRIFICATION ({len(finished_matches)})",
-    "🎟️ COUPONS DU JOUR (BANKER & MONSTER)"
+    "🎟️ COUPONS (BANKER & MONSTER)",
+    "💬 ASSISTANT APEX AI"
 ])
 
 with tab_live:
@@ -663,3 +699,30 @@ with tab_coupon:
                 """, unsafe_allow_html=True)
                 telegram_m += f"{idx}. {item['match']} ➔ {item['combo']} (Cote: {item['combo_odds']})\n"
             st.code(telegram_m, language="text")
+
+# ------------------------------------------
+# ONGLET 6 : ASSISTANT APEX AI (DÉBAT & ANALYSE)
+# ------------------------------------------
+with tab_ai:
+    st.subheader("💬 Assistant Apex AI - Débat & Analyse Critique")
+    st.markdown("Ton analyste quantitatif personnel est en ligne. Pose-lui tes questions sur les matchs de la compétition sélectionnée (**" + selected_comp + "**) : il passera les chiffres au crible et challengera tes choix sans langue de bois.")
+    
+    if "messages" not in st.session_state:
+        st.session_state.messages = [
+            {"role": "assistant", "content": f"Salut Amour ! Je suis l'Assistant Apex. Je surveille la compétition **{selected_comp}**. Quel match ou quel pari veux-tu qu'on décortique aujourd'hui ?"}
+        ]
+        
+    for message in st.session_state.messages:
+        with st.chat_message(message["role"]):
+            st.markdown(message["content"])
+            
+    if prompt := st.chat_input("Ex: Que penses-tu d'un pari sur le prochain match à domicile ?"):
+        st.session_state.messages.append({"role": "user", "content": prompt})
+        with st.chat_message("user"):
+            st.markdown(prompt)
+            
+        with st.chat_message("assistant"):
+            with st.spinner("Analyse des matrices de Poisson et des xG en cours..."):
+                response_text = generate_apex_ai_response(prompt, team_stats)
+                st.markdown(response_text)
+                st.session_state.messages.append({"role": "assistant", "content": response_text})
