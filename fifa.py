@@ -6,10 +6,10 @@ import pandas as pd
 from datetime import datetime, timedelta
 
 # ==========================================
-# 1. CONFIGURATION ET DESIGN V25.4 PRO
+# 1. CONFIGURATION ET DESIGN V25.5 PRO
 # ==========================================
 st.set_page_config(
-    page_title="Apex Quant v25.4 Pro",
+    page_title="Apex Quant v25.5 Pro",
     page_icon="⚽",
     layout="wide"
 )
@@ -405,13 +405,22 @@ def run_quant_prediction_v23(h_name, a_name, score_h=0, score_a=0, elapsed_min=0
     }
 
 # ==========================================
-# 4. FONCTION ANALYTIQUE DE L'ASSISTANT IA
+# 4. FONCTION ANALYTIQUE DE L'ASSISTANT IA (CORRIGÉE & INTELLIGENTE)
 # ==========================================
 def generate_apex_ai_response(user_prompt, team_stats):
     prompt_lower = user_prompt.lower()
     
-    matched_teams = [t for t in team_stats.keys() if t.lower() in prompt_lower]
-    
+    # Recherche robuste par mots-clés (ignore les suffixes FC / AFC)
+    matched_teams = []
+    for team in team_stats.keys():
+        team_clean = team.lower().replace("fc", "").replace("afc", "").strip()
+        keywords = [w for w in team_clean.split() if len(w) > 2]
+        
+        # Si le nom nettoyé ou un mot clé significatif est dans la phrase de l'utilisateur
+        if team_clean in prompt_lower or any(kw in prompt_lower for kw in keywords):
+            if team not in matched_teams:
+                matched_teams.append(team)
+                
     if len(matched_teams) >= 2:
         t1, t2 = matched_teams[0], matched_teams[1]
         s1, s2 = team_stats[t1], team_stats[t2]
@@ -438,9 +447,9 @@ J'ai bien reçu ton message (*"{user_prompt}"*). Pour que je puisse te faire une
 Je suis là pour challenger tes idées, traquer les value bets et t'éviter les paris basés sur l'émotion !"""
 
 # ==========================================
-# 5. INTERFACE APPLICATIVE V25.4
+# 5. INTERFACE APPLICATIVE V25.5
 # ==========================================
-st.sidebar.title("Apex Quant v25.4 Pro")
+st.sidebar.title("Apex Quant v25.5 Pro")
 selected_comp = st.sidebar.selectbox("Sélectionner la Compétition principale", list(COMPETITIONS.keys()))
 league_code = COMPETITIONS[selected_comp]
 
