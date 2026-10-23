@@ -6,10 +6,10 @@ import pandas as pd
 from datetime import datetime, timedelta
 
 # ==========================================
-# 1. CONFIGURATION ET DESIGN V25.8 PRO (80%+)
+# 1. CONFIGURATION ET DESIGN V25.9 PRO (80%+)
 # ==========================================
 st.set_page_config(
-    page_title="Apex Quant v25.8 Sécurité 80%+",
+    page_title="Apex Quant v25.9 Sécurité 80%+",
     page_icon="🎯",
     layout="wide"
 )
@@ -401,9 +401,9 @@ def generate_apex_ai_response(user_prompt, team_stats):
         return f"""🤖 **Assistant Apex AI** : Mentionne deux équipes pour lancer l'analyse ciblée sur les options à plus de 80% !"""
 
 # ==========================================
-# 5. INTERFACE APPLICATIVE V25.8
+# 5. INTERFACE APPLICATIVE V25.9
 # ==========================================
-st.sidebar.title("Apex Quant v25.8 (80%+)")
+st.sidebar.title("Apex Quant v25.9 (80%+)")
 selected_comp = st.sidebar.selectbox("Sélectionner la Compétition principale", list(COMPETITIONS.keys()))
 league_code = COMPETITIONS[selected_comp]
 
@@ -428,7 +428,7 @@ for m in all_matches:
             except Exception:
                 upcoming_matches.append(m)
 
-finished_matches = [m for m in all_matches if m.get('status'] == 'FINISHED']
+finished_matches = [m for m in all_matches if m.get('status') == 'FINISHED']
 
 tab_live, tab_calendar, tab_detail, tab_audit, tab_coupon, tab_ai = st.tabs([
     f"🔴 EN DIRECT ({len(live_matches)})",
@@ -622,7 +622,6 @@ with tab_coupon:
                 "pick": pred["best_pick"], "prob": pred["best_prob"], "odds": pred["selected_odds"]
             })
             
-        # Tri strict par probabilité décroissante pour ne garder que le gratin (>80%)
         analyzed_list.sort(key=lambda x: x["prob"], reverse=True)
         
         st.markdown(f"""
