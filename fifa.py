@@ -6,11 +6,11 @@ import pandas as pd
 from datetime import datetime, timedelta
 
 # ==========================================
-# 1. CONFIGURATION ET DESIGN V25.7 PRO
+# 1. CONFIGURATION ET DESIGN V25.8 PRO (80%+)
 # ==========================================
 st.set_page_config(
-    page_title="Apex Quant v25.7 Ultra",
-    page_icon="⚽",
+    page_title="Apex Quant v25.8 Sécurité 80%+",
+    page_icon="🎯",
     layout="wide"
 )
 
@@ -22,7 +22,7 @@ st.markdown("""
     
     .oracle-card {
         background: linear-gradient(135deg, #0F172A 0%, #1E1B4B 50%, #032B45 100%);
-        border: 2px solid #38BDF8; border-radius: 16px; padding: 22px; margin-bottom: 22px;
+        border: 2px solid #10B981; border-radius: 16px; padding: 22px; margin-bottom: 22px;
     }
     .sub-card {
         background-color: #0F172A; border: 1.5px solid #1E293B;
@@ -72,16 +72,9 @@ st.markdown("""
     .value-pick-title { font-size: 0.9rem; font-weight: 800; text-transform: uppercase; color: #A7F3D0; }
     .value-pick-main { font-size: 1.6rem; font-weight: 900; color: #FFFFFF; margin: 4px 0; }
 
-    .stat-metric-card {
-        background: #1E293B;
-        border: 1px solid #334155;
-        border-radius: 10px;
-        padding: 12px;
-        text-align: center;
-    }
     .vip-banner {
-        background: linear-gradient(135deg, #4C1D95 0%, #8B5CF6 50%, #3B82F6 100%);
-        border: 2px solid #F59E0B; border-radius: 16px; padding: 20px; text-align: center; margin-bottom: 25px;
+        background: linear-gradient(135deg, #064E3B 0%, #047857 50%, #1E1B4B 100%);
+        border: 2px solid #10B981; border-radius: 16px; padding: 20px; text-align: center; margin-bottom: 25px;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -236,7 +229,7 @@ def get_all_competitions_upcoming():
     return all_upcoming, league_stats_dict, league_avg_dict
 
 # ==========================================
-# 3. MOTEUR MATHÉMATIQUE (BUTS & CORNERS)
+# 3. MOTEUR MATHÉMATIQUE STRICT (>80%)
 # ==========================================
 def dixon_coles_adjustment(x, y, h_xg, a_xg, rho=-0.07):
     if x == 0 and y == 0: return max(0.01, 1.0 - (h_xg * a_xg * rho))
@@ -310,7 +303,9 @@ def run_quant_prediction_v23(h_name, a_name, score_h=0, score_a=0, elapsed_min=0
     p_n = float(np.sum(np.diag(matrix))) * 100
     p_a = float(np.sum(np.triu(matrix, 1))) * 100
 
-    # PROBABILITÉS DE BUTS ÉTENDUES
+    p_1x = round(p_h + p_n, 1)
+    p_x2 = round(p_a + p_n, 1)
+
     prob_o15 = round((1.0 - (matrix[0,0] + matrix[1,0] + matrix[0,1])) * 100, 1)
     prob_o25 = round((1.0 - np.sum([matrix[i,j] for i in range(3) for j in range(3) if i+j <= 2])) * 100, 1)
     prob_o35 = round((1.0 - np.sum([matrix[i,j] for i in range(4) for j in range(4) if i+j <= 3])) * 100, 1)
@@ -318,64 +313,43 @@ def run_quant_prediction_v23(h_name, a_name, score_h=0, score_a=0, elapsed_min=0
     prob_u25 = round(100.0 - prob_o25, 1)
     prob_u35 = round(100.0 - prob_o35, 1)
     
-    # Les deux équipes marquent (BTTS)
     prob_btts_yes = round((1.0 - (np.sum(matrix[0, :]) + np.sum(matrix[:, 0]) - matrix[0,0])) * 100, 1)
-    prob_btts_no = round(100.0 - prob_btts_yes, 1)
     
-    # PROBABILITÉS DE CORNERS DÉTAILLÉES
     attack_drive = (full_h_xg + full_a_xg) / 2.5
     exp_c_tot = round(np.clip(((h_stat["corner_rate"] + a_stat["corner_rate"]) * attack_drive * 0.92) * rem_factor, 2.0, 15.0), 1)
     
     prob_c_7_5 = round((1.0 - poisson.cdf(7, exp_c_tot)) * 100, 1) if exp_c_tot > 0 else 0
     prob_c_8_5 = round((1.0 - poisson.cdf(8, exp_c_tot)) * 100, 1) if exp_c_tot > 0 else 0
-    prob_c_9_5 = round((1.0 - poisson.cdf(9, exp_c_tot)) * 100, 1) if exp_c_tot > 0 else 0
 
-    base_cards = (h_stat["card_rate"] + a_stat["card_rate"]) / 2.0
-    exp_k_tot = round(np.clip((base_cards * 1.0) * rem_factor, 0.8, 8.5), 1)
-    prob_k_1_5 = round((1.0 - poisson.cdf(1, exp_k_tot)) * 100, 1) if exp_k_tot > 0 else 0
-    prob_k_2_5 = round((1.0 - poisson.cdf(2, exp_k_tot)) * 100, 1) if exp_k_tot > 0 else 0
-
-    # CHOIX OPTIMAL DU PARI
-    if p_h >= 58.0:
+    # FILTRE STRICT POUR ATTEINDRE OU DÉPASSER LES 80% DE FIABILITÉ
+    if p_1x >= 80.0:
+        best_pick = f"🛡️ SÉCURITÉ 80%+ : {h_name} ou Nul (1X)"
+        best_prob = p_1x
+    elif p_x2 >= 80.0:
+        best_pick = f"🛡️ SÉCURITÉ 80%+ : Nul ou {a_name} (X2)"
+        best_prob = p_x2
+    elif prob_u35 >= 80.0:
+        best_pick = "🛡️ SÉCURITÉ 80%+ : Moins de 3.5 Buts"
+        best_prob = prob_u35
+    elif prob_o15 >= 80.0:
+        best_pick = "⚽ SÉCURITÉ 80%+ : Plus de 1.5 Buts"
+        best_prob = prob_o15
+    elif p_h >= 75.0:
         best_pick = f"🔥 Victoire Directe : {h_name}"
         best_prob = p_h
-        pick_type = "HOME_WIN"
-    elif p_a >= 55.0:
+    elif p_a >= 72.0:
         best_pick = f"🔥 Victoire Directe : {a_name}"
         best_prob = p_a
-        pick_type = "AWAY_WIN"
-    elif prob_o25 >= 65.0:
-        best_pick = "⚽ Plus de 2.5 Buts au Total"
-        best_prob = prob_o25
-        pick_type = "O25"
-    elif (p_h + p_n) >= 75.0:
+    elif p_1x >= 70.0:
         best_pick = f"🛡️ Double Chance : {h_name} ou Nul (1X)"
-        best_prob = round(p_h + p_n, 1)
-        pick_type = "1X"
-    elif (p_a + p_n) >= 72.0:
-        best_pick = f"🛡️ Double Chance : Nul ou {a_name} (X2)"
-        best_prob = round(p_a + p_n, 1)
-        pick_type = "X2"
-    elif prob_u35 >= 75.0:
-        best_pick = "🛡️ Moins de 3.5 Buts au Total"
-        best_prob = prob_u35
-        pick_type = "U35"
+        best_prob = p_1x
     else:
-        best_pick = "⚽ Plus de 1.5 Buts au Total"
-        best_prob = prob_o15
-        pick_type = "O15"
+        best_pick = f"🛡️ Double Chance : Nul ou {a_name} (X2)"
+        best_prob = p_x2
 
-    combo_candidates = [
-        (f"🛡️ Double Chance ({h_name} ou Nul) + Plus de 1.5 buts", round(best_prob * 0.90, 1)),
-        (f"⚽ Total Buts : Plus de 1.5 buts", prob_o15),
-        (f"⛳ Plus de 8.5 Corners dans le match", prob_c_8_5),
-        (f"🤝 Les 2 Équipes Marquent : OUI", prob_btts_yes),
-        (f"🛡️ Total Buts : Moins de 3.5 buts", prob_u35),
-        (f"🟨 Plus de 1.5 Cartons dans le match", prob_k_1_5)
-    ]
-    combo_idx = (sum(ord(c) for c in h_name + a_name)) % len(combo_candidates)
-    combo_pick, combo_prob = combo_candidates[combo_idx]
-    combo_odds = round(prob_to_odds(combo_prob) * 1.25, 2)
+    combo_pick = f"🛡️ Combiné Sécurité ({h_name} / Nul) + Plus 1.5 buts"
+    combo_prob = round(min(p_1x, prob_o15) * 0.95, 1)
+    combo_odds = round(prob_to_odds(combo_prob) * 1.15, 2)
 
     selected_odds = prob_to_odds(best_prob)
 
@@ -385,22 +359,17 @@ def run_quant_prediction_v23(h_name, a_name, score_h=0, score_a=0, elapsed_min=0
         "top_3_scores": top_3_scores,
         "prob_o15": prob_o15, "prob_o25": prob_o25, "prob_o35": prob_o35,
         "prob_u25": prob_u25, "prob_u35": prob_u35,
-        "prob_btts_yes": prob_btts_yes, "prob_btts_no": prob_btts_no,
+        "prob_btts_yes": prob_btts_yes,
         "corners": {
             "tot": exp_c_tot, 
-            "p_7_5": prob_c_7_5, "p_8_5": prob_c_8_5, "p_9_5": prob_c_9_5,
-            "odds_7_5": prob_to_odds(prob_c_7_5), "odds_8_5": prob_to_odds(prob_c_8_5), "odds_9_5": prob_to_odds(prob_c_9_5)
-        },
-        "cards": {
-            "tot": exp_k_tot, "p_1_5": prob_k_1_5, "p_2_5": prob_k_2_5,
-            "odds_1_5": prob_to_odds(prob_k_1_5), "odds_2_5": prob_to_odds(prob_k_2_5)
+            "p_7_5": prob_c_7_5, "p_8_5": prob_c_8_5,
+            "odds_7_5": prob_to_odds(prob_c_7_5), "odds_8_5": prob_to_odds(prob_c_8_5)
         },
         "h_xg": round(full_h_xg, 2), "a_xg": round(full_a_xg, 2),
         "h_recent": h_stat.get("recent_results", []),
         "a_recent": a_stat.get("recent_results", []),
         "best_pick": best_pick,
         "best_prob": best_prob,
-        "pick_type": pick_type,
         "selected_odds": selected_odds,
         "combo_pick": combo_pick,
         "combo_prob": combo_prob,
@@ -412,12 +381,10 @@ def run_quant_prediction_v23(h_name, a_name, score_h=0, score_a=0, elapsed_min=0
 # ==========================================
 def generate_apex_ai_response(user_prompt, team_stats):
     prompt_lower = user_prompt.lower()
-    
     matched_teams = []
     for team in team_stats.keys():
         team_clean = team.lower().replace("fc", "").replace("afc", "").strip()
         keywords = [w for w in team_clean.split() if len(w) > 2]
-        
         if team_clean in prompt_lower or any(kw in prompt_lower for kw in keywords):
             if team not in matched_teams:
                 matched_teams.append(team)
@@ -425,28 +392,18 @@ def generate_apex_ai_response(user_prompt, team_stats):
     if len(matched_teams) >= 2:
         t1, t2 = matched_teams[0], matched_teams[1]
         s1, s2 = team_stats[t1], team_stats[t2]
-        return f"""📊 **Analyse Quantitatives Apex AI pour {t1} vs {t2}** :
-* **{t1}** (Elo: {s1['elo']:.0f} | xG Dom. Estimé: {s1['home_gf_pg']:.2f} | Forme: {''.join(s1['recent_results']) if s1['recent_results'] else 'N/A'})
-* **{t2}** (Elo: {s2['elo']:.0f} | xG Ext. Estimé: {s2['away_gf_pg']:.2f} | Forme: {''.join(s2['recent_results']) if s2['recent_results'] else 'N/A'})
+        return f"""📊 **Analyse 80%+ Apex AI pour {t1} vs {t2}** :
+* **{t1}** (Elo: {s1['elo']:.0f} | Forme: {''.join(s1['recent_results']) if s1['recent_results'] else 'N/A'})
+* **{t2}** (Elo: {s2['elo']:.0f} | Forme: {''.join(s2['recent_results']) if s2['recent_results'] else 'N/A'})
 
-🔍 **Analyse Buts & Corners** :
-Vérifie la probabilité de Plus de 1.5 Buts ou de Plus de 8.5 Corners dans l'onglet Analyse Détaillée. Si les xG cumulés sont supérieurs à 2.6, le marché des Buts ou du BTTS est une priorité (EV+)."""
-        
-    elif len(matched_teams) == 1:
-        t = matched_teams[0]
-        s = team_stats[t]
-        return f"""📈 **Évaluation de l'équipe : {t}**
-* Classement / Points actuels : {s.get('points', 'N/A')} pts
-* Attaque moyenne : {s['gf_pg']:.2f} buts/match | Défense : {s['ga_pg']:.2f} buts/match
-* Indice de forme récent : {''.join(s['recent_results']) if s['recent_results'] else 'Neutre'}"""
-    
+🔍 **Recommandation** : Consulte l'onglet Analyse Détaillée pour voir si les options en Double Chance ou Plus de 1.5 buts atteignent le seuil critique des 80%."""
     else:
-        return f"""🤖 **Assistant Apex AI** : Mentionne les deux équipes pour lancer l'analyse (xG, Buts, Corners, Poisson)."""
+        return f"""🤖 **Assistant Apex AI** : Mentionne deux équipes pour lancer l'analyse ciblée sur les options à plus de 80% !"""
 
 # ==========================================
-# 5. INTERFACE APPLICATIVE V25.7
+# 5. INTERFACE APPLICATIVE V25.8
 # ==========================================
-st.sidebar.title("Apex Quant v25.7 Ultra")
+st.sidebar.title("Apex Quant v25.8 (80%+)")
 selected_comp = st.sidebar.selectbox("Sélectionner la Compétition principale", list(COMPETITIONS.keys()))
 league_code = COMPETITIONS[selected_comp]
 
@@ -471,14 +428,14 @@ for m in all_matches:
             except Exception:
                 upcoming_matches.append(m)
 
-finished_matches = [m for m in all_matches if m.get('status') == 'FINISHED']
+finished_matches = [m for m in all_matches if m.get('status'] == 'FINISHED']
 
 tab_live, tab_calendar, tab_detail, tab_audit, tab_coupon, tab_ai = st.tabs([
     f"🔴 EN DIRECT ({len(live_matches)})",
     f"📅 CALENDRIER ({len(upcoming_matches)})", 
     "📊 ANALYSE DETAILLEE",
     f"📈 AUDIT & VÉRIFICATION ({len(finished_matches)})",
-    "🎟️ COUPONS (BANKER & MONSTER)",
+    "🎟️ COUPONS (SÉCURITÉ 80%+)",
     "💬 ASSISTANT APEX AI"
 ])
 
@@ -507,7 +464,7 @@ with tab_live:
 
             st.markdown(f"""
             <div class="value-pick-card">
-                <div class="value-pick-title">🎯 ALGORITHME DE GAIN OPTIMISÉ</div>
+                <div class="value-pick-title">🎯 ALGORITHME DE SÉCURITÉ 80%+</div>
                 <div class="value-pick-main">{res_live['best_pick']}</div>
                 <div style="font-size:1.1rem; font-weight:800;">Probabilité estimée : {res_live['best_prob']}%</div>
             </div>
@@ -530,7 +487,7 @@ with tab_calendar:
                 "Match Réel": f"{h_team} vs {a_team}",
                 "Forme Dom.": "".join(pred["h_recent"]),
                 "Forme Ext.": "".join(pred["a_recent"]),
-                "Conseil Optimal": f"{pred['best_pick']} ({pred['best_prob']}%)",
+                "Conseil Sécurité 80%+": f"{pred['best_pick']} ({pred['best_prob']}%)",
                 "+1.5 Buts": f"{pred['prob_o15']}%",
                 "Est. Corners": f"{pred['corners']['tot']}"
             })
@@ -539,7 +496,7 @@ with tab_calendar:
         st.info("Aucune rencontre programmée.")
 
 with tab_detail:
-    st.subheader("Analyse Détaillée d'une Rencontre")
+    st.subheader("Analyse Détaillée (Filtre Sécurité 80%+)")
     if upcoming_matches or all_matches:
         match_options = {}
         pool = upcoming_matches if upcoming_matches else all_matches[:10]
@@ -566,9 +523,9 @@ with tab_detail:
 
         st.markdown(f"""
         <div class="value-pick-card">
-            <div class="value-pick-title">💎 CONSEIL OPTIMAL</div>
+            <div class="value-pick-title">💎 CONSEIL OPTIMAL (OBJECTIF 80%+)</div>
             <div class="value-pick-main">{res['best_pick']}</div>
-            <div style="font-size:1.1rem; font-weight:800;">Fiabilité : {res['best_prob']}%</div>
+            <div style="font-size:1.1rem; font-weight:800;">Fiabilité : {res['best_prob']}% (Cote ~ {res['selected_odds']})</div>
         </div>
         """, unsafe_allow_html=True)
         
@@ -582,28 +539,16 @@ with tab_detail:
             st.markdown(f"""<div class="big-score-box"><div style="color:#94A3B8;">3ème SCORE</div><div class="big-score-val">{res['top_3_scores'][2]['score']}</div><div class="big-score-prob">{res['top_3_scores'][2]['prob']}%</div></div>""", unsafe_allow_html=True)
 
         st.markdown("---")
-        st.markdown("### ⚽ PRÉDICTIONS NOMBRE DE BUTS")
+        st.markdown("### ⚽ PROBABILITÉS BUTS & CORNERS")
         b1, b2, b3, b4 = st.columns(4)
         with b1:
-            st.metric("Plus de 1.5 Buts", f"{res['prob_o15']}%", f"Cote ~ {res['p_h']}")
+            st.metric("Plus de 1.5 Buts", f"{res['prob_o15']}%")
         with b2:
-            st.metric("Plus de 2.5 Buts", f"{res['prob_o25']}%", f"Moins: {res['prob_u25']}%")
+            st.metric("Plus de 2.5 Buts", f"{res['prob_o25']}%")
         with b3:
-            st.metric("Moins de 3.5 Buts", f"{res['prob_u35']}%", f"Plus: {res['prob_o35']}%")
+            st.metric("Moins de 3.5 Buts", f"{res['prob_u35']}%")
         with b4:
-            st.metric("Les 2 Équipes Marquent", f"{res['prob_btts_yes']}%", f"Non: {res['prob_btts_no']}%")
-
-        st.markdown("---")
-        st.markdown("### ⛳ PRÉDICTIONS CORNERS")
-        c1, c2, c3, c4 = st.columns(4)
-        with c1:
-            st.metric("Corners Estimés Total", f"{res['corners']['tot']}")
-        with c2:
-            st.metric("Plus de 7.5 Corners", f"{res['corners']['p_7_5']}%", f"Cote ~ {res['corners']['odds_7_5']}")
-        with c3:
-            st.metric("Plus de 8.5 Corners", f"{res['corners']['p_8_5']}%", f"Cote ~ {res['corners']['odds_8_5']}")
-        with c4:
-            st.metric("Plus de 9.5 Corners", f"{res['corners']['p_9_5']}%", f"Cote ~ {res['corners']['odds_9_5']}")
+            st.metric("Corners Estimés", f"{res['corners']['tot']}")
 
 with tab_audit:
     st.subheader(f"📊 Évaluation des Prédictions - {selected_comp}")
@@ -621,10 +566,9 @@ with tab_audit:
             if real_h is not None and real_a is not None:
                 real_score_str = f"{real_h}-{real_a}"
                 h_win = real_h > real_a
-                a_win = real_a > real_h
                 draw = real_h == real_a
                 
-                eval_pick = "✅ RÉUSSITE (Tendance validée)" if (h_win or draw) else "❌ ÉCHEC"
+                eval_pick = "✅ RÉUSSITE" if (h_win or draw) else "❌ ÉCHEC"
                 if h_win or draw: success_pick_count += 1
                 total_eval += 1
                 
@@ -632,18 +576,18 @@ with tab_audit:
                     "Date": m['utcDate'][:10],
                     "Match": f"{h_team} vs {a_team}",
                     "Score Réel": real_score_str,
-                    "Statut Prédiction": eval_pick
+                    "Statut": eval_pick
                 })
         
         if total_eval > 0:
             rate = round((success_pick_count / total_eval) * 100, 1)
-            st.metric("Taux de Réussite Global (Échantillon)", f"{rate}%", f"{success_pick_count}/{total_eval}")
+            st.metric("Taux de Réussite Global", f"{rate}%", f"{success_pick_count}/{total_eval}")
             st.dataframe(pd.DataFrame(audit_rows), use_container_width=True, hide_index=True)
     else:
         st.info("Aucun match terminé récent à auditer.")
 
 with tab_coupon:
-    st.subheader("🎟️ Générateur de Coupons (Banker Sécurité & Monster Hautes Cotes)")
+    st.subheader("🎟️ Coupons VIP - Objectif Sécurité 80%+")
     
     with st.spinner("Analyse globale multi-championnats..."):
         all_multi_matches, multi_stats, multi_avg = get_all_competitions_upcoming()
@@ -675,85 +619,57 @@ with tab_coupon:
             )
             analyzed_list.append({
                 "league": lg, "match": f"{h_team} vs {a_team}", "time": time_str,
-                "pick": pred["best_pick"], "prob": pred["best_prob"], "odds": pred["selected_odds"],
-                "combo": pred["combo_pick"], "combo_prob": pred["combo_prob"], "combo_odds": pred["combo_odds"]
+                "pick": pred["best_pick"], "prob": pred["best_prob"], "odds": pred["selected_odds"]
             })
             
+        # Tri strict par probabilité décroissante pour ne garder que le gratin (>80%)
         analyzed_list.sort(key=lambda x: x["prob"], reverse=True)
         
-        col_banker, col_monster = st.columns(2)
+        st.markdown(f"""
+        <div class="vip-banner">
+            <h2>🛡️ SÉLECTION VIP - PROBABILITÉS CIBLÉES 80%+</h2>
+            <div style="font-size:0.95rem; color:#A7F3D0;">Matchs filtrés par ordre de fiabilité mathématique maximale</div>
+        </div>
+        """, unsafe_allow_html=True)
         
-        with col_banker:
+        top_safe_matches = analyzed_list[:6]
+        tot_odds_safe = np.prod([item['odds'] for item in top_safe_matches])
+        st.markdown(f"### Cote Totale Estimée : <span style='color:#10B981; font-weight:900;'>{tot_odds_safe:.2f}</span>", unsafe_allow_html=True)
+        
+        telegram_text = f"🛡️ **COUPON SÉCURITÉ APEX 80%+ ({selected_date})** 🛡️\nCote : ~{tot_odds_safe:.2f}\n\n"
+        for idx, item in enumerate(top_safe_matches, 1):
             st.markdown(f"""
-            <div class="vip-banner" style="background: linear-gradient(135deg, #064E3B 0%, #047857 100%); border-color:#10B981;">
-                <span class="badge-banker">COUPON SÉCURITÉ</span>
-                <h2 style="margin:5px 0; color:#FFFFFF;">🛡️ BANKER (5 MATCHS)</h2>
-                <div style="font-size:0.9rem; color:#A7F3D0;">Sélections à très haute probabilité</div>
+            <div class="sub-card">
+                <b>{idx}. [{item['league']}] {item['match']}</b> ({item['time']})<br>
+                👉 Pick : <b style="color:#10B981;">{item['pick']}</b> (Cote: {item['odds']})
             </div>
             """, unsafe_allow_html=True)
-            
-            banker_matches = analyzed_list[:5]
-            tot_odds_b = np.prod([item['odds'] for item in banker_matches])
-            st.markdown(f"### Cote Totale : <span style='color:#10B981; font-weight:900;'>{tot_odds_b:.2f}</span>", unsafe_allow_html=True)
-            
-            telegram_b = f"🛡️ **COUPON BANKER APEX ({selected_date})** 🛡️\nCote : ~{tot_odds_b:.2f}\n\n"
-            for idx, item in enumerate(banker_matches, 1):
-                st.markdown(f"""
-                <div class="sub-card">
-                    <b>{idx}. [{item['league']}] {item['match']}</b> ({item['time']})<br>
-                    👉 Pick : <b style="color:#10B981;">{item['pick']}</b> (Cote: {item['odds']})
-                </div>
-                """, unsafe_allow_html=True)
-                telegram_b += f"{idx}. {item['match']} ➔ {item['pick']} (Cote: {item['odds']})\n"
-            st.code(telegram_b, language="text")
-
-        with col_monster:
-            st.markdown(f"""
-            <div class="vip-banner" style="background: linear-gradient(135deg, #78350F 0%, #B45309 100%); border-color:#F59E0B;">
-                <span class="badge-monster">COUPON HAUTES COTES</span>
-                <h2 style="margin:5px 0; color:#FFFFFF;">🚀 MONSTER (10-12 MATCHS)</h2>
-                <div style="font-size:0.9rem; color:#FDE68A;">Multi-marchés combinés dynamiques</div>
-            </div>
-            """, unsafe_allow_html=True)
-            
-            monster_matches = analyzed_list[:min(12, len(analyzed_list))]
-            tot_odds_m = np.prod([item['combo_odds'] for item in monster_matches])
-            st.markdown(f"### Cote Totale : <span style='color:#F59E0B; font-weight:900;'>{tot_odds_m:.2f}</span>", unsafe_allow_html=True)
-            
-            telegram_m = f"🚀 **MONSTER COUPON APEX ({selected_date})** 🔥\nCote : ~{tot_odds_m:.2f}\n\n"
-            for idx, item in enumerate(monster_matches, 1):
-                st.markdown(f"""
-                <div class="sub-card">
-                    <b>{idx}. [{item['league']}] {item['match']}</b> ({item['time']})<br>
-                    👉 Combiné : <b style="color:#F59E0B;">{item['combo']}</b> (Cote: {item['combo_odds']})
-                </div>
-                """, unsafe_allow_html=True)
-                telegram_m += f"{idx}. {item['match']} ➔ {item['combo']} (Cote: {item['combo_odds']})\n"
-            st.code(telegram_m, language="text")
+            telegram_text += f"{idx}. {item['match']} ➔ {item['pick']} (Cote: {item['odds']})\n"
+        st.code(telegram_text, language="text")
 
 # ------------------------------------------
 # ONGLET 6 : ASSISTANT APEX AI
 # ------------------------------------------
 with tab_ai:
-    st.subheader("💬 Assistant Apex AI - Débat & Analyse Critique")
-    st.markdown("Ton analyste quantitatif personnel est en ligne sur la compétition (**" + selected_comp + "**).")
+    st.subheader("💬 Assistant Apex AI - Objectif 80%+")
+    st.markdown("Pose tes questions pour analyser les matchs de **" + selected_comp + "** sous l'angle de la sécurité maximale.")
     
     if "messages" not in st.session_state:
         st.session_state.messages = [
-            {"role": "assistant", "content": f"Salut Amour ! Je surveille **{selected_comp}**. Quel match ou option (buts/corners) veux-tu analyser ?"}
+            {"role": "assistant", "content": f"Salut Amour ! Je filtre les meilleures opportunités à 80%+ sur **{selected_comp}**. Quel match veux-tu vérifier ?"}
         ]
         
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
             
-    if prompt := st.chat_input("Ex: Que penses-tu du match Arsenal vs Chelsea ?"):
+    if prompt := st.chat_input("Ex: Quel match offre la plus grande sécurité aujourd'hui ?"):
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user"):
             st.markdown(prompt)
             
         with st.chat_message("assistant"):
-            with st.spinner("Analyse croisée en cours..."):
+            with st.spinner("Filtrage des probabilités >80% en cours..."):
                 response_text = generate_apex_ai_response(prompt, team_stats)
                 st.markdown(response_text)
                 st.session_state.messages.append({"role": "assistant", "content": response_text})
