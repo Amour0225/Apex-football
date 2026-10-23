@@ -6,10 +6,10 @@ import pandas as pd
 from datetime import datetime, timedelta
 
 # ==========================================
-# 1. CONFIGURATION ET DESIGN V25.6 PRO
+# 1. CONFIGURATION ET DESIGN V25.7 PRO
 # ==========================================
 st.set_page_config(
-    page_title="Apex Quant v25.6 Pro",
+    page_title="Apex Quant v25.7 Ultra",
     page_icon="⚽",
     layout="wide"
 )
@@ -36,10 +36,6 @@ st.markdown("""
         background-color: #3B82F6; color: white; padding: 6px 12px;
         border-radius: 8px; font-weight: 900; font-size: 0.95rem;
     }
-    .badge-league {
-        background-color: #8B5CF6; color: white; padding: 4px 10px;
-        border-radius: 6px; font-weight: 800; font-size: 0.85rem; margin-right: 8px;
-    }
     .badge-banker { background-color: #10B981; color: white; padding: 4px 10px; border-radius: 6px; font-weight: 800; font-size: 0.85rem; }
     .badge-monster { background-color: #F59E0B; color: black; padding: 4px 10px; border-radius: 6px; font-weight: 800; font-size: 0.85rem; }
     
@@ -52,13 +48,13 @@ st.markdown("""
         margin: 8px 0;
     }
     .big-score-val {
-        font-size: 2.3rem;
+        font-size: 2.1rem;
         font-weight: 900;
         color: #38BDF8;
         line-height: 1.1;
     }
     .big-score-prob {
-        font-size: 1.1rem;
+        font-size: 1.0rem;
         font-weight: 700;
         color: #10B981;
         margin-top: 4px;
@@ -76,20 +72,12 @@ st.markdown("""
     .value-pick-title { font-size: 0.9rem; font-weight: 800; text-transform: uppercase; color: #A7F3D0; }
     .value-pick-main { font-size: 1.6rem; font-weight: 900; color: #FFFFFF; margin: 4px 0; }
 
-    .audit-stat-box {
-        background-color: #1E293B;
-        border: 2px solid #3B82F6;
-        border-radius: 12px;
-        padding: 15px;
+    .stat-metric-card {
+        background: #1E293B;
+        border: 1px solid #334155;
+        border-radius: 10px;
+        padding: 12px;
         text-align: center;
-    }
-
-    .coupon-card {
-        background: linear-gradient(135deg, #1E1B4B 0%, #0F172A 100%);
-        border: 2px solid #8B5CF6;
-        border-radius: 14px;
-        padding: 16px;
-        margin-bottom: 12px;
     }
     .vip-banner {
         background: linear-gradient(135deg, #4C1D95 0%, #8B5CF6 50%, #3B82F6 100%);
@@ -99,7 +87,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 2. ACCÈS API & MOTEUR DYNAMIQUE RENFORCÉ
+# 2. ACCÈS API & DONNÉES
 # ==========================================
 API_KEY = "1e9518e7585349f9abe6d5a29ddb83b1"
 BASE_URL = "https://api.football-data.org/v4/"
@@ -163,9 +151,7 @@ def get_advanced_league_stats(league_code):
             
             seed_val = sum(ord(c) for c in name)
             card_rate = float(np.clip(1.8 + (seed_val % 12) * 0.18 + (ga / played) * 0.25, 1.5, 4.2))
-            corner_rate = float(np.clip(4.2 + (seed_val % 15) * 0.20 + (gf / played) * 0.45, 3.8, 7.5))
-            
-            # Contrôle du milieu affiné basé sur la possession virtuelle et l'efficacité des points
+            corner_rate = float(np.clip(4.5 + (seed_val % 14) * 0.22 + (gf / played) * 0.50, 4.0, 8.0))
             midfield_control = float(np.clip(0.80 + (pts / (played * 3.0)) * 0.40, 0.70, 1.35))
             
             stats[name] = {
@@ -178,9 +164,8 @@ def get_advanced_league_stats(league_code):
                 "points": pts
             }
 
-    # Analyse approfondie de l'historique des 5 derniers matchs réels (Forme + Attaque + Défense)
     if matches_data and "matches" in matches_data:
-        finished = [m for m in matches_data["matches"] if m.get("status"] == "FINISHED"]
+        finished = [m for m in matches_data["matches"] if m.get("status") == "FINISHED"]
         finished.sort(key=lambda x: x.get("utcDate", ""))
         
         team_recent_history = {}
@@ -210,7 +195,6 @@ def get_advanced_league_stats(league_code):
                 form_pts = sum(3 if r['res']=='W' else (1 if r['res']=='D' else 0) for r in last_5)
                 recent_gd = sum(r['gf'] - r['ga'] for r in last_5)
                 
-                # Form factor plus sensible à la dynamique réelle (points + différence de buts)
                 form_factor = np.clip(0.85 + (form_pts / 40.0) + (recent_gd * 0.02), 0.80, 1.20)
                 stats[t_name]["form_factor"] = form_factor
                 stats[t_name]["recent_results"] = [m['res'] for m in last_5]
@@ -252,7 +236,7 @@ def get_all_competitions_upcoming():
     return all_upcoming, league_stats_dict, league_avg_dict
 
 # ==========================================
-# 3. MOTEUR MATHÉMATIQUE HAUTE PRécision (V25.6)
+# 3. MOTEUR MATHÉMATIQUE (BUTS & CORNERS)
 # ==========================================
 def dixon_coles_adjustment(x, y, h_xg, a_xg, rho=-0.07):
     if x == 0 and y == 0: return max(0.01, 1.0 - (h_xg * a_xg * rho))
@@ -275,13 +259,11 @@ def run_quant_prediction_v23(h_name, a_name, score_h=0, score_a=0, elapsed_min=0
     h_stat = team_stats.get(h_name, default_stat)
     a_stat = team_stats.get(a_name, default_stat)
     
-    # Intégration stricte de l'attaque domicile vs défense extérieur et vice-versa
     h_att = h_stat["home_gf_pg"] / max(0.1, avg_goals)
     h_def = h_stat["home_ga_pg"] / max(0.1, avg_goals)
     a_att = a_stat["away_gf_pg"] / max(0.1, avg_goals)
     a_def = a_stat["away_ga_pg"] / max(0.1, avg_goals)
 
-    # Calcul Elo et impact du milieu de terrain sur la domination du match
     elo_diff = h_stat["elo"] - a_stat["elo"]
     elo_adj = np.clip(elo_diff / 700.0, -0.30, 0.30)
     
@@ -289,7 +271,6 @@ def run_quant_prediction_v23(h_name, a_name, score_h=0, score_a=0, elapsed_min=0
     midfield_multiplier_h = np.clip(midfield_ratio, 0.85, 1.15)
     midfield_multiplier_v = np.clip(1.0 / midfield_ratio, 0.85, 1.15)
 
-    # xG finaux basés sur : Attaque x Défense adverse x Elo x Forme x Milieu
     full_h_xg = float(np.clip(avg_goals * h_att * a_def * (1.0 + elo_adj) * h_stat["form_factor"] * midfield_multiplier_h, 0.3, 3.5))
     full_a_xg = float(np.clip(avg_goals * a_att * h_def * (1.0 - elo_adj) * a_stat["form_factor"] * midfield_multiplier_v, 0.3, 3.2))
 
@@ -329,22 +310,32 @@ def run_quant_prediction_v23(h_name, a_name, score_h=0, score_a=0, elapsed_min=0
     p_n = float(np.sum(np.diag(matrix))) * 100
     p_a = float(np.sum(np.triu(matrix, 1))) * 100
 
+    # PROBABILITÉS DE BUTS ÉTENDUES
     prob_o15 = round((1.0 - (matrix[0,0] + matrix[1,0] + matrix[0,1])) * 100, 1)
     prob_o25 = round((1.0 - np.sum([matrix[i,j] for i in range(3) for j in range(3) if i+j <= 2])) * 100, 1)
-    prob_u35 = round(np.sum([matrix[i,j] for i in range(max_g) for j in range(max_g) if i+j <= 3]) * 100, 1)
+    prob_o35 = round((1.0 - np.sum([matrix[i,j] for i in range(4) for j in range(4) if i+j <= 3])) * 100, 1)
     
+    prob_u25 = round(100.0 - prob_o25, 1)
+    prob_u35 = round(100.0 - prob_o35, 1)
+    
+    # Les deux équipes marquent (BTTS)
+    prob_btts_yes = round((1.0 - (np.sum(matrix[0, :]) + np.sum(matrix[:, 0]) - matrix[0,0])) * 100, 1)
+    prob_btts_no = round(100.0 - prob_btts_yes, 1)
+    
+    # PROBABILITÉS DE CORNERS DÉTAILLÉES
     attack_drive = (full_h_xg + full_a_xg) / 2.5
-    exp_c_tot = round(np.clip(((h_stat["corner_rate"] + a_stat["corner_rate"]) * attack_drive * 0.90) * rem_factor, 1.5, 14.0), 1)
+    exp_c_tot = round(np.clip(((h_stat["corner_rate"] + a_stat["corner_rate"]) * attack_drive * 0.92) * rem_factor, 2.0, 15.0), 1)
     
-    prob_c_4_5 = round((1.0 - poisson.cdf(4, exp_c_tot)) * 100, 1) if exp_c_tot > 0 else 0
-    prob_c_6_5 = round((1.0 - poisson.cdf(6, exp_c_tot)) * 100, 1) if exp_c_tot > 0 else 0
+    prob_c_7_5 = round((1.0 - poisson.cdf(7, exp_c_tot)) * 100, 1) if exp_c_tot > 0 else 0
+    prob_c_8_5 = round((1.0 - poisson.cdf(8, exp_c_tot)) * 100, 1) if exp_c_tot > 0 else 0
+    prob_c_9_5 = round((1.0 - poisson.cdf(9, exp_c_tot)) * 100, 1) if exp_c_tot > 0 else 0
 
     base_cards = (h_stat["card_rate"] + a_stat["card_rate"]) / 2.0
     exp_k_tot = round(np.clip((base_cards * 1.0) * rem_factor, 0.8, 8.5), 1)
     prob_k_1_5 = round((1.0 - poisson.cdf(1, exp_k_tot)) * 100, 1) if exp_k_tot > 0 else 0
     prob_k_2_5 = round((1.0 - poisson.cdf(2, exp_k_tot)) * 100, 1) if exp_k_tot > 0 else 0
 
-    # SEUILS DE DÉCISION TRANCHANTS ET LOGIQUES (Plus de sélectivité)
+    # CHOIX OPTIMAL DU PARI
     if p_h >= 58.0:
         best_pick = f"🔥 Victoire Directe : {h_name}"
         best_prob = p_h
@@ -377,9 +368,9 @@ def run_quant_prediction_v23(h_name, a_name, score_h=0, score_a=0, elapsed_min=0
     combo_candidates = [
         (f"🛡️ Double Chance ({h_name} ou Nul) + Plus de 1.5 buts", round(best_prob * 0.90, 1)),
         (f"⚽ Total Buts : Plus de 1.5 buts", prob_o15),
+        (f"⛳ Plus de 8.5 Corners dans le match", prob_c_8_5),
+        (f"🤝 Les 2 Équipes Marquent : OUI", prob_btts_yes),
         (f"🛡️ Total Buts : Moins de 3.5 buts", prob_u35),
-        (f"🛡️ Double Chance ({a_name} ou Nul)", round((p_a + p_n), 1)),
-        (f"⛳ Plus de 6.5 Corners dans le match", prob_c_6_5),
         (f"🟨 Plus de 1.5 Cartons dans le match", prob_k_1_5)
     ]
     combo_idx = (sum(ord(c) for c in h_name + a_name)) % len(combo_candidates)
@@ -392,10 +383,13 @@ def run_quant_prediction_v23(h_name, a_name, score_h=0, score_a=0, elapsed_min=0
         "p_h": round(p_h, 1), "p_n": round(p_n, 1), "p_a": round(p_a, 1),
         "odds_h": prob_to_odds(p_h), "odds_n": prob_to_odds(p_n), "odds_a": prob_to_odds(p_a),
         "top_3_scores": top_3_scores,
-        "prob_o15": prob_o15, "prob_o25": prob_o25, "prob_u35": prob_u35,
+        "prob_o15": prob_o15, "prob_o25": prob_o25, "prob_o35": prob_o35,
+        "prob_u25": prob_u25, "prob_u35": prob_u35,
+        "prob_btts_yes": prob_btts_yes, "prob_btts_no": prob_btts_no,
         "corners": {
-            "tot": exp_c_tot, "p_4_5": prob_c_4_5, "p_6_5": prob_c_6_5, 
-            "odds_4_5": prob_to_odds(prob_c_4_5), "odds_6_5": prob_to_odds(prob_c_6_5)
+            "tot": exp_c_tot, 
+            "p_7_5": prob_c_7_5, "p_8_5": prob_c_8_5, "p_9_5": prob_c_9_5,
+            "odds_7_5": prob_to_odds(prob_c_7_5), "odds_8_5": prob_to_odds(prob_c_8_5), "odds_9_5": prob_to_odds(prob_c_9_5)
         },
         "cards": {
             "tot": exp_k_tot, "p_1_5": prob_k_1_5, "p_2_5": prob_k_2_5,
@@ -414,7 +408,7 @@ def run_quant_prediction_v23(h_name, a_name, score_h=0, score_a=0, elapsed_min=0
     }
 
 # ==========================================
-# 4. FONCTION ANALYTIQUE DE L'ASSISTANT IA
+# 4. ASSISTANT APEX AI
 # ==========================================
 def generate_apex_ai_response(user_prompt, team_stats):
     prompt_lower = user_prompt.lower()
@@ -431,11 +425,12 @@ def generate_apex_ai_response(user_prompt, team_stats):
     if len(matched_teams) >= 2:
         t1, t2 = matched_teams[0], matched_teams[1]
         s1, s2 = team_stats[t1], team_stats[t2]
-        return f"""📊 **Analyse Critique Apex AI pour {t1} vs {t2}** :
+        return f"""📊 **Analyse Quantitatives Apex AI pour {t1} vs {t2}** :
 * **{t1}** (Elo: {s1['elo']:.0f} | xG Dom. Estimé: {s1['home_gf_pg']:.2f} | Forme: {''.join(s1['recent_results']) if s1['recent_results'] else 'N/A'})
 * **{t2}** (Elo: {s2['elo']:.0f} | xG Ext. Estimé: {s2['away_gf_pg']:.2f} | Forme: {''.join(s2['recent_results']) if s2['recent_results'] else 'N/A'})
 
-🔍 **Mon avis de débatteur** : D'après les matrices de Poisson, les rapports de force au milieu et l'ajustement Dixon-Coles, la balance tactique penche. Vérifie bien l'état de forme réel avant de valider ton choix final !"""
+🔍 **Analyse Buts & Corners** :
+Vérifie la probabilité de Plus de 1.5 Buts ou de Plus de 8.5 Corners dans l'onglet Analyse Détaillée. Si les xG cumulés sont supérieurs à 2.6, le marché des Buts ou du BTTS est une priorité (EV+)."""
         
     elif len(matched_teams) == 1:
         t = matched_teams[0]
@@ -443,18 +438,15 @@ def generate_apex_ai_response(user_prompt, team_stats):
         return f"""📈 **Évaluation de l'équipe : {t}**
 * Classement / Points actuels : {s.get('points', 'N/A')} pts
 * Attaque moyenne : {s['gf_pg']:.2f} buts/match | Défense : {s['ga_pg']:.2f} buts/match
-* Indice de forme récent : {''.join(s['recent_results']) if s['recent_results'] else 'Neutre'}
-
-⚠️ **Analyse critique** : Attention à la régularité de cette équipe sur ses derniers déplacements/réceptions."""
+* Indice de forme récent : {''.join(s['recent_results']) if s['recent_results'] else 'Neutre'}"""
     
     else:
-        return f"""🤖 **Assistant Apex AI (Mode Critique)** : 
-J'ai bien reçu ton message (*"{user_prompt}"*). Mentionne explicitement les noms des deux équipes du match pour lancer l'analyse croisée (xG, Elo, Milieu, Poisson) !"""
+        return f"""🤖 **Assistant Apex AI** : Mentionne les deux équipes pour lancer l'analyse (xG, Buts, Corners, Poisson)."""
 
 # ==========================================
-# 5. INTERFACE APPLICATIVE V25.6
+# 5. INTERFACE APPLICATIVE V25.7
 # ==========================================
-st.sidebar.title("Apex Quant v25.6 Pro")
+st.sidebar.title("Apex Quant v25.7 Ultra")
 selected_comp = st.sidebar.selectbox("Sélectionner la Compétition principale", list(COMPETITIONS.keys()))
 league_code = COMPETITIONS[selected_comp]
 
@@ -536,12 +528,11 @@ with tab_calendar:
             cal_data.append({
                 "Date & Heure": date_str,
                 "Match Réel": f"{h_team} vs {a_team}",
-                "Forme Domicile": "".join(pred["h_recent"]),
-                "Forme Extérieur": "".join(pred["a_recent"]),
-                "Cote 1": pred["odds_h"],
-                "Cote N": pred["odds_n"],
-                "Cote 2": pred["odds_a"],
-                "Conseil Optimal": f"{pred['best_pick']} ({pred['best_prob']}%)"
+                "Forme Dom.": "".join(pred["h_recent"]),
+                "Forme Ext.": "".join(pred["a_recent"]),
+                "Conseil Optimal": f"{pred['best_pick']} ({pred['best_prob']}%)",
+                "+1.5 Buts": f"{pred['prob_o15']}%",
+                "Est. Corners": f"{pred['corners']['tot']}"
             })
         st.dataframe(pd.DataFrame(cal_data), use_container_width=True, hide_index=True)
     else:
@@ -575,7 +566,7 @@ with tab_detail:
 
         st.markdown(f"""
         <div class="value-pick-card">
-            <div class="value-pick-title">💎 CONSEIL DE GAIN OPTIMISÉ (POISSON + DIXON-COLES + ELO)</div>
+            <div class="value-pick-title">💎 CONSEIL OPTIMAL</div>
             <div class="value-pick-main">{res['best_pick']}</div>
             <div style="font-size:1.1rem; font-weight:800;">Fiabilité : {res['best_prob']}%</div>
         </div>
@@ -589,6 +580,30 @@ with tab_detail:
             st.markdown(f"""<div class="big-score-box"><div style="color:#94A3B8;">2ème SCORE</div><div class="big-score-val">{res['top_3_scores'][1]['score']}</div><div class="big-score-prob">{res['top_3_scores'][1]['prob']}%</div></div>""", unsafe_allow_html=True)
         with sc3:
             st.markdown(f"""<div class="big-score-box"><div style="color:#94A3B8;">3ème SCORE</div><div class="big-score-val">{res['top_3_scores'][2]['score']}</div><div class="big-score-prob">{res['top_3_scores'][2]['prob']}%</div></div>""", unsafe_allow_html=True)
+
+        st.markdown("---")
+        st.markdown("### ⚽ PRÉDICTIONS NOMBRE DE BUTS")
+        b1, b2, b3, b4 = st.columns(4)
+        with b1:
+            st.metric("Plus de 1.5 Buts", f"{res['prob_o15']}%", f"Cote ~ {res['p_h']}")
+        with b2:
+            st.metric("Plus de 2.5 Buts", f"{res['prob_o25']}%", f"Moins: {res['prob_u25']}%")
+        with b3:
+            st.metric("Moins de 3.5 Buts", f"{res['prob_u35']}%", f"Plus: {res['prob_o35']}%")
+        with b4:
+            st.metric("Les 2 Équipes Marquent", f"{res['prob_btts_yes']}%", f"Non: {res['prob_btts_no']}%")
+
+        st.markdown("---")
+        st.markdown("### ⛳ PRÉDICTIONS CORNERS")
+        c1, c2, c3, c4 = st.columns(4)
+        with c1:
+            st.metric("Corners Estimés Total", f"{res['corners']['tot']}")
+        with c2:
+            st.metric("Plus de 7.5 Corners", f"{res['corners']['p_7_5']}%", f"Cote ~ {res['corners']['odds_7_5']}")
+        with c3:
+            st.metric("Plus de 8.5 Corners", f"{res['corners']['p_8_5']}%", f"Cote ~ {res['corners']['odds_8_5']}")
+        with c4:
+            st.metric("Plus de 9.5 Corners", f"{res['corners']['p_9_5']}%", f"Cote ~ {res['corners']['odds_9_5']}")
 
 with tab_audit:
     st.subheader(f"📊 Évaluation des Prédictions - {selected_comp}")
@@ -717,28 +732,28 @@ with tab_coupon:
             st.code(telegram_m, language="text")
 
 # ------------------------------------------
-# ONGLET 6 : ASSISTANT APEX AI (DÉBAT & ANALYSE)
+# ONGLET 6 : ASSISTANT APEX AI
 # ------------------------------------------
 with tab_ai:
     st.subheader("💬 Assistant Apex AI - Débat & Analyse Critique")
-    st.markdown("Ton analyste quantitatif personnel est en ligne. Pose-lui tes questions sur les matchs de la compétition sélectionnée (**" + selected_comp + "**) : il passera les chiffres au crible et challengera tes choix sans langue de bois.")
+    st.markdown("Ton analyste quantitatif personnel est en ligne sur la compétition (**" + selected_comp + "**).")
     
     if "messages" not in st.session_state:
         st.session_state.messages = [
-            {"role": "assistant", "content": f"Salut Amour ! Je suis l'Assistant Apex. Je surveille la compétition **{selected_comp}**. Quel match ou quel pari veux-tu qu'on décortique aujourd'hui ?"}
+            {"role": "assistant", "content": f"Salut Amour ! Je surveille **{selected_comp}**. Quel match ou option (buts/corners) veux-tu analyser ?"}
         ]
         
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
             
-    if prompt := st.chat_input("Ex: Que penses-tu d'un pari sur le prochain match à domicile ?"):
+    if prompt := st.chat_input("Ex: Que penses-tu du match Arsenal vs Chelsea ?"):
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user"):
             st.markdown(prompt)
             
         with st.chat_message("assistant"):
-            with st.spinner("Analyse croisée (Poisson, Dixon-Coles, Elo, Milieu) en cours..."):
+            with st.spinner("Analyse croisée en cours..."):
                 response_text = generate_apex_ai_response(prompt, team_stats)
                 st.markdown(response_text)
                 st.session_state.messages.append({"role": "assistant", "content": response_text})
