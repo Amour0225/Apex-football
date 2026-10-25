@@ -6,10 +6,10 @@ import pandas as pd
 from datetime import datetime, timedelta
 
 # ==========================================
-# 1. CONFIGURATION & DESIGN V44.0 ALPHA MATRIX
+# 1. CONFIGURATION & DESIGN V45.0 ALPHA MATRIX
 # ==========================================
 st.set_page_config(
-    page_title="Apex Quant v44.0 Alpha Matrix",
+    page_title="Apex Quant v45.0 Alpha Matrix Pro",
     page_icon="⚡",
     layout="wide"
 )
@@ -38,16 +38,11 @@ st.markdown("""
     .option-box-sec {
         background: rgba(56, 189, 248, 0.08); border: 1px solid #38BDF8; border-radius: 12px; padding: 14px; margin: 8px 0;
     }
-    .badge-live { background-color: #EF4444; color: white; padding: 6px 12px; border-radius: 8px; font-weight: 900; }
     .badge-league { background-color: #8B5CF6; color: white; padding: 4px 10px; border-radius: 6px; font-weight: 800; font-size: 0.85rem; margin-right: 8px; }
     
     .big-score-box { background: #1E293B; border: 2px solid #38BDF8; border-radius: 12px; padding: 15px; text-align: center; margin: 8px 0; }
     .big-score-val { font-size: 2.1rem; font-weight: 900; color: #38BDF8; line-height: 1.1; }
     .big-score-prob { font-size: 1rem; font-weight: 700; color: #10B981; margin-top: 4px; }
-
-    .analysis-report {
-        background-color: #0B0F19; border-left: 4px solid #38BDF8; padding: 15px; border-radius: 0 12px 12px 0; margin: 15px 0; font-size: 0.95rem; line-height: 1.6; color: #CBD5E1;
-    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -297,10 +292,7 @@ def run_alpha_matrix_prediction(h_name, a_name, score_h=0, score_a=0, elapsed_mi
     prob_1x = np.clip(p_h + (p_n * 0.94), 50.0, 96.5)
     prob_x2 = np.clip(p_a + (p_n * 0.94), 50.0, 96.5)
 
-    # --- GÉNÉRATION DES 3 OPTIONS TACTIQUES (MULTI-OPTIONS 90-95%) ---
     options = []
-    
-    # Option 1 : Sécurité Blindée (90-95% certitude)
     if prob_1x >= 85.0:
         options.append({"type": "SÉCURITÉ 90%+", "desc": f"Double Chance : {h_name} ou Nul (1X)", "prob": round(prob_1x, 1), "odds": prob_to_odds(prob_1x)})
     elif prob_x2 >= 85.0:
@@ -308,7 +300,6 @@ def run_alpha_matrix_prediction(h_name, a_name, score_h=0, score_a=0, elapsed_mi
     else:
         options.append({"type": "SÉCURITÉ 90%+", "desc": "Plus de 1.5 Buts dans le match", "prob": round(prob_o15, 1), "odds": prob_to_odds(prob_o15)})
 
-    # Option 2 : Value Bet / Force de Frappe Principale
     if p_h >= 55.0:
         options.append({"type": "VALUE BET PRINCIPAL", "desc": f"Victoire Sèche : {h_name}", "prob": round(p_h, 1), "odds": prob_to_odds(p_h)})
     elif p_a >= 55.0:
@@ -316,7 +307,6 @@ def run_alpha_matrix_prediction(h_name, a_name, score_h=0, score_a=0, elapsed_mi
     else:
         options.append({"type": "VALUE BET PRINCIPAL", "desc": "Plus de 2.5 Buts (Match Ouvert)", "prob": round(prob_o25, 1), "odds": prob_to_odds(prob_o25)})
 
-    # Option 3 : Scénario Alternatif / Contre-Pied (Hedging si surprise)
     if elo_diff > 100:
         options.append({"type": "SCÉNARIO ALTERNATIF", "desc": f"Victoire de {h_name} par 1 but d'écart ou plus (Handicap -1)", "prob": round(p_h * 0.85, 1), "odds": prob_to_odds(p_h * 0.85)})
     elif elo_diff < -100:
@@ -342,9 +332,9 @@ def run_alpha_matrix_prediction(h_name, a_name, score_h=0, score_a=0, elapsed_mi
     }
 
 # ==========================================
-# 4. INTERFACE STREAMLIT V44.0
+# 4. INTERFACE STREAMLIT V45.0
 # ==========================================
-st.sidebar.title("Apex Alpha Matrix v44.0 ⚡")
+st.sidebar.title("Apex Alpha Matrix v45.0 ⚡")
 selected_comp = st.sidebar.selectbox("Compétition Principale", list(COMPETITIONS.keys()))
 
 st.sidebar.divider()
@@ -361,27 +351,13 @@ team_stats, avg_goals_h, avg_goals_a = get_advanced_league_stats(league_code)
 raw_matches = fetch_api(f"competitions/{league_code}/matches")
 
 all_matches = raw_matches.get("matches", []) if raw_matches else []
-live_matches = [m for m in all_matches if m.get('status') in ['IN_PLAY', 'LIVE', 'PAUSED']]
-
-today_dt = datetime.utcnow()
-next_week_dt = today_dt + timedelta(days=8)
-upcoming_matches = []
-for m in all_matches:
-    if m.get('status') in ['SCHEDULED', 'TIMED']:
-        utc_str = m.get('utcDate', '')
-        if utc_str:
-            try:
-                m_dt = datetime.strptime(utc_str[:19], "%Y-%m-%dT%H:%M:%S")
-                if today_dt - timedelta(hours=3) <= m_dt <= next_week_dt:
-                    upcoming_matches.append(m)
-            except Exception:
-                upcoming_matches.append(m)
-
+upcoming_matches = [m for m in all_matches if m.get('status') in ['SCHEDULED', 'TIMED']]
 finished_matches = [m for m in all_matches if m.get('status') == 'FINISHED']
 
-tab_calendar, tab_detail, tab_coupon = st.tabs([
+tab_calendar, tab_detail, tab_audit, tab_coupon = st.tabs([
     f"📅 CALENDRIER ({len(upcoming_matches)})", 
     "📊 MATRICE D'ANALYSE MULTI-OPTIONS",
+    f"📈 AUDIT & VÉRIFICATION ({len(finished_matches)})",
     "🎟️ MARMITE MULTI-OPTIONS VIP"
 ])
 
@@ -424,7 +400,6 @@ with tab_detail:
         """, unsafe_allow_html=True)
 
         st.markdown("### 🎯 LES 3 OPTIONS TACTIQUES DU MATCH (STRATÉGIE GAGNANTE)")
-        
         for opt in res['options']:
             box_style = "option-box" if "SÉCURITÉ" in opt['type'] else "option-box-sec"
             st.markdown(f"""
@@ -445,6 +420,58 @@ with tab_detail:
         with sc2: st.markdown(f"""<div class="big-score-box"><b>2ème SCORE</b><div class="big-score-val">{res['top_3_scores'][1]['score']}</div><div class="big-score-prob">{res['top_3_scores'][1]['prob']}%</div></div>""", unsafe_allow_html=True)
         with sc3: st.markdown(f"""<div class="big-score-box"><b>3ème SCORE</b><div class="big-score-val">{res['top_3_scores'][2]['score']}</div><div class="big-score-prob">{res['top_3_scores'][2]['prob']}%</div></div>""", unsafe_allow_html=True)
 
+with tab_audit:
+    st.markdown("""
+    <div class="vip-banner">
+        <h2 style="margin:0; color:#F59E0B;">👑 AUDIT & VÉRIFICATION DES PRÉDICTIONS</h2>
+    </div>
+    """, unsafe_allow_html=True)
+    if finished_matches:
+        audit_rows = []
+        total_eval, success_pick_count, net_units = 0, 0, 0.0
+        for m in finished_matches:
+            ht, at = m['homeTeam']['name'], m['awayTeam']['name']
+            rh, ra = m['score']['fullTime']['home'], m['score']['fullTime']['away']
+            if rh is not None and ra is not None:
+                real_score_str = f"{rh}-{ra}"
+                pred = run_alpha_matrix_prediction(ht, at, 0, 0, 0, team_stats, avg_goals_h, avg_goals_a, False, False, user_bankroll, None, weather_condition)
+                top_opt_desc = pred['options'][0]['desc']
+                tot_goals = rh + ra
+                
+                if "Double Chance" in top_opt_desc:
+                    is_home_pick = ht in top_opt_desc and "ou Nul (1X)" in top_opt_desc
+                    is_away_pick = at in top_opt_desc and "Nul ou" in top_opt_desc
+                    pick_hit = (is_home_pick and rh >= ra) or (is_away_pick and ra >= rh)
+                elif "Plus de 1.5" in top_opt_desc:
+                    pick_hit = tot_goals > 1
+                else:
+                    pick_hit = (rh > ra if ht in top_opt_desc else ra > rh)
+
+                eval_status = "✅ GAGNÉ" if pick_hit else "❌ PERDU"
+                if pick_hit:
+                    success_pick_count += 1
+                    net_units += 10.0 * (pred['options'][0]['odds'] - 1.0)
+                else:
+                    net_units -= 10.0
+                total_eval += 1
+                audit_rows.append({
+                    "Date": m['utcDate'][:10],
+                    "Rencontre": f"{ht} vs {at}",
+                    "Score Réel": real_score_str,
+                    "Option Validée": top_opt_desc,
+                    "Statut": eval_status
+                })
+        if total_eval > 0:
+            winrate_pick = round((success_pick_count / total_eval) * 100, 1)
+            roi = round((net_units / (total_eval * 10.0)) * 100, 1)
+            k1, k2, k3 = st.columns(3)
+            with k1: st.markdown(f"""<div class="sub-card" style="text-align:center;"><b>MATCHS AUDITÉS</b><br><span style="font-size:1.6rem; color:#38BDF8;">{total_eval}</span></div>""", unsafe_allow_html=True)
+            with k2: st.markdown(f"""<div class="sub-card" style="text-align:center;"><b>TAUX DE RÉUSSITE</b><br><span style="font-size:1.6rem; color:#10B981;">{winrate_pick}%</span></div>""", unsafe_allow_html=True)
+            with k3: st.markdown(f"""<div class="sub-card" style="text-align:center;"><b>PROFIT / ROI</b><br><span style="font-size:1.6rem; color:{'#10B981' if net_units>=0 else '#EF4444'};">{net_units:+.1f} U ({roi:+.1f}%)</span></div>""", unsafe_allow_html=True)
+            st.dataframe(pd.DataFrame(audit_rows), use_container_width=True, hide_index=True)
+    else:
+        st.info("Aucun match terminé récent à auditer dans cette compétition.")
+
 with tab_coupon:
     st.subheader("🎟️ Ticket Combiné Multi-Options VIP")
     if upcoming_matches:
@@ -452,14 +479,13 @@ with tab_coupon:
         for m in upcoming_matches:
             ht, at = m['homeTeam']['name'], m['awayTeam']['name']
             pred = run_alpha_matrix_prediction(ht, at, 0, 0, 0, team_stats, avg_goals_h, avg_goals_a, False, post_break_mode, user_bankroll, None, weather_condition)
-            top_opt = pred['options'][0] # Option sécurité 90%+
+            top_opt = pred['options'][0]
             coupon_list.append({
                 "match": f"{ht} vs {at}",
                 "pick": top_opt['desc'],
                 "prob": top_opt['prob'],
                 "odds": top_opt['odds']
             })
-        
         coupon_list.sort(key=lambda x: x['prob'], reverse=True)
         top_safe = coupon_list[:5]
         total_odds = np.prod([item['odds'] for item in top_safe])
