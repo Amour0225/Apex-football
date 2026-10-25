@@ -6,10 +6,10 @@ import pandas as pd
 from datetime import datetime, timedelta
 
 # ==========================================
-# 1. CONFIGURATION & DESIGN V46.0 BAYESIAN
+# 1. CONFIGURATION & DESIGN V45.2 ALPHA MATRIX
 # ==========================================
 st.set_page_config(
-    page_title="Apex Quant v46.0 Bayesian Matrix",
+    page_title="Apex Quant v45.2 Alpha Matrix Pro",
     page_icon="⚡",
     layout="wide"
 )
@@ -146,46 +146,6 @@ def get_advanced_league_stats(league_code):
             a_gf = a_row.get("goalsFor", gf / 2)
             a_ga = a_row.get("goalsAgainst", ga / 2)
             
-            total_home_gf += h_gf
-            total_home_matches += h_played
-            total_away_gf += a_gf
-            total_away_matches += a_played
-            
-        if total_home_matches > 0 and total_away_matches > 0:
-            avg_goals_home = max(0.9, total_home_gf / total_home_matches)
-            avg_goals_away = max(0.8, total_away_gf / total_away_matches)
-
-        # Calcul bayésien (Shrinkage) pour chaque équipe
-        for row in table_total:
-            name = row["team"]["name"]
-            played = max(1, row.get("playedGames", 1))
-            pts = row.get("points", 0)
-            gf = row.get("goalsFor", 0)
-            ga = row.get("goalsAgainst", 0)
-            
-            h_row = dict_home.get(name, row)
-            h_played = max(1, h_row.get("playedGames", 1))
-            h_gf = h_row.get("goalsFor", gf / 2)
-            h_ga = h_row.get("goalsAgainst", ga / 2)
-            
-            a_row = dict_away.get(name, row)
-            a_played = max(1, a_row.get("playedGames", 1))
-            a_gf = a_row.get("goalsFor", gf / 2)
-            a_ga = a_row.get("goalsAgainst", ga / 2)
-            
-            # Inférence Bayésienne Analytique (Poisson-Gamma Conjugate Shrinkage)
-            # Paramètre de lissage K = 3.0 (poids prioritaire de la ligue)
-            K_bayes = 3.0
-            raw_h_gf_rate = h_gf / h_played
-            raw_h_ga_rate = h_ga / h_played
-            raw_a_gf_rate = a_gf / a_played
-            raw_a_ga_rate = a_ga / a_played
-
-            bayes_h_gf = (h_played * raw_h_gf_rate + K_bayes * avg_goals_home) / (h_played + K_bayes)
-            bayes_h_ga = (h_played * raw_h_ga_rate + K_bayes * avg_goals_away) / (h_played + K_bayes)
-            bayes_a_gf = (a_played * raw_a_gf_rate + K_bayes * avg_goals_away) / (a_played + K_bayes)
-            bayes_a_ga = (a_played * raw_a_ga_rate + K_bayes * avg_goals_home) / (a_played + K_bayes)
-
             elo_rating = 1500 + (pts * 14) + ((gf - ga) * 5)
             seed_val = sum(ord(c) for c in name)
             card_rate = float(np.clip(2.0 + (seed_val % 8) * 0.25 + (ga / played) * 0.35, 2.0, 5.5))
@@ -196,11 +156,19 @@ def get_advanced_league_stats(league_code):
             
             stats[name] = {
                 "played": played, "pts": pts, "gf": gf, "ga": ga,
-                "home_gf_pg": bayes_h_gf, "home_ga_pg": bayes_h_ga,
-                "away_gf_pg": bayes_a_gf, "away_ga_pg": bayes_a_ga,
+                "home_gf_pg": h_gf / h_played, "home_ga_pg": h_ga / h_played,
+                "away_gf_pg": a_gf / a_played, "away_ga_pg": a_ga / a_played,
                 "elo": elo_rating, "momentum_factor": mom_factor, "momentum_status": mom_status,
                 "card_rate": card_rate, "corner_rate": corner_rate, "last_4": last_4
             }
+            total_home_gf += h_gf
+            total_home_matches += h_played
+            total_away_gf += a_gf
+            total_away_matches += a_played
+            
+        if total_home_matches > 0 and total_away_matches > 0:
+            avg_goals_home = max(0.9, total_home_gf / total_home_matches)
+            avg_goals_away = max(0.8, total_away_gf / total_away_matches)
             
     return stats, avg_goals_home, avg_goals_away
 
@@ -234,7 +202,7 @@ def get_all_competitions_upcoming():
     return all_upcoming, league_stats_dict, league_avg_h_dict, league_avg_a_dict
 
 # ==========================================
-# 3. MOTEUR BAYESIAN MATRIX (MULTI-OPTIONS)
+# 3. MOTEUR ALPHA MATRIX (MULTI-OPTIONS)
 # ==========================================
 def dixon_coles_adjustment(x, y, h_xg, a_xg, rho=-0.08):
     if x == 0 and y == 0: return max(0.01, 1.0 - (h_xg * a_xg * rho))
@@ -256,10 +224,10 @@ def calculate_kelly(prob_pct, bookmaker_odds, bankroll, kelly_fraction=0.25, max
     adjusted_f = min(f_star * kelly_fraction, max_cap_pct)
     return round(bankroll * adjusted_f, 2), round(((p * bookmaker_odds) - 1.0) * 100, 1)
 
-def run_bayesian_matrix_prediction(h_name, a_name, score_h=0, score_a=0, elapsed_min=0, team_stats={}, avg_goals_h=1.45, avg_goals_a=1.15, is_live=False, bankroll=1000.0, book_odds_input=None, weather_mode="Normal (Idéal)"):
+def run_alpha_matrix_prediction(h_name, a_name, score_h=0, score_a=0, elapsed_min=0, team_stats={}, avg_goals_h=1.45, avg_goals_a=1.15, is_live=False, post_break_active=False, bankroll=1000.0, book_odds_input=None, weather_mode="Normal (Idéal)"):
     default_stat = {
         "played": 10, "pts": 15, "gf": 12, "ga": 12,
-        "home_gf_pg": avg_goals_h, "home_ga_pg": avg_goals_a, "away_gf_pg": avg_goals_a, "away_ga_pg": avg_goals_h,
+        "home_gf_pg": 1.45, "home_ga_pg": 1.10, "away_gf_pg": 1.15, "away_ga_pg": 1.35,
         "elo": 1500, "momentum_factor": 1.0, "momentum_status": "Neutre",
         "card_rate": 3.0, "corner_rate": 5.0, "last_4": []
     }
@@ -280,9 +248,10 @@ def run_bayesian_matrix_prediction(h_name, a_name, score_h=0, score_a=0, elapsed
     elo_mult_a = np.clip(1.0 - (elo_diff / 1000.0), 0.50, 1.55)
     
     mom_h, mom_a = h_stat["momentum_factor"], a_stat["momentum_factor"]
+    dampener = 0.88 if (post_break_active and not is_live) else 1.0
 
-    full_h_xg = float(np.clip(raw_h_xg * elo_mult_h * mom_h * weather_multiplier, 0.20, 4.00))
-    full_a_xg = float(np.clip(raw_a_xg * elo_mult_a * mom_a * weather_multiplier, 0.20, 3.50))
+    full_h_xg = float(np.clip(raw_h_xg * elo_mult_h * mom_h * dampener * weather_multiplier, 0.20, 4.00))
+    full_a_xg = float(np.clip(raw_a_xg * elo_mult_a * mom_a * dampener * weather_multiplier, 0.20, 3.50))
 
     rem_factor = max(0.05, (90.0 - float(elapsed_min)) / 90.0) if is_live and elapsed_min > 0 else 1.0
     rem_h_xg, rem_a_xg = full_h_xg * rem_factor, full_a_xg * rem_factor
@@ -361,14 +330,15 @@ def run_bayesian_matrix_prediction(h_name, a_name, score_h=0, score_a=0, elapsed
     }
 
 # ==========================================
-# 4. INTERFACE STREAMLIT V46.0
+# 4. INTERFACE STREAMLIT V45.2
 # ==========================================
-st.sidebar.title("Apex Bayesian Matrix v46.0 ⚡")
+st.sidebar.title("Apex Alpha Matrix v45.2 ⚡")
 selected_comp = st.sidebar.selectbox("Compétition Principale", list(COMPETITIONS.keys()))
 
 st.sidebar.divider()
 st.sidebar.markdown("### ⚙️ PARAMÈTRES TACTIQUES")
 weather_condition = st.sidebar.selectbox("Météo / Pelouse", ["Normal (Idéal)", "Pluie / Terrain Lourd", "Canicule / Chaleur Intense"])
+post_break_mode = st.sidebar.checkbox("🔒 Filtre Post-Trêve Internationale", value=True)
 
 st.sidebar.divider()
 st.sidebar.markdown("### 💰 GESTION DE BANKROLL KELLY")
@@ -380,7 +350,7 @@ raw_matches = fetch_api(f"competitions/{league_code}/matches")
 
 all_matches = raw_matches.get("matches", []) if raw_matches else []
 
-# FILTRE CHRONOLOGIQUE STRICT (Zéro match du passé)
+# FILTRE CHRONOLOGIQUE STRICT (Élimine les matchs passés)
 today_dt = datetime.utcnow()
 next_week_dt = today_dt + timedelta(days=8)
 upcoming_matches = []
@@ -395,22 +365,22 @@ for m in all_matches:
             except Exception:
                 pass
 
-finished_matches = [m for m in all_matches if m.get('status'] == 'FINISHED']
+finished_matches = [m for m in all_matches if m.get('status') == 'FINISHED']
 
 tab_calendar, tab_detail, tab_audit, tab_coupon = st.tabs([
     f"📅 CALENDRIER ({len(upcoming_matches)})", 
-    "📊 MATRICE BAYÉSIENNE MULTI-OPTIONS",
+    "📊 MATRICE D'ANALYSE MULTI-OPTIONS",
     f"📈 AUDIT & VÉRIFICATION ({len(finished_matches)})",
-    "🎟️ MARMITE BAYÉSIENNE VIP"
+    "🎟️ MARMITE MULTI-OPTIONS VIP"
 ])
 
 with tab_calendar:
-    st.subheader(f"Calendrier Tactique Bayésien - {selected_comp}")
+    st.subheader(f"Calendrier Tactique (À venir) - {selected_comp}")
     if upcoming_matches:
         cal_data = []
         for m in upcoming_matches:
             ht, at = m['homeTeam']['name'], m['awayTeam']['name']
-            pred = run_bayesian_matrix_prediction(ht, at, 0, 0, 0, team_stats, avg_goals_h, avg_goals_a, False, user_bankroll, None, weather_condition)
+            pred = run_alpha_matrix_prediction(ht, at, 0, 0, 0, team_stats, avg_goals_h, avg_goals_a, False, post_break_mode, user_bankroll, None, weather_condition)
             cal_data.append({
                 "Date": m['utcDate'][:10] + " [" + m['utcDate'][11:16] + "]",
                 "Match": f"{ht} vs {at}",
@@ -422,7 +392,7 @@ with tab_calendar:
         st.info("Aucun match à venir dans les 7 prochains jours.")
 
 with tab_detail:
-    st.subheader("Matrice Bayésienne & Multi-Options Avancée")
+    st.subheader("Matrice d'Analyse Complète & Multi-Options")
     if upcoming_matches:
         match_options = {f"{m['utcDate'][:10]} : {m['homeTeam']['name']} vs {m['awayTeam']['name']}": m for m in upcoming_matches}
         selected_label = st.selectbox("Sélectionner la rencontre :", list(match_options.keys()))
@@ -431,7 +401,7 @@ with tab_detail:
         ht, at = selected_m['homeTeam']['name'], selected_m['awayTeam']['name']
         book_odds = st.number_input("Cote bookmaker pour l'option principale :", value=1.70, step=0.05)
         
-        res = run_bayesian_matrix_prediction(ht, at, 0, 0, 0, team_stats, avg_goals_h, avg_goals_a, False, user_bankroll, book_odds, weather_condition)
+        res = run_alpha_matrix_prediction(ht, at, 0, 0, 0, team_stats, avg_goals_h, avg_goals_a, False, post_break_mode, user_bankroll, book_odds, weather_condition)
         
         st.markdown(f"""
         <div class="matrix-card">
@@ -442,14 +412,14 @@ with tab_detail:
         </div>
         """, unsafe_allow_html=True)
 
-        st.markdown("### 🎯 LES 3 OPTIONS TACTIQUES DU MATCH (SHRINKAGE BAYÉSIEN)")
+        st.markdown("### 🎯 LES 3 OPTIONS TACTIQUES DU MATCH (STRATÉGIE GAGNANTE)")
         for opt in res['options']:
             box_style = "option-box" if "SÉCURITÉ" in opt['type'] else "option-box-sec"
             st.markdown(f"""
             <div class="{box_style}">
                 <div style="font-size:0.85rem; font-weight:800; text-transform:uppercase; color:#38BDF8;">{opt['type']}</div>
                 <div style="font-size:1.4rem; font-weight:900; color:#FFFFFF; margin:4px 0;">{opt['desc']}</div>
-                <div style="font-size:1rem; font-weight:700; color:#10B981;">Probabilité lissée : {opt['prob']}% | Cote estimée : {opt['odds']}</div>
+                <div style="font-size:1rem; font-weight:700; color:#10B981;">Probabilité estimée : {opt['prob']}% | Cote estimée : {opt['odds']}</div>
             </div>
             """, unsafe_allow_html=True)
 
@@ -479,7 +449,7 @@ with tab_audit:
             rh, ra = m['score']['fullTime']['home'], m['score']['fullTime']['away']
             if rh is not None and ra is not None:
                 real_score_str = f"{rh}-{ra}"
-                pred = run_bayesian_matrix_prediction(ht, at, 0, 0, 0, team_stats, avg_goals_h, avg_goals_a, False, user_bankroll, None, weather_condition)
+                pred = run_alpha_matrix_prediction(ht, at, 0, 0, 0, team_stats, avg_goals_h, avg_goals_a, False, False, user_bankroll, None, weather_condition)
                 top_opt_desc = pred['options'][0]['desc']
                 tot_goals = rh + ra
                 
@@ -518,12 +488,12 @@ with tab_audit:
         st.info("Aucun match terminé récent à auditer dans cette compétition.")
 
 with tab_coupon:
-    st.subheader("🎟️ Ticket Combiné Bayésien VIP")
+    st.subheader("🎟️ Ticket Combiné Multi-Options VIP")
     if upcoming_matches:
         coupon_list = []
         for m in upcoming_matches:
             ht, at = m['homeTeam']['name'], m['awayTeam']['name']
-            pred = run_bayesian_matrix_prediction(ht, at, 0, 0, 0, team_stats, avg_goals_h, avg_goals_a, False, user_bankroll, None, weather_condition)
+            pred = run_alpha_matrix_prediction(ht, at, 0, 0, 0, team_stats, avg_goals_h, avg_goals_a, False, post_break_mode, user_bankroll, None, weather_condition)
             top_opt = pred['options'][0]
             coupon_list.append({
                 "match": f"{ht} vs {at}",
@@ -537,7 +507,7 @@ with tab_coupon:
         
         st.markdown(f"""
         <div class="vip-banner">
-            <h2 style="margin:0; color:#F59E0B;">🛡️ COMBINÉ SÉCURITÉ BAYÉSIEN (90%+)</h2>
+            <h2 style="margin:0; color:#F59E0B;">🛡️ COMBINÉ SÉCURITÉ ABSOLUE (90%+)</h2>
             <div style="font-size:1.6rem; font-weight:900; color:#FFFFFF; margin-top:6px;">Cote Totale : <span style="color:#38BDF8;">{total_odds:.2f}</span></div>
         </div>
         """, unsafe_allow_html=True)
