@@ -6,10 +6,10 @@ import pandas as pd
 from datetime import datetime, timedelta
 
 # ==========================================
-# 1. CONFIGURATION & DESIGN V47.0 SOFASCORE PRO
+# 1. CONFIGURATION & DESIGN V47.1 SOFASCORE PRO
 # ==========================================
 st.set_page_config(
-    page_title="Apex Quant v47.0 SofaScore Pro",
+    page_title="Apex Quant v47.1 SofaScore Pro",
     page_icon="⚡",
     layout="wide"
 )
@@ -183,7 +183,6 @@ def get_advanced_league_stats(league_code):
             elo_rating = 1500 + (pts * 14) + ((gf - ga) * 5)
             seed_val = sum(ord(c) for c in name)
             
-            # Modélisation avancée Corners & Cartons basée sur le profil de l'équipe
             corner_rate = float(np.clip(4.2 + (seed_val % 5) * 0.4 + (gf / played) * 0.6, 3.8, 8.5))
             card_rate = float(np.clip(1.8 + (seed_val % 4) * 0.3 + (ga / played) * 0.4, 1.5, 4.8))
             
@@ -311,14 +310,11 @@ def run_sofascore_prediction(h_name, a_name, score_h=0, score_a=0, elapsed_min=0
     prob_o25 = round((1.0 - np.sum([matrix[i,j] for i in range(3) for j in range(3) if i+j <= 2])) * 100, 1)
     prob_u35 = round(np.sum([matrix[i,j] for i in range(max_g) for j in range(max_g) if i+j <= 3]) * 100, 1)
 
-    # --- MODÉLISATION AVANCÉE CORNERS & CARTONS ---
-    # Corners : Basé sur le volume de xG cumulé et les taux individuels
     exp_corners = round(np.clip((h_stat["corner_rate"] + a_stat["corner_rate"]) * (0.85 + (full_h_xg + full_a_xg) * 0.1), 4.5, 13.5), 1)
     prob_c75 = round((1.0 - poisson.cdf(7, exp_corners)) * 100, 1)
     prob_c85 = round((1.0 - poisson.cdf(8, exp_corners)) * 100, 1)
     prob_c95 = round((1.0 - poisson.cdf(9, exp_corners)) * 100, 1)
 
-    # Cartons : Basé sur le taux combiné et l'intensité du match (écart Elo serré = plus de duels)
     tension_coef = 1.15 if abs(elo_diff) < 80 else 0.95
     exp_cards = round(np.clip((h_stat["card_rate"] + a_stat["card_rate"]) * tension_coef, 1.8, 6.5), 1)
     prob_cards35 = round((1.0 - poisson.cdf(3, exp_cards)) * 100, 1)
@@ -356,13 +352,16 @@ def run_sofascore_prediction(h_name, a_name, score_h=0, score_a=0, elapsed_min=0
     actual_odds = book_odds_input if book_odds_input else round(model_odds * 1.06, 2)
     kelly_stake, ev_value = calculate_kelly(best_prob, actual_odds, bankroll)
 
-    # --- GÉNÉRATION DU RAPPORT TYPE SOFASCORE ---
+    # Correction syntaxique propre du rapport textuel SofaScore
+    dominant_team = h_name if elo_diff > 0 else a_name
+    physio_text = f"Domination territoriale attendue de {dominant_team} avec un bloc adverse bas." if abs(elo_diff) > 100 else "Match équilibré, lutte intense au milieu de terrain."
+
     sofascore_report = f"📊 **Rapport d'Analyse Tactique (Type SofaScore)** :<br>"
     sofascore_report += f"• 🏠 **{h_name}** ({h_stat['momentum_status']}) | xG Dom. Estimé : <b>{full_h_xg:.2f}</b><br>"
     sofascore_report += f"• ✈️ **{a_name}** ({a_stat['momentum_status']}) | xG Ext. Estimé : <b>{full_a_xg:.2f}</b><br>"
-    sofascore_report += f"• ⚔️ **Physionomie du Match** : {'Domination territoriale attendue du '} + (h_name if elo_diff > 0 else a_name) + ' avec un bloc adverse bas.' if abs(elo_diff) > 100 else 'Match équilibré, lutte intense au milieu de terrain.'
+    sofascore_report += f"• ⚔️ **Physionomie du Match** : {physio_text}"
     sofascore_report += f"<br>• ⛳ **Projection Corners** : Moyenne estimée à <b>~{exp_corners} corners</b> (Probabilité +8.5 : <b>{prob_c85}%</b>)."
-    sofascore_report += f"<br>• 🟨 **Projection DisCIPLINAIRE** : Indice de tension de <b>~{exp_cards} cartons</b> (Probabilité +3.5 : <b>{prob_cards35}%</b>)."
+    sofascore_report += f"<br>• 🟨 **Projection Disciplinaire** : Indice de tension de <b>~{exp_cards} cartons</b> (Probabilité +3.5 : <b>{prob_cards35}%</b>)."
 
     return {
         "p_h": round(p_h, 1), "p_n": round(p_n, 1), "p_a": round(p_a, 1),
@@ -377,9 +376,9 @@ def run_sofascore_prediction(h_name, a_name, score_h=0, score_a=0, elapsed_min=0
     }
 
 # ==========================================
-# 4. INTERFACE STREAMLIT V47.0
+# 4. INTERFACE STREAMLIT V47.1
 # ==========================================
-st.sidebar.title("Apex SofaScore Pro v47.0 ⚡")
+st.sidebar.title("Apex SofaScore Pro v47.1 ⚡")
 selected_comp = st.sidebar.selectbox("Compétition Principale", list(COMPETITIONS.keys()))
 
 st.sidebar.divider()
