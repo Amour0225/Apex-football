@@ -1,4 +1,3 @@
-```python
 import streamlit as st
 import requests
 import numpy as np
@@ -1052,4 +1051,3 @@ with tab_coupon:
             """, unsafe_allow_html=True)
     else:
         st.warning("Nombre insuffisant de matchs programmés pour générer un combiné complet.")
-```
