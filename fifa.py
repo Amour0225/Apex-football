@@ -10,7 +10,7 @@ import math
 # 1. CONFIGURATION & DESIGN AVANCÉ V49.0 SOFASCORE QUANT PRO
 # ==============================================================================
 st.set_page_config(
-    page_title="Apex Quant v50.0 Faits Réels & Bouclier 99%",
+    page_title="Apex Quant v49.0 SofaScore Ultra-Pro",
     page_icon="⚡",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -514,40 +514,12 @@ def run_advanced_quant_prediction(
         gh, ga = np.unravel_index(idx, matrix.shape)
         top_3_scores.append({"score": f"{gh}-{ga}", "prob": round(matrix[gh, ga] * 100.0, 1)})
 
-    # Détection factuelle des risques de match cadenassé (0-0, 1-0, 0-1)
-    last_5_h = h_stat.get("last_5", [])
-    last_5_a = a_stat.get("last_5", [])
-    low_goals_h = sum(1 for m in last_5_h if (m.get('gf', 0) + m.get('ga', 0)) <= 1)
-    low_goals_a = sum(1 for m in last_5_a if (m.get('gf', 0) + m.get('ga', 0)) <= 1)
-    p_low_score_risk = float(matrix[0,0] + matrix[1,0] + matrix[0,1]) * 100.0
-    tot_xg = full_h_xg + full_a_xg
-    
-    # Règle dure : si l'historique réel ou les xG indiquent un verrou défensif, l'Over 1.5 est INTERDIT
-    is_cadenas_trap = (p_low_score_risk >= 17.5) or (low_goals_h >= 1 or low_goals_a >= 1) or (tot_xg < 2.50)
-    
-    prob_o05 = round(float(1.0 - matrix[0, 0]) * 100.0, 1)
-    prob_u45 = round(float(np.sum([matrix[i, j] for i in range(max_g) for j in range(max_g) if i + j <= 4])) * 100.0, 1)
-
     options = []
-    
-    # 1. OPTION 0 : BOUCLIER 99% HYPER-SÉCURITÉ (Probabilité 93% à 98% vérifiée par les faits)
-    if prob_u45 >= 93.5:
-        options.append({"type": "👑 BOUCLIER 99% HYPER-SÉCURITÉ", "desc": "Moins de 4.5 Buts dans le match", "prob": prob_u45, "odds": prob_to_odds(prob_u45)})
-    elif prob_o05 >= 94.0:
-        options.append({"type": "👑 BOUCLIER 99% HYPER-SÉCURITÉ", "desc": "Plus de 0.5 But dans le match", "prob": prob_o05, "odds": prob_to_odds(prob_o05)})
-    elif prob_1x >= 88.0:
-        options.append({"type": "👑 BOUCLIER 99% HYPER-SÉCURITÉ", "desc": f"Double Chance Blindée : {h_name} ou Nul (1X)", "prob": prob_1x, "odds": prob_to_odds(prob_1x)})
-    elif prob_x2 >= 88.0:
-        options.append({"type": "👑 BOUCLIER 99% HYPER-SÉCURITÉ", "desc": f"Double Chance Blindée : Nul ou {a_name} (X2)", "prob": prob_x2, "odds": prob_to_odds(prob_x2)})
-    else:
-        options.append({"type": "👑 BOUCLIER 99% HYPER-SÉCURITÉ", "desc": "Moins de 4.5 Buts dans le match", "prob": prob_u45, "odds": prob_to_odds(prob_u45)})
-
-    # 2. OPTION 1 : SÉCURITÉ RENFORCÉE (85%+)
-    if prob_1x >= 82.0:
+    if prob_1x >= 84.0:
         options.append({"type": "🛡️ SÉCURITÉ MAX (85%+)", "desc": f"Double Chance : {h_name} ou Nul (1X)", "prob": prob_1x, "odds": prob_to_odds(prob_1x)})
-    elif prob_x2 >= 82.0:
+    elif prob_x2 >= 84.0:
         options.append({"type": "🛡️ SÉCURITÉ MAX (85%+)", "desc": f"Double Chance : Nul ou {a_name} (X2)", "prob": prob_x2, "odds": prob_to_odds(prob_x2)})
-    elif not is_cadenas_trap and prob_o15 >= 80.0:
+    elif prob_o15 >= 78.0:
         options.append({"type": "🛡️ SÉCURITÉ MAX (85%+)", "desc": "Plus de 1.5 Buts dans le match", "prob": prob_o15, "odds": prob_to_odds(prob_o15)})
     else:
         options.append({"type": "🛡️ SÉCURITÉ MAX (85%+)", "desc": "Moins de 3.5 Buts dans le match", "prob": prob_u35, "odds": prob_to_odds(prob_u35)})
@@ -636,7 +608,7 @@ def run_monte_carlo_simulation(matrix, n_simulations=10000):
 st.sidebar.markdown("""
     <div style="text-align:center; padding:10px 0;">
         <h2 style="color:#38BDF8; margin:0; font-weight:900;">APEX QUANT</h2>
-        <span style="font-size:0.8rem; letter-spacing:2px; color:#10B981; font-weight:800;">FAITS RÉELS & BOUCLIER 99% v50.0</span>
+        <span style="font-size:0.8rem; letter-spacing:2px; color:#F59E0B; font-weight:800;">SOFASCORE ULTRA-PRO v49.0</span>
     </div>
 """, unsafe_allow_html=True)
 
@@ -679,14 +651,14 @@ finished_matches = [m for m in all_matches if m.get('status') == 'FINISHED']
 match_map = {f"{m['utcDate'][:10]} {m['utcDate'][11:16]} : {m['homeTeam']['name']} vs {m['awayTeam']['name']}": m for m in upcoming_matches}
 
 # ONGLETS MULTI-EXPERTS
-tab_scanner, tab_ht_ft, tab_detail, tab_cal, tab_real_facts, tab_audit, tab_coupon = st.tabs([
+tab_scanner, tab_ht_ft, tab_detail, tab_cal, tab_monte_carlo, tab_audit, tab_coupon = st.tabs([
     "🔍 SCANNER VALUE BETS PRO",
     "⏱️ MI-TEMPS & FIN DE MATCH (HT/FT)",
     "📊 ANALYSE MATCH & DÉRIVÉS",
     f"📅 CALENDRIER QUANT ({len(upcoming_matches)})",
-    "📋 FAITS RÉELS & H2H TERRAIN",
+    "🎲 MONTE CARLO & SHIN",
     f"📈 AUDIT ({len(finished_matches)})",
-    "🎟️ MARMITE VIP & ANTI-PERTE"
+    "🎟️ MARMITE SOFASCORE VIP"
 ])
 
 # ------------------------------------------------------------------------------
@@ -953,52 +925,28 @@ with tab_cal:
         st.info("Aucun match à afficher.")
 
 # ------------------------------------------------------------------------------
-# ONGLET 5 : FAITS RÉELS & DERNIERS MATCHS (H2H)
+# ONGLET 5 : MONTE CARLO & SHIN
 # ------------------------------------------------------------------------------
-with tab_real_facts:
+with tab_monte_carlo:
     st.markdown("""
     <div class="vip-banner">
-        <h2 style="margin:0; color:#10B981;">📋 FAITS RÉELS DU TERRAIN & CONFRONTATIONS (H2H)</h2>
-        <span style="font-size:0.95rem; color:#E2E8F0;">Zéro simulation théorique : historique réel des 5 derniers matchs et scores vérifiés</span>
+        <h2 style="margin:0; color:#38BDF8;">🎲 SIMULATEUR DE MONTE CARLO & DÉMARGEAGE SHIN</h2>
     </div>
     """, unsafe_allow_html=True)
     if upcoming_matches:
-        rf_chosen = st.selectbox("Sélectionnez l'affiche pour voir les faits réels :", list(match_map.keys()), key="rf_tab_select")
-        rf_obj = match_map[rf_chosen]
-        ht, at = rf_obj['homeTeam']['name'], rf_obj['awayTeam']['name']
-        h_st = team_stats.get(ht, {})
-        a_st = team_stats.get(at, {})
+        mc_chosen = st.selectbox("Match pour simulation :", list(match_map.keys()), key="mc_tab_select")
+        mc_obj = match_map[mc_chosen]
+        ht, at = mc_obj['homeTeam']['name'], mc_obj['awayTeam']['name']
+        mc_res = run_advanced_quant_prediction(ht, at, 0, 0, 0, team_stats, avg_goals_h, avg_goals_a, profile, False, user_bankroll, None, weather_condition)
+        mc_stats = run_monte_carlo_simulation(mc_res['matrix'], 10000)
         
-        col_rf1, col_rf2 = st.columns(2)
-        with col_rf1:
-            st.markdown(f"### 🏠 Faits Réels : {ht}")
-            h_m = h_st.get("last_5", [])
-            if h_m:
-                df_h_m = pd.DataFrame([{
-                    "Date": m["date"], "Adversaire": m["opponent"], "Lieu": m["venue"],
-                    "Score Réel": m["score"], "Résultat": m["result"], "Total Buts": m["gf"] + m["ga"]
-                } for m in h_m])
-                st.dataframe(df_h_m, use_container_width=True, hide_index=True)
-                low_h = sum(1 for m in h_m if (m['gf'] + m['ga']) <= 1)
-                st.caption(f"📊 Constat réel : {low_h} match(s) sur 5 avec 0 ou 1 but.")
-            else:
-                st.info("Données en cours de synchronisation.")
-                
-        with col_rf2:
-            st.markdown(f"### ✈️ Faits Réels : {at}")
-            a_m = a_st.get("last_5", [])
-            if a_m:
-                df_a_m = pd.DataFrame([{
-                    "Date": m["date"], "Adversaire": m["opponent"], "Lieu": m["venue"],
-                    "Score Réel": m["score"], "Résultat": m["result"], "Total Buts": m["gf"] + m["ga"]
-                } for m in a_m])
-                st.dataframe(df_a_m, use_container_width=True, hide_index=True)
-                low_a = sum(1 for m in a_m if (m['gf'] + m['ga']) <= 1)
-                st.caption(f"📊 Constat réel : {low_a} match(s) sur 5 avec 0 ou 1 but.")
-            else:
-                st.info("Données en cours de synchronisation.")
+        k1, k2, k3, k4 = st.columns(4)
+        with k1: st.metric("Victoires Domicile (MC)", f"{mc_stats['mc_h']}%", f"Théorique: {mc_res['p_h']}%")
+        with k2: st.metric("Matchs Nuls (MC)", f"{mc_stats['mc_d']}%", f"Théorique: {mc_res['p_n']}%")
+        with k3: st.metric("Victoires Extérieur (MC)", f"{mc_stats['mc_a']}%", f"Théorique: {mc_res['p_a']}%")
+        with k4: st.metric("Over 2.5 Buts (MC)", f"{mc_stats['mc_o25']}%", f"95% CI: [{int(mc_stats['ci_low'])}-{int(mc_stats['ci_high'])} buts]")
     else:
-        st.info("Aucun match disponible.")
+        st.info("Aucun match disponible pour Monte Carlo.")
 
 # ------------------------------------------------------------------------------
 # ONGLET 6 : AUDIT DU MODÈLE
@@ -1023,8 +971,6 @@ with tab_audit:
                     elif "Nul ou" in top_opt['desc'] and ra >= rh: pick_hit = True
                 elif "Plus de 1.5" in top_opt['desc']: pick_hit = (tot_goals >= 2)
                 elif "Moins de 3.5" in top_opt['desc']: pick_hit = (tot_goals <= 3)
-                elif "Moins de 4.5" in top_opt['desc']: pick_hit = (tot_goals <= 4)
-                elif "Plus de 0.5" in top_opt['desc']: pick_hit = (tot_goals >= 1)
                 elif "Victoire Sèche" in top_opt['desc']:
                     if ht in top_opt['desc'] and rh > ra: pick_hit = True
                     elif at in top_opt['desc'] and ra > rh: pick_hit = True
@@ -1051,54 +997,40 @@ with tab_audit:
         st.info("Aucun match terminé à auditer.")
 
 # ------------------------------------------------------------------------------
-# ONGLET 7 : MARMITE VIP & PROTECTION ANTI-PERTE
+# ONGLET 7 : MARMITE SOFASCORE VIP
 # ------------------------------------------------------------------------------
 with tab_coupon:
-    st.subheader("🎟️ Marmite VIP & Stratégie Anti-Perte (Zéro Aléa)")
+    st.subheader("🎟️ Ticket Combiné Sécurisé SofaScore VIP (90%+)")
     if upcoming_matches:
         coupon_candidates = []
         for m in upcoming_matches:
             ht, at = m['homeTeam']['name'], m['awayTeam']['name']
             pred = run_advanced_quant_prediction(ht, at, 0, 0, 0, team_stats, avg_goals_h, avg_goals_a, profile, False, user_bankroll, None, weather_condition)
-            # Sélection priorité Bouclier 99%
-            bouclier_opt = pred['options'][0]
+            top_opt = pred['options'][0]
             coupon_candidates.append({
-                "match": f"{ht} vs {at}", "pick": bouclier_opt['desc'],
-                "prob": bouclier_opt['prob'], "odds": bouclier_opt['odds'],
-                "type": bouclier_opt['type']
+                "match": f"{ht} vs {at}", "pick": top_opt['desc'],
+                "prob": top_opt['prob'], "odds": top_opt['odds'],
+                "corners": pred['corners'], "cards": pred['cards']
             })
         coupon_candidates.sort(key=lambda x: x['prob'], reverse=True)
-        
-        # 1. TICKET BOUCLIER 99% ULTRA-SÛR (3 MATCHS MAX POUR ÉVITER LE MULTIPLICATEUR DE RISQUE)
-        top_shield_picks = coupon_candidates[:3]
-        total_shield_odds = float(np.prod([item['odds'] for item in top_shield_picks]))
-        cumul_shield_prob = float(np.prod([item['prob']/100.0 for item in top_shield_picks])) * 100.0
+        top_safe_picks = coupon_candidates[:5]
+        total_combined_odds = float(np.prod([item['odds'] for item in top_safe_picks]))
         
         st.markdown(f"""
         <div class="vip-banner">
-            <h2 style="margin:0; color:#10B981;">👑 TICKET BOUCLIER 99% (TOP 3 FAITS RÉELS)</h2>
-            <div style="font-size:1.6rem; font-weight:900; color:#FFFFFF; margin-top:8px;">
-                Cote Totale : <span style="color:#38BDF8;">{total_shield_odds:.2f}</span> | Confiance Conjointe : <span style="color:#10B981;">{cumul_shield_prob:.1f}%</span>
+            <h2 style="margin:0; color:#F59E0B;">🛡️ COMBINÉ SÉCURITÉ ALGORITHMIQUE APEX (TOP 5)</h2>
+            <div style="font-size:1.8rem; font-weight:900; color:#FFFFFF; margin-top:8px;">
+                Cote Totale Estimée : <span style="color:#38BDF8;">{total_combined_odds:.2f}</span>
             </div>
-            <span style="font-size:0.85rem; color:#CBD5E1;">Sélection restreinte à 3 matchs pour préserver l'hyper-fiabilité mathématique</span>
         </div>
         """, unsafe_allow_html=True)
-        
-        for idx, item in enumerate(top_shield_picks, 1):
+        for idx, item in enumerate(top_safe_picks, 1):
             st.markdown(f"""
             <div class="sub-card">
                 <b>{idx}. {item['match']}</b><br>
-                👉 Choix Blindé : <b style="color:#10B981;">{item['pick']}</b> | Probabilité : <b>{item['prob']}%</b> (Cote : <b>{item['odds']}</b>)
+                👉 Choix Quantifié : <b style="color:#10B981;">{item['pick']}</b> | Probabilité : <b>{item['prob']}%</b> (Cote : <b>{item['odds']}</b>)<br>
+                <span style="font-size:0.85rem; color:#94A3B8;">⛳ Corners : ~{item['corners']} | 🟨 Cartons : ~{item['cards']}</span>
             </div>
             """, unsafe_allow_html=True)
-            
-        st.markdown("""
-        <div class="sofascore-box" style="border-left: 5px solid #F59E0B;">
-            <b>💡 RÈGLE D'OR DU TERRAIN (ANTI-PERTE PAR 1 MATCH) :</b><br>
-            Sur votre bookmaker (WinWin.bet, 1xBet, etc.), lorsque vous préparez un ticket de plus de 4 matchs, <b>ne cochez plus "Combiné" sec</b>.<br>
-            Cochez l'option <b>"SYSTÈME"</b> (par exemple <i>Système 4/5</i> ou <i>Système 11/12</i>) :<br>
-            👉 Même si un match surprise fait 0-1 comme sur Fulham, <b>le bookmaker vous paie l'ensemble de vos autres combinaisons gagnantes</b> !
-        </div>
-        """, unsafe_allow_html=True)
     else:
         st.warning("Nombre insuffisant de matchs programmés pour générer un combiné complet.")
