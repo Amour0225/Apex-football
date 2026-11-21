@@ -1,13 +1,3 @@
-Apex Quant v50.0 SofaScore Ultra-Pro — Production Edition
-=========================================================
-Architecture modulaire en couches logiques :
-  1. Configuration, Secrets & Profils de Ligues
-  2. Client HTTP Résilient (football-data.org & The Odds API v4) + Matching Flou
-  3. Moteur Mathématique Vectorisé (Shin, Dixon-Coles, Binomiale Négative, HT/FT)
-  4. Prétraitement Temporel (Time-Decay), Calibration d'Hyperparamètres & Walk-Forward
-  5. Cache Centralisé des Prédictions & Interface Streamlit 7 Onglets
-"""
-
 from __future__ import annotations
 
 import os
