@@ -72,6 +72,7 @@ st.markdown(
 )
 
 FD_BASE_URL = "https://api.football-data.org/v4/"
+DEFAULT_FD_API_KEY = "1e9518e7585349f9abe6d5a29ddb83b1"
 
 COMPETITIONS: dict[str, str] = {
     "Ligue des Champions 🏆": "CL",
@@ -131,20 +132,20 @@ class ApiClientError(Exception):
         super().__init__(message)
 
 
-def _get_secret(key_name: str) -> str | None:
+def _get_secret(key_name: str, default: str | None = None) -> str | None:
     try:
         val = st.secrets.get(key_name)
         if val:
             return str(val)
     except Exception:
         pass
-    return os.getenv(key_name)
+    return os.getenv(key_name) or default
 
 
 def _request_football_data(endpoint: str) -> dict[str, Any]:
-    api_key = _get_secret("FOOTBALL_DATA_API_KEY")
+    api_key = _get_secret("FOOTBALL_DATA_API_KEY", default=DEFAULT_FD_API_KEY)
     if not api_key:
-        raise ApiClientError(401, "Clé FOOTBALL_DATA_API_KEY absente de st.secrets ou de l'environnement.")
+        raise ApiClientError(401, "Clé FOOTBALL_DATA_API_KEY absente.")
 
     try:
         res = requests.get(f"{FD_BASE_URL}{endpoint}", headers={"X-Auth-Token": api_key}, timeout=8)
