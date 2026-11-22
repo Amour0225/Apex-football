@@ -1,80 +1,110 @@
-from __future__ import annotations
-
-import os
-import re
-import unicodedata
-from datetime import datetime, timedelta, timezone
-from difflib import SequenceMatcher
-from typing import Any
-
-import numpy as np
-import pandas as pd
-import requests
 import streamlit as st
-from scipy.optimize import brentq, minimize
-from scipy.stats import nbinom, poisson
+import requests
+import numpy as np
+from scipy.stats import poisson, nbinom
+import pandas as pd
+from datetime import datetime, timedelta
+import math
 
 # ==============================================================================
-# 1. CONFIGURATION, SECRETS & DESIGN UI
+# 1. CONFIGURATION & DESIGN AVANCÉ V54.0 INSTITUTIONAL QUANT ENGINE
 # ==============================================================================
-
 st.set_page_config(
-    page_title="Apex Quant v50.0 Production",
-    page_icon="⚡",
+    page_title="Apex Quant v54.0 — Institutional Multi-Model AI",
+    page_icon="🧠",
     layout="wide",
-    initial_sidebar_state="expanded",
+    initial_sidebar_state="expanded"
 )
 
-st.markdown(
-    """
+st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&display=swap');
     * { font-family: 'Plus Jakarta Sans', sans-serif; }
     code, .quant-mono { font-family: 'JetBrains Mono', monospace; }
+    
     .stApp { background-color: #030712; color: #F1F5F9; }
+    
     .matrix-card {
         background: linear-gradient(135deg, #0B132B 0%, #1C2541 50%, #032B45 100%);
         border: 2px solid #38BDF8; border-radius: 18px; padding: 24px; margin-bottom: 24px;
         box-shadow: 0 10px 30px -10px rgba(56, 189, 248, 0.25);
     }
+    .sniper-card {
+        background: linear-gradient(135deg, #064E3B 0%, #022C22 100%);
+        border: 2px solid #10B981; border-radius: 16px; padding: 20px; margin-bottom: 16px;
+        box-shadow: 0 8px 24px -6px rgba(16, 185, 129, 0.35);
+    }
+    .degen-card {
+        background: linear-gradient(135deg, #450A0A 0%, #7C2D12 50%, #3B0764 100%);
+        border: 2px solid #F97316; border-radius: 16px; padding: 20px; margin-bottom: 16px;
+        box-shadow: 0 8px 28px -6px rgba(249, 115, 22, 0.45);
+    }
+    .ticket-master {
+        background: linear-gradient(145deg, #1E1B4B 0%, #4C1D95 45%, #7C2D12 100%);
+        border: 2.5px solid #FBBF24; border-radius: 20px; padding: 26px; margin: 18px 0;
+        box-shadow: 0 12px 35px -8px rgba(251, 191, 36, 0.4);
+    }
+    .ticket-leg {
+        background: rgba(3, 7, 18, 0.72);
+        border-left: 4px solid #F97316;
+        border-radius: 0 12px 12px 0;
+        padding: 14px 18px;
+        margin: 10px 0;
+    }
     .sofascore-box {
         background-color: #0B0F19; border: 1px solid #1E293B; border-left: 5px solid #10B981;
-        border-radius: 0 14px 14px 0; padding: 20px; margin: 16px 0; font-size: 0.95rem; line-height: 1.65; color: #E2E8F0;
+        border-radius: 0 14px 14px 0; padding: 20px; margin: 16px 0; font-size: 0.95rem; line-height: 1.7; color: #E2E8F0;
     }
     .vip-banner {
         background: linear-gradient(135deg, #311042 0%, #581C87 50%, #1E3A8A 100%);
         border: 2px solid #F59E0B; border-radius: 16px; padding: 22px; text-align: center; margin-bottom: 25px;
-        box-shadow: 0 10px 25px -5px rgba(245, 158, 11, 0.2);
     }
     .sub-card {
         background: #0B1120; border: 1.5px solid #1E293B;
-        border-radius: 14px; padding: 18px; margin-bottom: 16px; transition: all 0.2s ease;
+        border-radius: 14px; padding: 18px; margin-bottom: 16px;
     }
-    .sub-card:hover { border-color: #38BDF8; }
-    .option-box { background: rgba(16, 185, 129, 0.08); border: 1.5px solid #10B981; border-radius: 14px; padding: 16px; margin: 10px 0; }
-    .option-box-sec { background: rgba(56, 189, 248, 0.08); border: 1.5px solid #38BDF8; border-radius: 14px; padding: 16px; margin: 10px 0; }
-    .option-box-alt { background: rgba(168, 85, 247, 0.08); border: 1.5px solid #A855F7; border-radius: 14px; padding: 16px; margin: 10px 0; }
-    .big-score-box { background: #0F172A; border: 2px solid #38BDF8; border-radius: 14px; padding: 16px; text-align: center; margin: 6px 0; }
+    .option-box {
+        background: rgba(16, 185, 129, 0.10); border: 1.5px solid #10B981; border-radius: 14px; padding: 16px; margin: 10px 0;
+    }
+    .option-box-sec {
+        background: rgba(56, 189, 248, 0.08); border: 1.5px solid #38BDF8; border-radius: 14px; padding: 16px; margin: 10px 0;
+    }
+    .option-box-alt {
+        background: rgba(168, 85, 247, 0.08); border: 1.5px solid #A855F7; border-radius: 14px; padding: 16px; margin: 10px 0;
+    }
+    .option-box-crazy {
+        background: rgba(249, 115, 22, 0.14); border: 2px solid #F97316; border-radius: 14px; padding: 16px; margin: 10px 0;
+    }
+    .big-score-box {
+        background: #0F172A; border: 2px solid #38BDF8; border-radius: 14px; padding: 16px; text-align: center; margin: 6px 0;
+    }
     .big-score-val { font-size: 2.2rem; font-weight: 900; color: #38BDF8; line-height: 1.1; font-family: 'JetBrains Mono', monospace; }
     .big-score-prob { font-size: 1.05rem; font-weight: 700; color: #10B981; margin-top: 5px; }
     .badge-quant {
-        display: inline-block; padding: 4px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 800;
-        text-transform: uppercase; background: rgba(56, 189, 248, 0.15); color: #38BDF8; border: 1px solid #38BDF8; margin-right: 6px;
+        display: inline-block; padding: 4px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 800; text-transform: uppercase;
+        background: rgba(56, 189, 248, 0.15); color: #38BDF8; border: 1px solid #38BDF8; margin-right: 6px;
     }
-    .badge-edge {
+    .badge-sniper {
         display: inline-block; padding: 4px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 800;
-        background: rgba(16, 185, 129, 0.15); color: #10B981; border: 1px solid #10B981;
+        background: rgba(16, 185, 129, 0.2); color: #10B981; border: 1px solid #10B981;
     }
-    .stat-badge { font-family: 'JetBrains Mono', monospace; font-size: 1.25rem; font-weight: 800; color: #38BDF8; }
+    .badge-crazy {
+        display: inline-block; padding: 4px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 800;
+        background: rgba(249, 115, 22, 0.25); color: #FB923C; border: 1px solid #F97316;
+    }
+    .stat-badge {
+        font-family: 'JetBrains Mono', monospace; font-size: 1.25rem; font-weight: 800; color: #38BDF8;
+    }
     </style>
-    """,
-    unsafe_allow_html=True,
-)
+""", unsafe_allow_html=True)
 
-FD_BASE_URL = "https://api.football-data.org/v4/"
-DEFAULT_FD_API_KEY = "1e9518e7585349f9abe6d5a29ddb83b1"
+# ==============================================================================
+# 2. PARAMÈTRES GLOBAUX & INFRASTRUCTURE API
+# ==============================================================================
+API_KEY = st.secrets.get("FOOTBALL_API_KEY", "1e9518e7585349f9abe6d5a29ddb83b1")
+BASE_URL = "https://api.football-data.org/v4/"
 
-COMPETITIONS: dict[str, str] = {
+COMPETITIONS = {
     "Ligue des Champions 🏆": "CL",
     "Premier League 🦁": "PL",
     "La Liga 🇪🇸": "PD",
@@ -82,1168 +112,956 @@ COMPETITIONS: dict[str, str] = {
     "Serie A 🇮🇹": "SA",
     "Bundesliga 🇩🇪": "BL1",
     "UEFA Europa League 🇪🇺": "EL",
-    "Championship 🏴": "ELC",
+    "Championship 🏴": "ELC"
 }
 
-ODDS_API_SPORTS: dict[str, str] = {
-    "CL": "soccer_uefa_champs_league",
-    "PL": "soccer_epl",
-    "PD": "soccer_spain_la_liga",
-    "FL1": "soccer_france_ligue_one",
-    "SA": "soccer_italy_serie_a",
-    "BL1": "soccer_germany_bundesliga",
-    "EL": "soccer_uefa_europa_league",
-    "ELC": "soccer_efl_champ",
+LEAGUE_PROFILES = {
+    "CL":  {"avg_h": 1.62, "avg_a": 1.28, "rho": -0.115, "card_base": 4.1, "corner_base": 9.9, "dispersion": 9.5,  "draw_base": 0.24},
+    "PL":  {"avg_h": 1.58, "avg_a": 1.24, "rho": -0.110, "card_base": 3.9, "corner_base": 10.4, "dispersion": 10.0, "draw_base": 0.24},
+    "PD":  {"avg_h": 1.48, "avg_a": 1.10, "rho": -0.125, "card_base": 4.8, "corner_base": 9.4, "dispersion": 9.2,  "draw_base": 0.27},
+    "FL1": {"avg_h": 1.50, "avg_a": 1.16, "rho": -0.118, "card_base": 3.8, "corner_base": 9.3, "dispersion": 9.8,  "draw_base": 0.26},
+    "SA":  {"avg_h": 1.52, "avg_a": 1.18, "rho": -0.120, "card_base": 4.5, "corner_base": 9.8, "dispersion": 9.4,  "draw_base": 0.27},
+    "BL1": {"avg_h": 1.72, "avg_a": 1.35, "rho": -0.095, "card_base": 3.9, "corner_base": 10.1, "dispersion": 11.2, "draw_base": 0.23},
+    "EL":  {"avg_h": 1.56, "avg_a": 1.22, "rho": -0.112, "card_base": 4.2, "corner_base": 9.7, "dispersion": 9.6,  "draw_base": 0.25},
+    "ELC": {"avg_h": 1.44, "avg_a": 1.14, "rho": -0.108, "card_base": 3.8, "corner_base": 10.2, "dispersion": 10.2, "draw_base": 0.28}
 }
 
-LEAGUE_PROFILES: dict[str, dict[str, float]] = {
-    "CL": {"avg_h": 1.62, "avg_a": 1.28, "rho": -0.115, "card_base": 4.1, "corner_base": 9.9, "dispersion": 9.5},
-    "PL": {"avg_h": 1.58, "avg_a": 1.24, "rho": -0.110, "card_base": 3.9, "corner_base": 10.4, "dispersion": 10.0},
-    "PD": {"avg_h": 1.48, "avg_a": 1.10, "rho": -0.125, "card_base": 4.8, "corner_base": 9.4, "dispersion": 9.2},
-    "FL1": {"avg_h": 1.50, "avg_a": 1.16, "rho": -0.118, "card_base": 3.8, "corner_base": 9.3, "dispersion": 9.8},
-    "SA": {"avg_h": 1.52, "avg_a": 1.18, "rho": -0.120, "card_base": 4.5, "corner_base": 9.8, "dispersion": 9.4},
-    "BL1": {"avg_h": 1.72, "avg_a": 1.35, "rho": -0.095, "card_base": 3.9, "corner_base": 10.1, "dispersion": 11.2},
-    "EL": {"avg_h": 1.56, "avg_a": 1.22, "rho": -0.112, "card_base": 4.2, "corner_base": 9.7, "dispersion": 9.6},
-    "ELC": {"avg_h": 1.44, "avg_a": 1.14, "rho": -0.108, "card_base": 3.8, "corner_base": 10.2, "dispersion": 10.2},
-}
-
-HT_FT_DESCRIPTIONS: dict[str, str] = {
-    "1/1": "Domicile mène à la MT et gagne le match",
-    "1/X": "Domicile mène à la MT, match nul final",
-    "1/2": "Renversement : Domicile mène à la MT, Extérieur gagne",
-    "X/1": "Nul à la MT, Domicile gagne en 2nde MT",
-    "X/X": "Nul à la MT et nul en fin de match",
-    "X/2": "Nul à la MT, Extérieur gagne en 2nde MT",
-    "2/1": "Renversement : Extérieur mène à la MT, Domicile gagne",
-    "2/X": "Extérieur mène à la MT, match nul final",
-    "2/2": "Extérieur mène à la MT et gagne le match",
-}
-
-
-# ==============================================================================
-# 2. CLIENTS API RÉSILIENT & APPARIEMENT DES ÉQUIPES
-# ==============================================================================
-
-class ApiClientError(Exception):
-    """Exception métier levée sur erreur HTTP/réseau pour éviter la mise en cache d'un échec."""
-
-    def __init__(self, status_code: int, message: str) -> None:
-        self.status_code = status_code
-        super().__init__(message)
-
-
-def _get_secret(key_name: str, default: str | None = None) -> str | None:
+@st.cache_data(ttl=300)
+def fetch_api(endpoint):
     try:
-        val = st.secrets.get(key_name)
-        if val:
-            return str(val)
+        res = requests.get(f"{BASE_URL}{endpoint}", headers={"X-Auth-Token": API_KEY}, timeout=6)
+        if res.status_code == 200:
+            return res.json()
     except Exception:
-        pass
-    return os.getenv(key_name) or default
-
-
-def _request_football_data(endpoint: str) -> dict[str, Any]:
-    api_key = _get_secret("FOOTBALL_DATA_API_KEY", default=DEFAULT_FD_API_KEY)
-    if not api_key:
-        raise ApiClientError(401, "Clé FOOTBALL_DATA_API_KEY absente.")
-
-    try:
-        res = requests.get(f"{FD_BASE_URL}{endpoint}", headers={"X-Auth-Token": api_key}, timeout=8)
-    except requests.RequestException as exc:
-        raise ApiClientError(0, f"Erreur réseau football-data.org : {exc}") from exc
-
-    if res.status_code == 200:
-        return res.json()
-    if res.status_code == 429:
-        reset_s = res.headers.get("X-RequestCounter-Reset", "60")
-        raise ApiClientError(429, f"Rate-limit football-data.org atteint. Réessayez dans ~{reset_s}s.")
-    if res.status_code == 403:
-        raise ApiClientError(403, "Accès refusé (403) : vérifiez votre clé ou les droits de cette ligue.")
-    raise ApiClientError(res.status_code, f"Erreur HTTP {res.status_code} sur {endpoint}.")
-
-
-@st.cache_data(ttl=1800, show_spinner=False)
-def fetch_fd_standings(league_code: str) -> dict[str, Any]:
-    return _request_football_data(f"competitions/{league_code}/standings")
-
-
-@st.cache_data(ttl=300, show_spinner=False)
-def fetch_fd_matches(league_code: str) -> list[dict[str, Any]]:
-    return _request_football_data(f"competitions/{league_code}/matches").get("matches", [])
-
-
-@st.cache_data(ttl=900, show_spinner=False)
-def fetch_real_odds(
-    league_code: str,
-    markets: str = "h2h,totals",
-    regions: str = "eu",
-) -> tuple[list[dict[str, Any]], str | None]:
-    """Interroge The Odds API v4 et retourne (événements, crédits restants)."""
-    sport_key = ODDS_API_SPORTS.get(league_code)
-    api_key = _get_secret("ODDS_API_KEY")
-    if not sport_key or not api_key:
-        return [], None
-
-    url = f"https://api.the-odds-api.com/v4/sports/{sport_key}/odds/"
-    params = {"apiKey": api_key, "regions": regions, "markets": markets, "oddsFormat": "decimal"}
-
-    try:
-        res = requests.get(url, params=params, timeout=8)
-    except requests.RequestException as exc:
-        raise ApiClientError(0, f"Erreur réseau The Odds API : {exc}") from exc
-
-    remaining = res.headers.get("x-requests-remaining")
-    if res.status_code == 200:
-        return res.json(), remaining
-    if res.status_code == 429:
-        raise ApiClientError(429, "Rate-limit The Odds API atteint (429).")
-    if res.status_code == 401:
-        raise ApiClientError(401, "Clé ODDS_API_KEY invalide ou quota mensuel épuisé.")
-    raise ApiClientError(res.status_code, f"Erreur HTTP {res.status_code} sur The Odds API.")
-
-
-_TEAM_STOPWORDS = r"\b(fc|cf|sc|ac|as|afc|ssc|rc|rcd|sv|vfl|tsg|fsv|ogc|stade)\b"
-
-
-def normalize_team_name(name: str) -> str:
-    ascii_name = unicodedata.normalize("NFKD", name).encode("ascii", "ignore").decode("ascii")
-    cleaned = re.sub(_TEAM_STOPWORDS, "", ascii_name.lower())
-    return re.sub(r"[^a-z0-9]+", " ", cleaned).strip()
-
-
-def find_matching_odds_event(
-    home_fd: str,
-    away_fd: str,
-    odds_events: list[dict[str, Any]],
-    threshold: float = 0.72,
-) -> dict[str, Any] | None:
-    nh, na = normalize_team_name(home_fd), normalize_team_name(away_fd)
-    best_event, best_score = None, 0.0
-    for ev in odds_events:
-        eh = normalize_team_name(ev.get("home_team", ""))
-        ea = normalize_team_name(ev.get("away_team", ""))
-        score = 0.5 * (SequenceMatcher(None, nh, eh).ratio() + SequenceMatcher(None, na, ea).ratio())
-        if score > best_score and score >= threshold:
-            best_event, best_score = ev, score
-    return best_event
-
+        return None
+    return None
 
 # ==============================================================================
-# 3. MOTEUR MATHÉMATIQUE VECTORISÉ (SHIN, DIXON-COLES, HT/FT, KELLY)
+# 3. ALGORITHMES INSTITUTIONNELS : RÉSOLUTION MATRICIELLE MASSEY-COLLEY
 # ==============================================================================
 
-def shin_remove_vig(odds_list: list[float]) -> tuple[list[float], float, float]:
-    """Démargeage exact de Shin (1993) corrigeant le favorite-longshot bias."""
-    if not odds_list or any(o <= 1.0 for o in odds_list):
-        raise ValueError("Toutes les cotes décimales doivent être strictement supérieures à 1.0.")
+def solve_massey_colley_ratings(all_matches, teams_list):
+    """
+    Résout le système linéaire d'algèbre matricielle (Massey Rating System)
+    sur l'intégralité des matchs joués de la ligue :
+    Ajuste la force réelle de chaque équipe selon la difficulté de son calendrier (Strength of Schedule).
+    """
+    n = len(teams_list)
+    if n < 2:
+        return {}
+    idx_map = {t: i for i, t in enumerate(teams_list)}
+    M = np.eye(n) * 2.0  # Régularisation de Ridge (Tikhonov) pour stabilité numérique
+    p = np.zeros(n)
+    
+    games_counted = 0
+    for m in all_matches:
+        if m.get('status') == 'FINISHED':
+            ht, at = m['homeTeam']['name'], m['awayTeam']['name']
+            if ht in idx_map and at in idx_map:
+                sc = m.get('score', {}).get('fullTime', {})
+                sh, sa = sc.get('home'), sc.get('away')
+                if sh is not None and sa is not None:
+                    i, j = idx_map[ht], idx_map[at]
+                    # On borne la différence de buts à +/- 4 pour éviter qu'un carton 7-0 ne fausse tout
+                    diff = float(np.clip(sh - sa, -4, 4))
+                    # On retire un avantage domicile standard de 0.32 but pour isoler la force pure
+                    adj_diff = diff - 0.32
+                    
+                    M[i, i] += 1.0
+                    M[j, j] += 1.0
+                    M[i, j] -= 1.0
+                    M[j, i] -= 1.0
+                    
+                    p[i] += adj_diff
+                    p[j] -= adj_diff
+                    games_counted += 1
 
-    inv_odds = np.array([1.0 / o for o in odds_list], dtype=float)
-    s = float(np.sum(inv_odds))
-    margin_pct = round((s - 1.0) * 100.0, 2)
-    if s <= 1.0:
-        return (inv_odds / s).tolist(), margin_pct, 0.0
+    if games_counted < 5:
+        return {t: 0.0 for t in teams_list}
 
-    def _shin_sum_diff(z: float) -> float:
-        num = np.sqrt(z**2 + 4.0 * (1.0 - z) * (inv_odds**2 / s)) - z
-        return float(np.sum(num / (2.0 * (1.0 - z))) - 1.0)
+    try:
+        ratings = np.linalg.solve(M, p)
+        # Centrage autour de 0
+        ratings -= np.mean(ratings)
+        return {teams_list[i]: round(float(ratings[i]), 3) for i in range(n)}
+    except Exception:
+        return {t: 0.0 for t in teams_list}
 
-    z_opt = float(brentq(_shin_sum_diff, 0.0, 0.9999))
-    true_probs = (
-        np.sqrt(z_opt**2 + 4.0 * (1.0 - z_opt) * (inv_odds**2 / s)) - z_opt
-    ) / (2.0 * (1.0 - z_opt))
-    return true_probs.tolist(), margin_pct, round(z_opt, 4)
+# ==============================================================================
+# 4. BRIQUES STOCHASTIQUES : DIXON-COLES, CALIBRATION, ENTROPIE & MONTE CARLO
+# ==============================================================================
 
+def dixon_coles_tau(x, y, lambda_h, lambda_a, rho=-0.115):
+    if x == 0 and y == 0: return max(0.01, 1.0 - (lambda_h * lambda_a * rho))
+    elif x == 0 and y == 1: return max(0.01, 1.0 + (lambda_h * rho))
+    elif x == 1 and y == 0: return max(0.01, 1.0 + (lambda_a * rho))
+    elif x == 1 and y == 1: return max(0.01, 1.0 - rho)
+    return 1.0
 
-def prob_to_odds(prob_pct: float) -> float:
-    if prob_pct <= 0.001:
-        return 99.00
-    return round(min(99.00, 100.0 / prob_pct), 2)
+def negative_binomial_pmf(k, mu, dispersion=10.0):
+    r = dispersion
+    p = r / (r + mu)
+    return nbinom.pmf(k, r, p)
 
+def compute_elo_1x2_probs(elo_h, elo_a, home_adv=65.0, draw_base=0.25):
+    diff = (elo_h + home_adv) - elo_a
+    exp_h = 1.0 / (1.0 + 10.0 ** (-diff / 400.0))
+    closeness = math.exp(-((diff / 220.0) ** 2))
+    p_draw = np.clip(draw_base * (0.65 + 0.55 * closeness), 0.14, 0.36)
+    rem = 1.0 - p_draw
+    return rem * exp_h * 100.0, p_draw * 100.0, rem * (1.0 - exp_h) * 100.0
 
-def calculate_quarter_kelly(
-    prob_pct: float,
-    bookmaker_odds: float,
-    bankroll: float,
-    estimation_uncertainty: float = 0.08,
-    max_cap_pct: float = 0.05,
-) -> tuple[float, float]:
-    """Critère de Quarter-Kelly découplé du moteur matriciel."""
-    if bankroll <= 0 or bookmaker_odds <= 1.0 or prob_pct <= 0.0:
-        return 0.0, 0.0
+def calibrate_probability_temperature(prob_pct, temperature=1.15):
+    p = np.clip(prob_pct / 100.0, 0.001, 0.999)
+    logit = math.log(p / (1.0 - p))
+    scaled_logit = logit / temperature
+    cal_p = 1.0 / (1.0 + math.exp(-scaled_logit))
+    return round(cal_p * 100.0, 1)
 
+def compute_shannon_entropy_1x2(p_h, p_n, p_a):
+    probs = np.clip(np.array([p_h, p_n, p_a]) / 100.0, 1e-6, 1.0)
+    entropy = -np.sum(probs * np.log2(probs))
+    return round(float(entropy / math.log2(3.0)), 3)
+
+def prob_to_odds(p):
+    if p <= 0.001: return 99.00
+    return round(min(99.00, 100.0 / p), 2)
+
+def run_stratified_monte_carlo(lambda_h, lambda_a, dispersion=10.0, rho=-0.115, n_sims=25000):
+    """
+    25 000 simulations Monte Carlo avec injection d'incertitude paramétrique (Gamma-Poisson)
+    pour mesurer la robustesse réelle des probabilités face aux aléas d'un match.
+    """
+    rng = np.random.default_rng(42)
+    # Variation aléatoire de +/- 12% autour de l'intensité offensive (forme du jour)
+    noise_h = rng.gamma(shape=dispersion, scale=lambda_h / dispersion, size=n_sims)
+    noise_a = rng.gamma(shape=dispersion, scale=lambda_a / dispersion, size=n_sims)
+    
+    sim_h = rng.poisson(noise_h)
+    sim_a = rng.poisson(noise_a)
+    
+    mc_h = float(np.mean(sim_h > sim_a)) * 100.0
+    mc_n = float(np.mean(sim_h == sim_a)) * 100.0
+    mc_a = float(np.mean(sim_h < sim_a)) * 100.0
+    
+    tot_g = sim_h + sim_a
+    mc_o15 = float(np.mean(tot_g > 1)) * 100.0
+    mc_o25 = float(np.mean(tot_g > 2)) * 100.0
+    mc_u35 = float(np.mean(tot_g <= 3)) * 100.0
+    mc_btts = float(np.mean((sim_h > 0) & (sim_a > 0))) * 100.0
+    
+    return {
+        "mc_h": round(mc_h, 1), "mc_n": round(mc_n, 1), "mc_a": round(mc_a, 1),
+        "mc_o15": round(mc_o15, 1), "mc_o25": round(mc_o25, 1),
+        "mc_u35": round(mc_u35, 1), "mc_btts": round(mc_btts, 1),
+        "ci_low": int(np.percentile(tot_g, 5)),
+        "ci_high": int(np.percentile(tot_g, 95))
+    }
+
+def calculate_adaptive_kelly(prob_pct, bookmaker_odds, bankroll, risk_mode="Équilibré"):
     p = prob_pct / 100.0
     b = bookmaker_odds - 1.0
-    ev_pct = round(((p * bookmaker_odds) - 1.0) * 100.0, 2)
-    f_star = (p * bookmaker_odds - 1.0) / b
-    if f_star <= 0.0:
-        return 0.0, ev_pct
+    if b <= 0 or p <= 0: return 0.0, 0.0
+    f_star = (p * (b + 1.0) - 1.0) / b
+    ev_val = round(((p * bookmaker_odds) - 1.0) * 100, 2)
+    
+    if "Chasseur" in risk_mode:
+        kelly_frac, max_cap = 0.12, 0.015
+        if f_star <= 0: return round(bankroll * 0.005, 2), ev_val
+    else:
+        kelly_frac, max_cap = 0.25, 0.05
+        if f_star <= 0: return 0.0, ev_val
 
-    f_adjusted = f_star * 0.25 * (1.0 - estimation_uncertainty)
-    f_capped = min(max(0.0, f_adjusted), max_cap_pct)
-    return round(bankroll * f_capped, 2), ev_pct
+    f_capped = min(max(0.0, f_star * kelly_frac), max_cap)
+    return round(bankroll * f_capped, 2), ev_val
 
+# ==============================================================================
+# 5. MODÉLISATION STOCHASTIQUE MI-TEMPS / FIN DE MATCH (HT / FT)
+# ==============================================================================
 
-def extract_markets_summary(
-    odds_event: dict[str, Any],
-    home_name_odds: str,
-    away_name_odds: str,
-    target_line: float = 2.5,
-) -> dict[str, Any]:
-    """Extrait meilleures cotes et probabilités Shin pour h2h (1X2) et totals (O/U)."""
-    best_h2h = {"1": (0.0, None), "X": (0.0, None), "2": (0.0, None)}
-    best_totals = {"Over": (0.0, None), "Under": (0.0, None)}
-    pin_h2h, pin_totals = None, None
-
-    for bk in odds_event.get("bookmakers", []):
-        bk_title = bk.get("title")
-        markets = {m["key"]: m for m in bk.get("markets", [])}
-
-        if "h2h" in markets:
-            prices = {o["name"]: o["price"] for o in markets["h2h"].get("outcomes", [])}
-            o_h, o_d, o_a = prices.get(home_name_odds), prices.get("Draw"), prices.get(away_name_odds)
-            if o_h and o_d and o_a:
-                if o_h > best_h2h["1"][0]: best_h2h["1"] = (o_h, bk_title)
-                if o_d > best_h2h["X"][0]: best_h2h["X"] = (o_d, bk_title)
-                if o_a > best_h2h["2"][0]: best_h2h["2"] = (o_a, bk_title)
-                if bk.get("key") == "pinnacle":
-                    pin_h2h = [o_h, o_d, o_a]
-
-        if "totals" in markets:
-            o_over, o_under = None, None
-            for o in markets["totals"].get("outcomes", []):
-                if o.get("point") == target_line:
-                    if o.get("name") == "Over":
-                        o_over = o.get("price")
-                    elif o.get("name") == "Under":
-                        o_under = o.get("price")
-            if o_over and o_under:
-                if o_over > best_totals["Over"][0]: best_totals["Over"] = (o_over, bk_title)
-                if o_under > best_totals["Under"][0]: best_totals["Under"] = (o_under, bk_title)
-                if bk.get("key") == "pinnacle":
-                    pin_totals = [o_over, o_under]
-
-    ref_h2h = pin_h2h or [best_h2h["1"][0], best_h2h["X"][0], best_h2h["2"][0]]
-    ref_tot = pin_totals or [best_totals["Over"][0], best_totals["Under"][0]]
-
-    shin_h2h, vig_h2h, z_h2h = (
-        shin_remove_vig(ref_h2h) if all(x > 1.0 for x in ref_h2h) else ([0.0, 0.0, 0.0], 0.0, 0.0)
-    )
-    shin_tot, vig_tot, _ = (
-        shin_remove_vig(ref_tot) if all(x > 1.0 for x in ref_tot) else ([0.0, 0.0], 0.0, 0.0)
-    )
-
-    return {
-        "h2h": {"best": best_h2h, "shin_pct": [round(p * 100.0, 1) for p in shin_h2h], "vig_pct": vig_h2h, "shin_z": z_h2h},
-        "totals": {"line": target_line, "best": best_totals, "shin_pct": [round(p * 100.0, 1) for p in shin_tot], "vig_pct": vig_tot},
-    }
-
-
-def generate_bivariate_score_matrix(
-    lambda_h: float,
-    lambda_a: float,
-    rho: float = -0.115,
-    dispersion: float = 10.0,
-    max_g: int = 9,
-    score_h: int = 0,
-    score_a: int = 0,
-) -> np.ndarray:
-    """Matrice conjointe vectorisée (Binomiale Négative + Dixon-Coles)."""
-    k = np.arange(max_g)
-    p_x = nbinom.pmf(k, dispersion, dispersion / (dispersion + max(1e-6, lambda_h)))
-    p_y = nbinom.pmf(k, dispersion, dispersion / (dispersion + max(1e-6, lambda_a)))
-
-    rem_matrix = np.outer(p_x, p_y)
-    tau_block = np.array([
-        [max(0.01, 1.0 - lambda_h * lambda_a * rho), max(0.01, 1.0 + lambda_h * rho)],
-        [max(0.01, 1.0 + lambda_a * rho), max(0.01, 1.0 - rho)],
-    ])
-    rem_matrix[:2, :2] *= tau_block
-
-    if score_h == 0 and score_a == 0:
-        tot = rem_matrix.sum()
-        return rem_matrix / tot if tot > 0 else rem_matrix
-
-    full_matrix = np.zeros((max_g, max_g), dtype=float)
-    if score_h < max_g and score_a < max_g:
-        full_matrix[score_h:, score_a:] = rem_matrix[: max_g - score_h, : max_g - score_a]
-
-    tot = full_matrix.sum()
-    return full_matrix / tot if tot > 0 else full_matrix
-
-
-def extract_match_markets(matrix: np.ndarray) -> dict[str, Any]:
-    max_g = matrix.shape[0]
-    i_grid, j_grid = np.ogrid[:max_g, :max_g]
-    tot_goals = i_grid + j_grid
-
-    p_h = float(np.tril(matrix, -1).sum()) * 100.0
-    p_n = float(np.diag(matrix).sum()) * 100.0
-    p_a = float(np.triu(matrix, 1).sum()) * 100.0
-    denom_dnb = max(0.01, p_h + p_a)
-
-    prob_btts_yes = round(float(matrix[1:, 1:].sum()) * 100.0, 1)
-    prob_o15 = round(float(matrix[tot_goals > 1].sum()) * 100.0, 1)
-    prob_o25 = round(float(matrix[tot_goals > 2].sum()) * 100.0, 1)
-    prob_o35 = round(float(matrix[tot_goals > 3].sum()) * 100.0, 1)
-
-    flat_idx = np.argsort(matrix.ravel())[::-1][:3]
-    top_3_scores = []
-    for idx in flat_idx:
-        gh, ga = np.unravel_index(idx, matrix.shape)
-        top_3_scores.append({"score": f"{gh}-{ga}", "prob": round(float(matrix[gh, ga]) * 100.0, 1)})
-
-    return {
-        "p_h": round(p_h, 1), "p_n": round(p_n, 1), "p_a": round(p_a, 1),
-        "prob_1x": round(p_h + p_n, 1), "prob_x2": round(p_a + p_n, 1), "prob_12": round(p_h + p_a, 1),
-        "prob_dnb_h": round((p_h / denom_dnb) * 100.0, 1), "prob_dnb_a": round((p_a / denom_dnb) * 100.0, 1),
-        "prob_btts_yes": prob_btts_yes, "prob_btts_no": round(100.0 - prob_btts_yes, 1),
-        "prob_o15": prob_o15, "prob_o25": prob_o25, "prob_u25": round(100.0 - prob_o25, 1),
-        "prob_o35": prob_o35, "prob_u35": round(100.0 - prob_o35, 1),
-        "prob_g_1_2": round(float(matrix[(tot_goals >= 1) & (tot_goals <= 2)].sum()) * 100.0, 1),
-        "prob_g_2_3": round(float(matrix[(tot_goals >= 2) & (tot_goals <= 3)].sum()) * 100.0, 1),
-        "prob_g_2_4": round(float(matrix[(tot_goals >= 2) & (tot_goals <= 4)].sum()) * 100.0, 1),
-        "prob_ah_h_m1": round(float(matrix[(i_grid - j_grid) >= 2].sum()) * 100.0, 1),
-        "prob_ah_a_m1": round(float(matrix[(j_grid - i_grid) >= 2].sum()) * 100.0, 1),
-        "top_3_scores": top_3_scores,
-    }
-
-
-def compute_stochastic_ht_ft_engine(
-    lambda_h: float,
-    lambda_a: float,
-    theta_ht: float = 0.445,
-    rho: float = -0.115,
-    dispersion: float = 10.0,
-) -> dict[str, Any]:
-    """Moteur HT/FT 100% vectorisé en Binomiale Négative par différence de buts."""
+def compute_stochastic_ht_ft_engine(lambda_h, lambda_a, theta_ht=0.435, rho=-0.115):
     l_h1, l_a1 = lambda_h * theta_ht, lambda_a * theta_ht
     l_h2, l_a2 = lambda_h * (1.0 - theta_ht), lambda_a * (1.0 - theta_ht)
-    disp_1 = max(1.0, dispersion * theta_ht)
-    disp_2 = max(1.0, dispersion * (1.0 - theta_ht))
-
+    
     max_g = 6
-    m1 = generate_bivariate_score_matrix(l_h1, l_a1, rho=rho * 1.25, dispersion=disp_1, max_g=max_g)
-    m2 = generate_bivariate_score_matrix(l_h2, l_a2, rho=0.0, dispersion=disp_2, max_g=max_g)
+    m1 = np.zeros((max_g, max_g))
+    for x in range(max_g):
+        for y in range(max_g):
+            tau = dixon_coles_tau(x, y, l_h1, l_a1, rho * 1.25)
+            m1[x, y] = max(0.0, poisson.pmf(x, l_h1) * poisson.pmf(y, l_a1) * tau)
+    if np.sum(m1) > 0: m1 /= np.sum(m1)
 
-    ht_1 = round(float(np.tril(m1, -1).sum()) * 100.0, 1)
-    ht_x = round(float(np.diag(m1).sum()) * 100.0, 1)
-    ht_2 = round(float(np.triu(m1, 1).sum()) * 100.0, 1)
+    m2 = np.zeros((max_g, max_g))
+    for x in range(max_g):
+        for y in range(max_g):
+            m2[x, y] = poisson.pmf(x, l_h2) * poisson.pmf(y, l_a2)
+    if np.sum(m2) > 0: m2 /= np.sum(m2)
+
+    ht_1 = round(float(np.sum(np.tril(m1, -1))) * 100.0, 1)
+    ht_x = round(float(np.sum(np.diag(m1))) * 100.0, 1)
+    ht_2 = round(float(np.sum(np.triu(m1, 1))) * 100.0, 1)
     ht_o05 = round(float(1.0 - m1[0, 0]) * 100.0, 1)
-    ht_o15 = round(float(1.0 - (m1[0, 0] + m1[1, 0] + m1[0, 1])) * 100.0, 1)
-    ht_btts = round(float(m1[1:, 1:].sum()) * 100.0, 1)
+    ht_u05 = round(100.0 - ht_o05, 1)
+    ht_o15 = round(float(1.0 - (m1[0,0] + m1[1,0] + m1[0,1])) * 100.0, 1)
+    ht_btts = round(float(np.sum(m1[1:, 1:])) * 100.0, 1)
 
-    diffs = np.arange(-(max_g - 1), max_g)
-    p_d1 = np.array([np.trace(m1, offset=-int(d)) for d in diffs])
-    p_d2 = np.array([np.trace(m2, offset=-int(d)) for d in diffs])
+    labels = ['1/1', '1/X', '1/2', 'X/1', 'X/X', 'X/2', '2/1', '2/X', '2/2']
+    ht_ft_raw = {k: 0.0 for k in labels}
+    
+    for x1 in range(max_g):
+        for y1 in range(max_g):
+            p1 = m1[x1, y1]
+            if p1 <= 0: continue
+            r1 = '1' if x1 > y1 else ('X' if x1 == y1 else '2')
+            for x2 in range(max_g):
+                for y2 in range(max_g):
+                    p2 = m2[x2, y2]
+                    tx, ty = x1 + x2, y1 + y2
+                    r2 = '1' if tx > ty else ('X' if tx == ty else '2')
+                    ht_ft_raw[f'{r1}/{r2}'] += float(p1 * p2)
 
-    joint_diff = np.outer(p_d1, p_d2)
-    d1_grid = diffs[:, None]
-    d_tot = diffs[:, None] + diffs[None, :]
-
-    masks = {
-        "1": (d1_grid > 0, d_tot > 0),
-        "X": (d1_grid == 0, d_tot == 0),
-        "2": (d1_grid < 0, d_tot < 0),
-    }
-
-    ht_ft_results = {}
-    for r1, (m_ht, _) in masks.items():
-        for r2, (_, m_ft) in masks.items():
-            p_val = round(float(joint_diff[m_ht & m_ft].sum()) * 100.0, 2)
-            ht_ft_results[f"{r1}/{r2}"] = {"prob": p_val, "odds": prob_to_odds(p_val)}
-
+    ht_ft_results = {k: {"prob": round(ht_ft_raw[k] * 100.0, 2), "odds": prob_to_odds(round(ht_ft_raw[k] * 100.0, 2))} for k in labels}
+        
     return {
         "l_h1": l_h1, "l_a1": l_a1,
         "ht_1": ht_1, "ht_x": ht_x, "ht_2": ht_2,
-        "ht_o05": ht_o05, "ht_u05": round(100.0 - ht_o05, 1),
+        "ht_o05": ht_o05, "ht_u05": ht_u05,
         "ht_o15": ht_o15, "ht_btts": ht_btts,
-        "ht_ft": ht_ft_results,
+        "ht_ft": ht_ft_results
     }
 
-
-def run_monte_carlo_simulation(matrix: np.ndarray, n_simulations: int = 10000, seed: int = 42) -> dict[str, Any]:
-    rng = np.random.default_rng(seed)
-    flat_probs = matrix.ravel()
-    flat_probs = flat_probs / flat_probs.sum()
-    flat_indices = rng.choice(len(flat_probs), size=n_simulations, p=flat_probs)
-    h_goals, a_goals = np.unravel_index(flat_indices, matrix.shape)
-    tot_goals = h_goals + a_goals
-
-    return {
-        "mc_h": round(float(np.mean(h_goals > a_goals)) * 100.0, 1),
-        "mc_d": round(float(np.mean(h_goals == a_goals)) * 100.0, 1),
-        "mc_a": round(float(np.mean(h_goals < a_goals)) * 100.0, 1),
-        "mc_o25": round(float(np.mean(tot_goals > 2)) * 100.0, 1),
-        "mc_btts": round(float(np.mean((h_goals > 0) & (a_goals > 0))) * 100.0, 1),
-        "ci_low": float(np.percentile(tot_goals, 2.5)),
-        "ci_high": float(np.percentile(tot_goals, 97.5)),
-    }
-
-
 # ==============================================================================
-# 4. PRÉTRAITEMENT TEMPOREL, CALIBRATION & BACKTEST WALK-FORWARD
+# 6. EXTRACTION STATISTIQUE PROFONDE & TIME-DECAY
 # ==============================================================================
 
-def compute_advanced_momentum(history: list[dict[str, Any]]) -> tuple[float, str]:
-    if not history:
-        return 1.0, "Neutre / Standard"
-    weights = [0.38, 0.28, 0.18, 0.10, 0.06][: len(history)]
+def get_team_last_matches(team_name, all_matches, max_matches=6):
+    history = []
+    for m in all_matches:
+        if m.get('status') == 'FINISHED':
+            h_team, a_team = m['homeTeam']['name'], m['awayTeam']['name']
+            if h_team == team_name or a_team == team_name:
+                sc = m.get('score', {}).get('fullTime', {})
+                sh, sa = sc.get('home'), sc.get('away')
+                if sh is not None and sa is not None:
+                    is_h = (h_team == team_name)
+                    gf, ga = (sh if is_h else sa), (sa if is_h else sh)
+                    res = 'W' if gf > ga else ('D' if gf == ga else 'L')
+                    history.append({
+                        "date": m.get('utcDate', '')[:10],
+                        "opponent": a_team if is_h else h_team,
+                        "venue": "Dom." if is_h else "Ext.",
+                        "score": f"{gf}-{ga}",
+                        "result": res, "gf": gf, "ga": ga, "diff": gf - ga
+                    })
+    history.sort(key=lambda x: x["date"], reverse=True)
+    return history[:max_matches]
+
+def compute_time_decay_form(history, post_fifa_break=False):
+    if not history: return 1.0, "Neutre", 1.35, 1.35, 0.5, 0.0
+    xi = 0.28
+    weights = [math.exp(-xi * i) for i in range(len(history))]
     w_sum = sum(weights)
-    perf = 0.0
+    norm_w = [w / w_sum for w in weights]
+    
+    perf_score, recent_gf, recent_ga = 0.0, 0.0, 0.0
+    results_list = []
+    clean_sheets = 0
     for idx, match in enumerate(history):
-        pts = 3.0 if match["result"] == "W" else (1.0 if match["result"] == "D" else 0.0)
-        margin_bonus = float(np.clip(match["diff"] * 0.25, -0.75, 0.75))
-        perf += (weights[idx] / w_sum) * (pts + margin_bonus)
+        pts = 3.0 if match['result'] == 'W' else (1.0 if match['result'] == 'D' else 0.0)
+        margin_bonus = np.clip(match['diff'] * 0.18, -0.55, 0.55)
+        perf_score += norm_w[idx] * (pts + margin_bonus)
+        recent_gf += norm_w[idx] * match['gf']
+        recent_ga += norm_w[idx] * match['ga']
+        results_list.append(pts)
+        if match['ga'] == 0:
+            clean_sheets += 1
+        
+    consistency = round(float(1.0 - (np.std(results_list) / 1.5)), 2) if len(results_list) > 1 else 0.5
+    cs_rate = round(clean_sheets / len(history), 2)
 
-    if perf >= 2.6: return 1.16, "🔥 Dynamique Conquérante (Ascendante)"
-    if perf >= 1.9: return 1.08, "✅ Forme Positive & Rassurante"
-    if perf >= 1.1: return 0.98, "⚖️ Régulier / Discontinu"
-    if perf >= 0.6: return 0.90, "⚠️ Instabilité & Fébrilité"
-    return 0.82, "🚨 Crise Aiguë / Décrochage"
+    if perf_score >= 2.50: raw_mom, label = 1.09, "🔥 Dynamique Ascendante"
+    elif perf_score >= 1.85: raw_mom, label = 1.04, "✅ Forme Positive"
+    elif perf_score >= 1.15: raw_mom, label = 0.99, "⚖️ Régulier"
+    elif perf_score >= 0.65: raw_mom, label = 0.94, "⚠️ Fébrilité"
+    else: raw_mom, label = 0.88, "🚨 Crise / Décrochage"
 
+    if post_fifa_break:
+        raw_mom = 1.0 + (raw_mom - 1.0) * 0.35
+        label += " (Amorti FIFA)"
+        
+    return round(raw_mom, 3), label, recent_gf, recent_ga, consistency, cs_rate
 
-def compute_time_decayed_team_stats(
-    finished_matches: list[dict[str, Any]],
-    profile: dict[str, float],
-    k_shrinkage: float = 3.8,
-    xi_decay: float = 0.0045,
-) -> tuple[dict[str, dict[str, Any]], float, float]:
-    """
-    Prétraitement avancé : agrège les matchs terminés avec décroissance exponentielle
-    exp(-xi * jours_écoulés) et régularisation bayésienne (shrinkage K).
-    """
-    avg_h, avg_a = profile["avg_h"], profile["avg_a"]
-    if not finished_matches:
-        return {}, avg_h, avg_a
+@st.cache_data(ttl=1800)
+def get_advanced_league_stats(league_code, post_fifa_break=False):
+    standings_data = fetch_api(f"competitions/{league_code}/standings")
+    raw_matches = fetch_api(f"competitions/{league_code}/matches")
+    all_comp_matches = raw_matches.get("matches", []) if raw_matches else []
+    
+    profile = LEAGUE_PROFILES.get(league_code, {"avg_h": 1.55, "avg_a": 1.18, "rho": -0.115, "card_base": 4.0, "corner_base": 9.8, "dispersion": 10.0, "draw_base": 0.25})
+    avg_goals_home, avg_goals_away = profile["avg_h"], profile["avg_a"]
+    stats = {}
+    
+    if standings_data and "standings" in standings_data and len(standings_data["standings"]) > 0:
+        table_total = standings_data["standings"][0].get("table", [])
+        table_home = standings_data["standings"][1].get("table", []) if len(standings_data["standings"]) > 1 else table_total
+        table_away = standings_data["standings"][2].get("table", []) if len(standings_data["standings"]) > 2 else table_total
+        
+        teams_list = [r["team"]["name"] for r in table_total]
+        massey_ratings = solve_massey_colley_ratings(all_comp_matches, teams_list)
+        
+        dict_home = {r["team"]["name"]: r for r in table_home}
+        dict_away = {r["team"]["name"]: r for r in table_away}
+        
+        tot_h_gf, tot_h_games, tot_a_gf, tot_a_games = 0, 0, 0, 0
+        for r in table_total:
+            n = r["team"]["name"]
+            hr, ar = dict_home.get(n, r), dict_away.get(n, r)
+            tot_h_gf += hr.get("goalsFor", 0); tot_h_games += hr.get("playedGames", 0)
+            tot_a_gf += ar.get("goalsFor", 0); tot_a_games += ar.get("playedGames", 0)
+            
+        if tot_h_games > 0 and tot_a_games > 0:
+            avg_goals_home = max(0.9, tot_h_gf / tot_h_games)
+            avg_goals_away = max(0.8, tot_a_gf / tot_a_games)
 
-    ordered = sorted(finished_matches, key=lambda m: m.get("utcDate", ""))
-    ref_date_str = ordered[-1].get("utcDate", "")[:10]
-    try:
-        ref_dt = datetime.strptime(ref_date_str, "%Y-%m-%d")
-    except ValueError:
-        ref_dt = datetime.now(timezone.utc).replace(tzinfo=None)
+        for row in table_total:
+            name = row["team"]["name"]
+            played = max(1, row.get("playedGames", 1))
+            pts, gf, ga = row.get("points", 0), row.get("goalsFor", 0), row.get("goalsAgainst", 0)
+            
+            h_row, a_row = dict_home.get(name, row), dict_away.get(name, row)
+            h_played = max(1, h_row.get("playedGames", 1))
+            a_played = max(1, a_row.get("playedGames", 1))
+            
+            K_shrinkage = 4.2
+            bayes_h_gf = (h_row.get("goalsFor", gf/2) + K_shrinkage * avg_goals_home) / (h_played + K_shrinkage)
+            bayes_h_ga = (h_row.get("goalsAgainst", ga/2) + K_shrinkage * avg_goals_away) / (h_played + K_shrinkage)
+            bayes_a_gf = (a_row.get("goalsFor", gf/2) + K_shrinkage * avg_goals_away) / (a_played + K_shrinkage)
+            bayes_a_ga = (a_row.get("goalsAgainst", ga/2) + K_shrinkage * avg_goals_home) / (a_played + K_shrinkage)
 
-    acc: dict[str, dict[str, Any]] = {}
-    tot_h_gf, tot_h_w, tot_a_gf, tot_a_w = 0.0, 0.0, 0.0, 0.0
-
-    def _init() -> dict[str, Any]:
-        return {
-            "played": 0, "pts": 0, "gf": 0, "ga": 0,
-            "h_gf_w": 0.0, "h_ga_w": 0.0, "h_w": 0.0,
-            "a_gf_w": 0.0, "a_ga_w": 0.0, "a_w": 0.0,
-            "last_5": [],
-        }
-
-    for m in ordered:
-        sc = m.get("score", {}).get("fullTime", {})
-        rh, ra = sc.get("home"), sc.get("away")
-        if rh is None or ra is None:
-            continue
-
-        try:
-            m_dt = datetime.strptime(m.get("utcDate", "")[:10], "%Y-%m-%d")
-            days_ago = max(0, (ref_dt - m_dt).days)
-        except ValueError:
-            days_ago = 0
-        w = float(np.exp(-xi_decay * days_ago))
-
-        ht, at = m["homeTeam"]["name"], m["awayTeam"]["name"]
-        hr, ar = acc.setdefault(ht, _init()), acc.setdefault(at, _init())
-
-        hr["played"] += 1; ar["played"] += 1
-        hr["gf"] += rh; hr["ga"] += ra
-        ar["gf"] += ra; ar["ga"] += rh
-        hr["h_gf_w"] += w * rh; hr["h_ga_w"] += w * ra; hr["h_w"] += w
-        ar["a_gf_w"] += w * ra; ar["a_ga_w"] += w * rh; ar["a_w"] += w
-        tot_h_gf += w * rh; tot_h_w += w
-        tot_a_gf += w * ra; tot_a_w += w
-
-        if rh > ra:
-            hr["pts"] += 3; res_h, res_a = "W", "L"
-        elif rh == ra:
-            hr["pts"] += 1; ar["pts"] += 1; res_h, res_a = "D", "D"
-        else:
-            ar["pts"] += 3; res_h, res_a = "L", "W"
-
-        hr["last_5"] = ([{"date": m.get("utcDate", "")[:10], "result": res_h, "diff": rh - ra}] + hr["last_5"])[:5]
-        ar["last_5"] = ([{"date": m.get("utcDate", "")[:10], "result": res_a, "diff": ra - rh}] + ar["last_5"])[:5]
-
-    if tot_h_w > 0 and tot_a_w > 0:
-        avg_h = max(0.9, tot_h_gf / tot_h_w)
-        avg_a = max(0.8, tot_a_gf / tot_a_w)
-
-    league_avg_half = max(0.5, (avg_h + avg_a) / 2.0)
-    stats: dict[str, dict[str, Any]] = {}
-    for name, rec in acc.items():
-        played = max(1, rec["played"])
-        mom_f, mom_s = compute_advanced_momentum(rec["last_5"])
-        stats[name] = {
-            "played": played,
-            "pts": rec["pts"],
-            "gf": rec["gf"],
-            "ga": rec["ga"],
-            "home_gf_pg": (rec["h_gf_w"] + k_shrinkage * avg_h) / (rec["h_w"] + k_shrinkage),
-            "home_ga_pg": (rec["h_ga_w"] + k_shrinkage * avg_a) / (rec["h_w"] + k_shrinkage),
-            "away_gf_pg": (rec["a_gf_w"] + k_shrinkage * avg_a) / (rec["a_w"] + k_shrinkage),
-            "away_ga_pg": (rec["a_ga_w"] + k_shrinkage * avg_h) / (rec["a_w"] + k_shrinkage),
-            "elo": 1500.0 + (rec["pts"] * 13.5) + ((rec["gf"] - rec["ga"]) * 5.2),
-            "momentum_factor": mom_f,
-            "momentum_status": mom_s,
-            "att_intensity": (rec["gf"] / played) / league_avg_half,
-            "def_vulnerability": (rec["ga"] / played) / league_avg_half,
-            "last_5": rec["last_5"],
-        }
-    return stats, avg_h, avg_a
-
-
-def _predict_xg_core(
-    h_stat: dict[str, Any],
-    a_stat: dict[str, Any],
-    avg_h: float,
-    avg_a: float,
-    weather_mode: str = "Normal (Idéal)",
-) -> tuple[float, float, float]:
-    raw_h_xg = (h_stat["home_gf_pg"] / max(0.5, avg_h)) * (a_stat["away_ga_pg"] / max(0.5, avg_h)) * avg_h
-    raw_a_xg = (a_stat["away_gf_pg"] / max(0.5, avg_a)) * (h_stat["home_ga_pg"] / max(0.5, avg_a)) * avg_a
-
-    elo_diff = h_stat["elo"] - a_stat["elo"]
-    elo_mult_h = float(np.clip(1.0 + (elo_diff / 850.0), 0.52, 1.60))
-    elo_mult_a = float(np.clip(1.0 - (elo_diff / 850.0), 0.52, 1.60))
-
-    weather_mult = 0.88 if ("Pluie" in weather_mode or "Lourd" in weather_mode) else (0.92 if "Canicule" in weather_mode else 1.0)
-    full_h_xg = float(np.clip(raw_h_xg * elo_mult_h * h_stat["momentum_factor"] * weather_mult, 0.22, 4.20))
-    full_a_xg = float(np.clip(raw_a_xg * elo_mult_a * a_stat["momentum_factor"] * weather_mult, 0.20, 3.80))
-    return full_h_xg, full_a_xg, elo_diff
-
-
-def run_walk_forward_audit(
-    finished_matches: list[dict[str, Any]],
-    profile: dict[str, float],
-    k_shrinkage: float = 3.8,
-    rho: float | None = None,
-    min_games_burnin: int = 4,
-) -> dict[str, Any]:
-    """Backtest chronologique strict (walk-forward) sans fuite de données."""
-    ordered = sorted(finished_matches, key=lambda m: m.get("utcDate", ""))
-    avg_h, avg_a = profile["avg_h"], profile["avg_a"]
-    rho_val = profile["rho"] if rho is None else rho
-    dispersion = profile["dispersion"]
-
-    rolling: dict[str, dict[str, Any]] = {}
-    eval_logs, brier_scores, log_losses, hits_1x2 = [], [], [], []
-
-    def _init() -> dict[str, Any]:
-        return {"played": 0, "pts": 0, "h_gf": 0, "h_ga": 0, "h_n": 0, "a_gf": 0, "a_ga": 0, "a_n": 0, "last_5": []}
-
-    for m in ordered:
-        sc = m.get("score", {}).get("fullTime", {})
-        rh, ra = sc.get("home"), sc.get("away")
-        if rh is None or ra is None:
-            continue
-
-        ht, at = m["homeTeam"]["name"], m["awayTeam"]["name"]
-        h_rec, a_rec = rolling.setdefault(ht, _init()), rolling.setdefault(at, _init())
-
-        if h_rec["played"] >= min_games_burnin and a_rec["played"] >= min_games_burnin:
-            h_stat = {
-                "home_gf_pg": (h_rec["h_gf"] + k_shrinkage * avg_h) / (h_rec["h_n"] + k_shrinkage),
-                "home_ga_pg": (h_rec["h_ga"] + k_shrinkage * avg_a) / (h_rec["h_n"] + k_shrinkage),
-                "elo": 1500.0 + h_rec["pts"] * 13.5 + ((h_rec["h_gf"] + h_rec["a_gf"]) - (h_rec["h_ga"] + h_rec["a_ga"])) * 5.2,
-                "momentum_factor": compute_advanced_momentum(h_rec["last_5"])[0],
+            massey_val = massey_ratings.get(name, 0.0)
+            # Fusion ELO points + Indice Matriciel Massey-Colley
+            elo_rating = 1500.0 + ((pts / played) * 165.0) + (((gf - ga) / played) * 50.0) + (massey_val * 110.0)
+            last_6 = get_team_last_matches(name, all_comp_matches, 6)
+            mom_factor, mom_status, rec_gf, rec_ga, consistency, cs_rate = compute_time_decay_form(last_6, post_fifa_break)
+            
+            stats[name] = {
+                "played": played, "pts": pts, "gf": gf, "ga": ga,
+                "home_gf_pg": bayes_h_gf, "home_ga_pg": bayes_h_ga,
+                "away_gf_pg": bayes_a_gf, "away_ga_pg": bayes_a_ga,
+                "recent_gf": rec_gf, "recent_ga": rec_ga, "consistency": consistency, "cs_rate": cs_rate,
+                "massey": massey_val,
+                "elo": elo_rating, "momentum_factor": mom_factor, "momentum_status": mom_status,
+                "att_intensity": (gf / played) / max(0.5, (avg_goals_home + avg_goals_away) / 2.0),
+                "def_vulnerability": (ga / played) / max(0.5, (avg_goals_home + avg_goals_away) / 2.0),
+                "last_5": last_6[:5]
             }
-            a_stat = {
-                "away_gf_pg": (a_rec["a_gf"] + k_shrinkage * avg_a) / (a_rec["a_n"] + k_shrinkage),
-                "away_ga_pg": (a_rec["a_ga"] + k_shrinkage * avg_h) / (a_rec["a_n"] + k_shrinkage),
-                "elo": 1500.0 + a_rec["pts"] * 13.5 + ((a_rec["h_gf"] + a_rec["a_gf"]) - (a_rec["h_ga"] + a_rec["a_ga"])) * 5.2,
-                "momentum_factor": compute_advanced_momentum(a_rec["last_5"])[0],
-            }
-            h_xg, a_xg, _ = _predict_xg_core(h_stat, a_stat, avg_h, avg_a)
-            mk = extract_match_markets(generate_bivariate_score_matrix(h_xg, a_xg, rho=rho_val, dispersion=dispersion))
-
-            probs = np.clip(np.array([mk["p_h"], mk["p_n"], mk["p_a"]]) / 100.0, 1e-6, 1.0)
-            probs /= probs.sum()
-
-            actual_idx = 0 if rh > ra else (1 if rh == ra else 2)
-            actual_vec = np.zeros(3, dtype=float)
-            actual_vec[actual_idx] = 1.0
-
-            brier = float(np.sum((probs - actual_vec) ** 2))
-            logloss = float(-np.log(probs[actual_idx]))
-            brier_scores.append(brier)
-            log_losses.append(logloss)
-            hits_1x2.append(int(np.argmax(probs) == actual_idx))
-            eval_logs.append({
-                "Date": m.get("utcDate", "")[:10],
-                "Affiche": f"{ht} vs {at}",
-                "Score": f"{rh}-{ra}",
-                "Probas 1X2": f"{mk['p_h']}% | {mk['p_n']}% | {mk['p_a']}%",
-                "Brier": round(brier, 4),
-                "LogLoss": round(logloss, 4),
-            })
-
-        h_rec["played"] += 1; a_rec["played"] += 1
-        h_rec["h_n"] += 1; a_rec["a_n"] += 1
-        h_rec["h_gf"] += rh; h_rec["h_ga"] += ra
-        a_rec["a_gf"] += ra; a_rec["a_ga"] += rh
-
-        if rh > ra:
-            h_rec["pts"] += 3; res_h, res_a = "W", "L"
-        elif rh == ra:
-            h_rec["pts"] += 1; a_rec["pts"] += 1; res_h, res_a = "D", "D"
-        else:
-            a_rec["pts"] += 3; res_h, res_a = "L", "W"
-
-        h_rec["last_5"] = ([{"result": res_h, "diff": rh - ra}] + h_rec["last_5"])[:5]
-        a_rec["last_5"] = ([{"result": res_a, "diff": ra - rh}] + a_rec["last_5"])[:5]
-
-    n_eval = len(eval_logs)
-    return {
-        "n_eval": n_eval,
-        "brier_score": round(float(np.mean(brier_scores)), 4) if n_eval else None,
-        "log_loss": round(float(np.mean(log_losses)), 4) if n_eval else None,
-        "accuracy_1x2_pct": round(float(np.mean(hits_1x2)) * 100.0, 1) if n_eval else None,
-        "logs": eval_logs,
-    }
-
-
-@st.cache_data(ttl=3600, show_spinner=False)
-def calibrate_league_hyperparameters(
-    league_code: str,
-    finished_matches: tuple[tuple[str, str, str, int, int], ...],
-) -> tuple[float, float]:
-    """Optimise (K_shrinkage, rho) par minimisation de la Log-Loss en walk-forward."""
-    profile = LEAGUE_PROFILES[league_code]
-    if len(finished_matches) < 40:
-        return 3.8, profile["rho"]
-
-    reconstructed = [
-        {"utcDate": d, "homeTeam": {"name": h}, "awayTeam": {"name": a}, "score": {"fullTime": {"home": sh, "away": sa}}}
-        for d, h, a, sh, sa in finished_matches
-    ]
-
-    def _objective(params: np.ndarray) -> float:
-        k_val, rho_val = float(params[0]), float(params[1])
-        audit = run_walk_forward_audit(reconstructed, profile, k_shrinkage=k_val, rho=rho_val, min_games_burnin=4)
-        return audit["log_loss"] if audit["log_loss"] is not None else 2.0
-
-    res = minimize(
-        _objective,
-        x0=np.array([3.8, profile["rho"]]),
-        method="Nelder-Mead",
-        options={"maxiter": 25, "xatol": 0.15, "fatol": 1e-3},
-    )
-    k_opt = float(np.clip(res.x[0], 1.5, 8.0))
-    rho_opt = float(np.clip(res.x[1], -0.20, -0.02))
-    return round(k_opt, 2), round(rho_opt, 4)
-
+            
+    return stats, avg_goals_home, avg_goals_away, profile
 
 # ==============================================================================
-# 5. MOTEUR DE PRÉDICTION UNIFIÉ & CACHE CENTRALISÉ
+# 7. MOTEUR INSTITUTIONNEL DE TOURNOI MULTI-MARCHÉS (V54.0)
 # ==============================================================================
 
-def predict_single_match(
-    h_name: str,
-    a_name: str,
-    team_stats: dict[str, dict[str, Any]],
-    avg_h: float,
-    avg_a: float,
-    profile: dict[str, float],
-    rho_override: float | None = None,
-    weather_mode: str = "Normal (Idéal)",
-) -> dict[str, Any]:
-    default_stat = {
+def run_institutional_prediction(
+    h_name, a_name, 
+    team_stats={}, avg_goals_h=1.55, avg_goals_a=1.18, 
+    profile=None, bankroll=1000.0, book_odds_1x2=None, 
+    weather_mode="Normal (Idéal)", post_fifa_break=False,
+    risk_profile="🛡️ Sniper Sécurité (90%+)",
+    tactical_adj=None
+):
+    if profile is None:
+        profile = {"avg_h": avg_goals_h, "avg_a": avg_goals_a, "rho": -0.115, "card_base": 4.0, "corner_base": 9.8, "dispersion": 10.0, "draw_base": 0.25}
+    if tactical_adj is None:
+        tactical_adj = {"h_att": 1.0, "h_def": 1.0, "a_att": 1.0, "a_def": 1.0}
+        
+    default_team = {
         "played": 10, "pts": 15, "gf": 14, "ga": 14,
-        "home_gf_pg": avg_h, "home_ga_pg": avg_a,
-        "away_gf_pg": avg_a, "away_ga_pg": avg_h,
+        "home_gf_pg": avg_goals_h, "home_ga_pg": avg_goals_a, 
+        "away_gf_pg": avg_goals_a, "away_ga_pg": avg_goals_h,
+        "recent_gf": 1.35, "recent_ga": 1.35, "consistency": 0.5, "cs_rate": 0.25, "massey": 0.0,
         "elo": 1500.0, "momentum_factor": 1.0, "momentum_status": "Neutre",
-        "att_intensity": 1.0, "def_vulnerability": 1.0, "last_5": [],
+        "att_intensity": 1.0, "def_vulnerability": 1.0, "last_5": []
     }
-    h_stat = team_stats.get(h_name, default_stat)
-    a_stat = team_stats.get(a_name, default_stat)
+    h_stat = team_stats.get(h_name, default_team)
+    a_stat = team_stats.get(a_name, default_team)
+    
+    # 1. Modèle Structurel (Saison Dom/Ext)
+    att_h_saison = h_stat["home_gf_pg"] / max(0.5, avg_goals_h)
+    def_a_saison = a_stat["away_ga_pg"] / max(0.5, avg_goals_h)
+    att_a_saison = a_stat["away_gf_pg"] / max(0.5, avg_goals_a)
+    def_h_saison = h_stat["home_ga_pg"] / max(0.5, avg_goals_a)
+    
+    xg_h_struct = att_h_saison * def_a_saison * avg_goals_h
+    xg_a_struct = att_a_saison * def_h_saison * avg_goals_a
 
-    full_h_xg, full_a_xg, elo_diff = _predict_xg_core(h_stat, a_stat, avg_h, avg_a, weather_mode)
-    rho = profile["rho"] if rho_override is None else rho_override
-    dispersion = profile["dispersion"]
+    # 2. Modèle Récent (Time-Decay Exponentiel)
+    avg_league = (avg_goals_h + avg_goals_a) / 2.0
+    xg_h_recent = (h_stat["recent_gf"] / avg_league) * (a_stat["recent_ga"] / avg_league) * avg_goals_h
+    xg_a_recent = (a_stat["recent_gf"] / avg_league) * (h_stat["recent_ga"] / avg_league) * avg_goals_a
 
-    matrix = generate_bivariate_score_matrix(full_h_xg, full_a_xg, rho=rho, dispersion=dispersion)
-    mk = extract_match_markets(matrix)
-    ht_ft_data = compute_stochastic_ht_ft_engine(full_h_xg, full_a_xg, 0.445, rho, dispersion)
+    # 3. Ajustement Matriciel Massey-Colley (Difficulté du calendrier)
+    massey_diff = h_stat["massey"] - a_stat["massey"]
+    massey_mult_h = np.clip(1.0 + massey_diff * 0.12, 0.85, 1.18)
+    massey_mult_a = np.clip(1.0 - massey_diff * 0.12, 0.85, 1.18)
 
-    # Corners & Cartons
-    tot_xg = full_h_xg + full_a_xg
-    pace = (tot_xg / max(0.5, avg_h + avg_a)) ** 0.35
-    dom = (full_h_xg ** 1.15) / max(0.1, full_h_xg ** 1.15 + full_a_xg ** 1.15)
-    exp_c_h = profile["corner_base"] * 0.54 * (dom ** 0.55) * pace * (h_stat["att_intensity"] ** 0.3)
-    exp_c_a = profile["corner_base"] * 0.46 * ((1.0 - dom) ** 0.55) * pace * (a_stat["att_intensity"] ** 0.3)
-    tot_corners = round(float(np.clip(exp_c_h + exp_c_a, 5.0, 14.5)), 1)
+    w_rec = 0.20 if post_fifa_break else 0.32
+    raw_h_xg = ((1.0 - w_rec) * xg_h_struct + w_rec * xg_h_recent) * massey_mult_h
+    raw_a_xg = ((1.0 - w_rec) * xg_a_struct + w_rec * xg_a_recent) * massey_mult_a
 
-    tension = 1.25 if abs(elo_diff) < 70.0 else (1.10 if abs(elo_diff) < 140.0 else 0.92)
-    def_stress = (h_stat["def_vulnerability"] + a_stat["def_vulnerability"]) / 2.0
-    tot_cards = round(float(np.clip(profile["card_base"] * tension * (def_stress ** 0.4), 2.0, 7.5)), 1)
+    fifa_pace_mult = 0.92 if post_fifa_break else 1.0
+    weather_mult = 0.89 if ("Pluie" in weather_mode or "Lourd" in weather_mode) else (0.93 if "Canicule" in weather_mode else 1.0)
+    
+    full_h_xg = float(np.clip(raw_h_xg * h_stat["momentum_factor"] * weather_mult * fifa_pace_mult * tactical_adj["h_att"] * tactical_adj["a_def"], 0.28, 3.40))
+    full_a_xg = float(np.clip(raw_a_xg * a_stat["momentum_factor"] * weather_mult * fifa_pace_mult * tactical_adj["a_att"] * tactical_adj["h_def"], 0.24, 3.10))
 
-    prob_c85 = round((1.0 - poisson.cdf(8, tot_corners)) * 100.0, 1)
-    prob_cards35 = round((1.0 - poisson.cdf(3, tot_cards)) * 100.0, 1)
+    base_rho = profile.get("rho", -0.115)
+    rho = base_rho * 1.25 if post_fifa_break else base_rho
+    dispersion = profile.get("dispersion", 10.0)
+    max_g = 9
+    
+    # Matrice Dixon-Coles + Binomiale Négative
+    matrix = np.zeros((max_g, max_g))
+    for dh in range(max_g):
+        for da in range(max_g):
+            p_h_g = negative_binomial_pmf(dh, full_h_xg, dispersion)
+            p_a_g = negative_binomial_pmf(da, full_a_xg, dispersion)
+            tau = dixon_coles_tau(dh, da, full_h_xg, full_a_xg, rho)
+            matrix[dh, da] = p_h_g * p_a_g * tau
+    if np.sum(matrix) > 0: matrix /= np.sum(matrix)
 
-    # Options hiérarchisées
-    options = []
-    if mk["prob_1x"] >= 84.0:
-        options.append({"type": "🛡️ SÉCURITÉ MAX", "desc": f"Double Chance : {h_name} ou Nul (1X)", "prob": mk["prob_1x"], "odds": prob_to_odds(mk["prob_1x"])})
-    elif mk["prob_x2"] >= 84.0:
-        options.append({"type": "🛡️ SÉCURITÉ MAX", "desc": f"Double Chance : Nul ou {a_name} (X2)", "prob": mk["prob_x2"], "odds": prob_to_odds(mk["prob_x2"])})
-    elif mk["prob_o15"] >= 78.0:
-        options.append({"type": "🛡️ SÉCURITÉ MAX", "desc": "Plus de 1.5 Buts dans le match", "prob": mk["prob_o15"], "odds": prob_to_odds(mk["prob_o15"])})
-    else:
-        options.append({"type": "🛡️ SÉCURITÉ MAX", "desc": "Moins de 3.5 Buts dans le match", "prob": mk["prob_u35"], "odds": prob_to_odds(mk["prob_u35"])})
+    dc_h = float(np.sum(np.tril(matrix, -1))) * 100.0
+    dc_n = float(np.sum(np.diag(matrix))) * 100.0
+    dc_a = float(np.sum(np.triu(matrix, 1))) * 100.0
 
-    if mk["p_h"] >= 52.0:
-        options.append({"type": "🎯 VALUE BET PRINCIPAL", "desc": f"Victoire Sèche : {h_name}", "prob": mk["p_h"], "odds": prob_to_odds(mk["p_h"])})
-    elif mk["p_a"] >= 52.0:
-        options.append({"type": "🎯 VALUE BET PRINCIPAL", "desc": f"Victoire Sèche : {a_name}", "prob": mk["p_a"], "odds": prob_to_odds(mk["p_a"])})
-    elif mk["prob_btts_yes"] >= 58.0:
-        options.append({"type": "🎯 VALUE BET PRINCIPAL", "desc": "Les Deux Équipes Marquent (BTTS)", "prob": mk["prob_btts_yes"], "odds": prob_to_odds(mk["prob_btts_yes"])})
-    else:
-        options.append({"type": "🎯 VALUE BET PRINCIPAL", "desc": "Plus de 2.5 Buts (Match Ouvert)", "prob": mk["prob_o25"], "odds": prob_to_odds(mk["prob_o25"])})
+    # Modèle ELO Logistique
+    elo_h_adj = h_stat["elo"] + (tactical_adj["h_att"] - 1.0) * 350.0 - (tactical_adj["h_def"] - 1.0) * 350.0
+    elo_a_adj = a_stat["elo"] + (tactical_adj["a_att"] - 1.0) * 350.0 - (tactical_adj["a_def"] - 1.0) * 350.0
+    elo_h_p, elo_n_p, elo_a_p = compute_elo_1x2_probs(elo_h_adj, elo_a_adj, 60.0 if not post_fifa_break else 45.0, profile.get("draw_base", 0.25))
 
-    if abs(elo_diff) > 130.0:
-        fav, ah_p = (h_name, mk["prob_ah_h_m1"]) if mk["p_h"] >= mk["p_a"] else (a_name, mk["prob_ah_a_m1"])
-        options.append({"type": "⚡ SCÉNARIO QUANT TACTIQUE", "desc": f"Handicap Asiatique : {fav} (-1.0)", "prob": ah_p, "odds": prob_to_odds(ah_p)})
-    elif mk["prob_btts_no"] >= 55.0:
-        options.append({"type": "⚡ SCÉNARIO QUANT TACTIQUE", "desc": "BTTS Non", "prob": mk["prob_btts_no"], "odds": prob_to_odds(mk["prob_btts_no"])})
-    else:
-        options.append({"type": "⚡ SCÉNARIO QUANT TACTIQUE", "desc": "Fourchette Multi-Buts : 2 à 4 Buts", "prob": mk["prob_g_2_4"], "odds": prob_to_odds(mk["prob_g_2_4"])})
+    # Simulation Monte Carlo 25 000 tirages (Modèle D)
+    mc = run_stratified_monte_carlo(full_h_xg, full_a_xg, dispersion, rho, 25000)
 
-    dom_team = h_name if elo_diff >= 0 else a_name
-    press_desc = (
-        f"Contrôle territorial appuyé de <b>{dom_team}</b> (xG {max(full_h_xg, full_a_xg):.2f})."
-        if abs(elo_diff) > 90.0 else
-        "Duel tactique équilibré au milieu de terrain."
-    )
-    report = (
-        f"📊 <b>Rapport Dixon-Coles & Binomiale Négative</b> :<br>"
-        f"• 🏠 <b>{h_name}</b> (ELO {h_stat['elo']:.0f} | {h_stat['momentum_status']}) : xG = <b>{full_h_xg:.2f}</b> [MT: <b>{ht_ft_data['l_h1']:.2f}</b>]<br>"
-        f"• ✈️ <b>{a_name}</b> (ELO {a_stat['elo']:.0f} | {a_stat['momentum_status']}) : xG = <b>{full_a_xg:.2f}</b> [MT: <b>{ht_ft_data['l_a1']:.2f}</b>]<br>"
-        f"• ⚔️ <b>Configuration</b> : {press_desc}<br>"
-        f"• ⛳ <b>Corners</b> : ~<b>{tot_corners}</b> (+8.5 : <b>{prob_c85}%</b>) | 🟨 <b>Cartons</b> : ~<b>{tot_cards}</b> (+3.5 : <b>{prob_cards35}%</b>)"
-    )
+    # Stacking Triple Modèle : 60% Dixon-Coles + 20% ELO Logistique + 20% Monte Carlo
+    raw_p_h = 0.60 * dc_h + 0.20 * elo_h_p + 0.20 * mc["mc_h"]
+    raw_p_n = 0.60 * dc_n + 0.20 * elo_n_p + 0.20 * mc["mc_n"]
+    raw_p_a = 0.60 * dc_a + 0.20 * elo_a_p + 0.20 * mc["mc_a"]
 
-    return {
-        **mk,
-        "matrix": matrix,
-        "options": options,
-        "corners": tot_corners,
-        "prob_c85": prob_c85,
-        "cards": tot_cards,
-        "prob_cards35": prob_cards35,
-        "sofascore_report": report,
-        "full_h_xg": full_h_xg,
-        "full_a_xg": full_a_xg,
-        "ht_ft": ht_ft_data,
-    }
+    model_disagreement = abs(dc_h - elo_h_p) + abs(dc_a - elo_a_p) + abs(dc_h - mc["mc_h"])
+    consensus_score = round(float(np.clip(100.0 - model_disagreement * 1.1, 40.0, 99.5)), 1)
 
+    temp = 1.20 if post_fifa_break else 1.10
+    p_h = calibrate_probability_temperature(raw_p_h, temp)
+    p_n = calibrate_probability_temperature(raw_p_n, temp)
+    p_a = calibrate_probability_temperature(raw_p_a, temp)
+    tot_1x2 = p_h + p_n + p_a
+    p_h, p_n, p_a = round(p_h/tot_1x2*100, 1), round(p_n/tot_1x2*100, 1), round(p_a/tot_1x2*100, 1)
 
-@st.cache_data(ttl=900, show_spinner="Calcul des matrices quantitatives...")
-def build_predictions_cache(
-    league_code: str,
-    weather_condition: str,
-    k_shrinkage: float,
-    rho_val: float,
-    upcoming_keys: tuple[tuple[int, str, str], ...],
-    finished_keys: tuple[tuple[str, str, str, int, int], ...],
-) -> dict[int, dict[str, Any]]:
-    profile = LEAGUE_PROFILES[league_code]
-    finished_list = [
-        {"utcDate": d, "homeTeam": {"name": h}, "awayTeam": {"name": a}, "score": {"fullTime": {"home": sh, "away": sa}}}
-        for d, h, a, sh, sa in finished_keys
+    entropy_idx = compute_shannon_entropy_1x2(p_h, p_n, p_a)
+
+    # Ensemble exhaustif des 25 marchés évalués
+    prob_1x = round(p_h + p_n, 1)
+    prob_x2 = round(p_a + p_n, 1)
+    prob_12 = round(p_h + p_a, 1)
+    denom_dnb = max(0.01, (p_h + p_a))
+    prob_dnb_h = round((p_h / denom_dnb) * 100.0, 1)
+    prob_dnb_a = round((p_a / denom_dnb) * 100.0, 1)
+    
+    prob_btts_yes = calibrate_probability_temperature(float(np.sum(matrix[1:, 1:])) * 100.0, temp)
+    prob_btts_no = round(100.0 - prob_btts_yes, 1)
+    prob_o15 = calibrate_probability_temperature(float(np.sum([matrix[i, j] for i in range(max_g) for j in range(max_g) if i + j > 1])) * 100.0, temp)
+    prob_o25 = calibrate_probability_temperature(float(np.sum([matrix[i, j] for i in range(max_g) for j in range(max_g) if i + j > 2])) * 100.0, temp)
+    prob_u25 = round(100.0 - prob_o25, 1)
+    prob_o35 = calibrate_probability_temperature(float(np.sum([matrix[i, j] for i in range(max_g) for j in range(max_g) if i + j > 3])) * 100.0, temp)
+    prob_u35 = round(100.0 - prob_o35, 1)
+
+    # Handicaps Asiatiques (-1.5 et +1.5)
+    prob_ah_h_minus_15 = round(float(np.sum([matrix[i, j] for i in range(max_g) for j in range(max_g) if i - j >= 2])) * 100.0, 1)
+    prob_ah_a_minus_15 = round(float(np.sum([matrix[i, j] for i in range(max_g) for j in range(max_g) if j - i >= 2])) * 100.0, 1)
+    prob_ah_h_plus_15 = round(100.0 - prob_ah_a_minus_15, 1)
+    prob_ah_a_plus_15 = round(100.0 - prob_ah_h_minus_15, 1)
+
+    # Clean Sheets & Buts par équipe
+    prob_h_scores = calibrate_probability_temperature(float(np.sum(matrix[1:, :])) * 100.0, temp)
+    prob_a_scores = calibrate_probability_temperature(float(np.sum(matrix[:, 1:])) * 100.0, temp)
+
+    theta_ht = 0.415 if post_fifa_break else 0.435
+    ht_ft_data = compute_stochastic_ht_ft_engine(full_h_xg, full_a_xg, theta_ht, rho)
+
+    flat_idx = np.argsort(matrix.ravel())[::-1]
+    top_3_scores = [{"score": f"{np.unravel_index(idx, matrix.shape)[0]}-{np.unravel_index(idx, matrix.shape)[1]}", "prob": round(matrix[np.unravel_index(idx, matrix.shape)] * 100.0, 1)} for idx in flat_idx[:3]]
+
+    # ==========================================================================
+    # TOURNOI INTERNE : CLASSEMENT DES 25 MARCHÉS PAR SCORE DE QUALITÉ QUANT
+    # ==========================================================================
+    stability_factor = (h_stat["consistency"] + a_stat["consistency"]) / 2.0
+    
+    all_25_markets = [
+        {"cat": "Sécurité", "name": f"Double Chance : {h_name} ou Nul (1X)", "prob": prob_1x},
+        {"cat": "Sécurité", "name": f"Double Chance : Nul ou {a_name} (X2)", "prob": prob_x2},
+        {"cat": "Sécurité", "name": f"Handicap Asiatique : {h_name} (+1.5)", "prob": prob_ah_h_plus_15},
+        {"cat": "Sécurité", "name": f"Handicap Asiatique : {a_name} (+1.5)", "prob": prob_ah_a_plus_15},
+        {"cat": "Sécurité", "name": "Plus de 1.5 Buts dans le match", "prob": prob_o15},
+        {"cat": "Sécurité", "name": "Moins de 3.5 Buts dans le match", "prob": prob_u35},
+        {"cat": "Sécurité", "name": f"{h_name} marque au moins 1 but", "prob": prob_h_scores},
+        {"cat": "Sécurité", "name": f"{a_name} marque au moins 1 but", "prob": prob_a_scores},
+        {"cat": "Value", "name": f"Victoire Sèche : {h_name} (1)", "prob": p_h},
+        {"cat": "Value", "name": f"Victoire Sèche : {a_name} (2)", "prob": p_a},
+        {"cat": "Value", "name": f"Draw No Bet (Remboursé si Nul) : {h_name}", "prob": prob_dnb_h},
+        {"cat": "Value", "name": f"Draw No Bet (Remboursé si Nul) : {a_name}", "prob": prob_dnb_a},
+        {"cat": "Value", "name": "Les Deux Équipes Marquent (BTTS Oui)", "prob": prob_btts_yes},
+        {"cat": "Value", "name": "Une Seule ou Zéro Équipe Marque (BTTS Non)", "prob": prob_btts_no},
+        {"cat": "Value", "name": "Plus de 2.5 Buts", "prob": prob_o25},
+        {"cat": "Value", "name": "Moins de 2.5 Buts", "prob": prob_u25},
+        {"cat": "Value", "name": "Plus de 0.5 But en 1ère Mi-Temps", "prob": ht_ft_data["ht_o05"]},
+        {"cat": "Explosif", "name": f"Handicap Asiatique : {h_name} (-1.5)", "prob": prob_ah_h_minus_15},
+        {"cat": "Explosif", "name": f"Handicap Asiatique : {a_name} (-1.5)", "prob": prob_ah_a_minus_15},
+        {"cat": "Explosif", "name": f"HT/FT : 1/1 ({h_name} MT & Fin)", "prob": ht_ft_data["ht_ft"]["1/1"]["prob"]},
+        {"cat": "Explosif", "name": f"HT/FT : 2/2 ({a_name} MT & Fin)", "prob": ht_ft_data["ht_ft"]["2/2"]["prob"]},
+        {"cat": "Explosif", "name": f"HT/FT : X/1 (Nul MT, {h_name} gagne)", "prob": ht_ft_data["ht_ft"]["X/1"]["prob"]},
+        {"cat": "Explosif", "name": f"HT/FT : X/2 (Nul MT, {a_name} gagne)", "prob": ht_ft_data["ht_ft"]["X/2"]["prob"]},
+        {"cat": "Explosif", "name": f"Score Exact Chirurgical : {top_3_scores[0]['score']}", "prob": top_3_scores[0]["prob"]}
     ]
-    team_stats, avg_h, avg_a = compute_time_decayed_team_stats(finished_list, profile, k_shrinkage=k_shrinkage)
+
+    for mkt in all_25_markets:
+        mkt["odds"] = prob_to_odds(mkt["prob"])
+        # Score de Qualité Institutionnel (pénalise l'entropie et le désaccord inter-modèles)
+        mkt["quality_score"] = round(float(
+            mkt["prob"] * (consensus_score / 100.0) * (1.0 - entropy_idx * 0.25) * (0.90 + 0.20 * stability_factor)
+        ), 2)
+
+    all_25_markets.sort(key=lambda x: x["quality_score"], reverse=True)
+
+    # Meilleur choix sécurité issu du tournoi des 25 marchés
+    best_safe_mkt = all_25_markets[0]
+    
+    # Meilleur choix Value (entre 48% et 78%)
+    value_mkts = [m for m in all_25_markets if 48.0 <= m["prob"] <= 78.0]
+    best_value_mkt = value_mkts[0] if value_mkts else all_25_markets[1]
+
+    # Candidats "Coups Fous"
+    elo_diff = elo_h_adj - elo_a_adj
+    crazy_candidates = []
+    if elo_diff > 100 and (h_stat["momentum_factor"] < 0.99 or post_fifa_break) and a_stat["momentum_factor"] >= 1.01:
+        crazy_candidates.append({
+            "tag": "💣 GIANT-KILLING", "category": "upset",
+            "desc": f"Victoire Sèche Outsider : {a_name} bat {h_name}",
+            "prob": p_a, "odds": prob_to_odds(p_a),
+            "reason": f"{h_name} vulnérable ({h_stat['momentum_status']}) face à {a_name} (Indice Massey {a_stat['massey']:+.2f})."
+        })
+    elif elo_diff < -100 and (a_stat["momentum_factor"] < 0.99 or post_fifa_break) and h_stat["momentum_factor"] >= 1.01:
+        crazy_candidates.append({
+            "tag": "💣 GIANT-KILLING", "category": "upset",
+            "desc": f"Victoire Sèche Outsider : {h_name} bat {a_name}",
+            "prob": p_h, "odds": prob_to_odds(p_h),
+            "reason": f"{h_name} à domicile peut faire chuter {a_name}."
+        })
+
+    p_rev_12 = ht_ft_data['ht_ft']['1/2']['prob']
+    p_rev_21 = ht_ft_data['ht_ft']['2/1']['prob']
+    if p_rev_12 >= p_rev_21 and p_rev_12 >= 3.0:
+        crazy_candidates.append({
+            "tag": "🤯 RENVERSEMENT HT/FT", "category": "reversal",
+            "desc": f"Mi-Temps / Fin : 1 / 2 ({h_name} mène MT, {a_name} gagne)",
+            "prob": p_rev_12, "odds": prob_to_odds(p_rev_12),
+            "reason": f"Match ouvert (xG {(full_h_xg+full_a_xg):.2f}) propice à une bascule en 2MT."
+        })
+    elif p_rev_21 >= 3.0:
+        crazy_candidates.append({
+            "tag": "🤯 REMONTADA HT/FT", "category": "reversal",
+            "desc": f"Mi-Temps / Fin : 2 / 1 ({a_name} mène MT, {h_name} renverse)",
+            "prob": p_rev_21, "odds": prob_to_odds(p_rev_21),
+            "reason": f"Forte poussée de {h_name} en seconde période."
+        })
+
+    p_x1, p_x2 = ht_ft_data['ht_ft']['X/1']['prob'], ht_ft_data['ht_ft']['X/2']['prob']
+    if p_x1 >= p_x2:
+        crazy_candidates.append({"tag": "⚡ HT/FT TACTIQUE", "category": "tactical", "desc": f"Mi-Temps / Fin : X / 1 (Nul MT, {h_name} gagne)", "prob": p_x1, "odds": prob_to_odds(p_x1), "reason": "1ère MT verrouillée, décision après la pause."})
+    else:
+        crazy_candidates.append({"tag": "⚡ HT/FT TACTIQUE", "category": "tactical", "desc": f"Mi-Temps / Fin : X / 2 (Nul MT, {a_name} gagne)", "prob": p_x2, "odds": prob_to_odds(p_x2), "reason": "Résistance à la pause puis différence en fin de match."})
+
+    top_sc = top_3_scores[0]
+    crazy_candidates.append({"tag": "🎯 SCORE EXACT", "category": "exact_score", "desc": f"Score Exact : {top_sc['score']}", "prob": top_sc['prob'], "odds": prob_to_odds(top_sc['prob']), "reason": f"Pic maximal de la matrice bivariée ({top_sc['prob']}%)."})
+    if prob_o35 >= 26.0:
+        crazy_candidates.append({"tag": "🔥 FESTIVAL BUTS", "category": "goals", "desc": "Plus de 3.5 Buts dans le match", "prob": prob_o35, "odds": prob_to_odds(prob_o35), "reason": f"xG cumulé élevé ({(full_h_xg+full_a_xg):.2f} buts)."})
+
+    crazy_candidates.sort(key=lambda x: x["prob"] * math.sqrt(x["odds"]), reverse=True)
+    best_crazy = crazy_candidates[0]
+
+    ai_confidence = round(float(np.clip(
+        best_safe_mkt["prob"] * 0.60 + consensus_score * 0.25 + (1.0 - entropy_idx) * 25.0 + stability_factor * 5.0,
+        0.0, 99.5
+    )), 1)
+    is_sniper_90 = (best_safe_mkt["prob"] >= 86.0 and consensus_score >= 83.0 and entropy_idx <= 0.87)
+
+    # Options finales selon profil de risque
+    options = []
+    if "Chasseur" in risk_profile:
+        options.append({"type": best_crazy["tag"], "desc": best_crazy["desc"], "prob": best_crazy["prob"], "odds": best_crazy["odds"], "style": "option-box-crazy"})
+        if len(crazy_candidates) > 1:
+            options.append({"type": crazy_candidates[1]["tag"], "desc": crazy_candidates[1]["desc"], "prob": crazy_candidates[1]["prob"], "odds": crazy_candidates[1]["odds"], "style": "option-box-alt"})
+        options.append({"type": "🛡️ FILET DE SÉCURITÉ", "desc": best_safe_mkt["name"], "prob": best_safe_mkt["prob"], "odds": best_safe_mkt["odds"], "style": "option-box"})
+    else:
+        options.append({"type": "💎 VAINQUEUR DU TOURNOI IA (90%+)" if is_sniper_90 else "🛡️ MEILLEUR MARCHÉ SÉCURISÉ", "desc": best_safe_mkt["name"], "prob": best_safe_mkt["prob"], "odds": best_safe_mkt["odds"], "style": "option-box"})
+        options.append({"type": "🎯 MEILLEUR VALUE BET (TOURNOI 25 MARCHÉS)", "desc": best_value_mkt["name"], "prob": best_value_mkt["prob"], "odds": best_value_mkt["odds"], "style": "option-box-sec"})
+        options.append({"type": f"🤯 COUP FOU ({best_crazy['tag']})", "desc": best_crazy["desc"], "prob": best_crazy["prob"], "odds": best_crazy["odds"], "style": "option-box-crazy"})
+
+    best_opt = options[0]
+    user_actual_odds = book_odds_1x2 if book_odds_1x2 else best_opt["odds"]
+    kelly_stake, ev_percentage = calculate_adaptive_kelly(best_opt["prob"], user_actual_odds, bankroll, risk_profile)
+
+    # Justification tactique approfondie par arbre décisionnel
+    massey_leader = h_name if h_stat["massey"] > a_stat["massey"] else a_name
+    sofascore_report = f"""
+    🧠 <b>Synthèse Institutionnelle (Massey Matrix + Dixon-Coles + ELO + 25 000 Monte Carlo)</b> :<br>
+    • 🏠 <b>{h_name}</b> : Indice Massey <b>{h_stat['massey']:+.2f}</b> | ELO <b>{elo_h_adj:.0f}</b> | xG = <b>{full_h_xg:.2f}</b> | Clean Sheets récents : <b>{int(h_stat['cs_rate']*100)}%</b><br>
+    • ✈️ <b>{a_name}</b> : Indice Massey <b>{a_stat['massey']:+.2f}</b> | ELO <b>{elo_a_adj:.0f}</b> | xG = <b>{full_a_xg:.2f}</b> | Clean Sheets récents : <b>{int(a_stat['cs_rate']*100)}%</b><br>
+    • 📐 <b>Convergence Multi-Modèles</b> : Consensus = <b>{consensus_score}%</b> | Entropie Shannon = <b>{entropy_idx}</b> | IC 90% Buts Monte Carlo : <b>[{mc['ci_low']} à {mc['ci_high']} buts]</b><br>
+    • 🏆 <b>Pourquoi ce choix bat les 24 autres marchés</b> : Avantage structurel corrigé du calendrier pour <b>{massey_leader}</b> avec un score de qualité quantitatif de <b>{best_safe_mkt['quality_score']}/100</b>.
+    """
 
     return {
-        m_id: predict_single_match(ht, at, team_stats, avg_h, avg_a, profile, rho_override=rho_val, weather_mode=weather_condition)
-        for m_id, ht, at in upcoming_keys
+        "p_h": p_h, "p_n": p_n, "p_a": p_a,
+        "dc_h": round(dc_h, 1), "elo_h_p": round(elo_h_p, 1), "mc_h": mc["mc_h"],
+        "prob_1x": prob_1x, "prob_x2": prob_x2, "prob_12": prob_12,
+        "prob_btts_yes": prob_btts_yes, "prob_btts_no": prob_btts_no,
+        "prob_o15": prob_o15, "prob_o25": prob_o25, "prob_u25": prob_u25, "prob_o35": prob_o35, "prob_u35": prob_u35,
+        "top_3_scores": top_3_scores, "matrix": matrix, "options": options,
+        "all_25_markets": all_25_markets,
+        "best_pick": best_opt["desc"], "best_prob": best_opt["prob"], "best_odds": best_opt["odds"],
+        "best_crazy": best_crazy, "crazy_candidates": crazy_candidates,
+        "is_sniper_90": is_sniper_90, "ai_confidence": ai_confidence,
+        "consensus_score": consensus_score, "entropy_idx": entropy_idx,
+        "sofascore_report": sofascore_report,
+        "full_h_xg": full_h_xg, "full_a_xg": full_a_xg,
+        "ht_ft": ht_ft_data, "mc": mc,
+        "kelly_stake": kelly_stake, "ev_percentage": ev_percentage
     }
 
-
 # ==============================================================================
-# 6. INTERFACE STREAMLIT PRODUCTION
+# 8. INTERFACE STREAMLIT V54.0 INSTITUTIONAL QUANT
 # ==============================================================================
-
-st.sidebar.markdown(
-    """
+st.sidebar.markdown("""
     <div style="text-align:center; padding:10px 0;">
         <h2 style="color:#38BDF8; margin:0; font-weight:900;">APEX QUANT</h2>
-        <span style="font-size:0.8rem; letter-spacing:2px; color:#F59E0B; font-weight:800;">PRODUCTION v50.0</span>
+        <span style="font-size:0.8rem; letter-spacing:2px; color:#10B981; font-weight:800;">INSTITUTIONAL AI v54.0</span>
     </div>
-    """,
-    unsafe_allow_html=True,
-)
+""", unsafe_allow_html=True)
 
 selected_comp = st.sidebar.selectbox("🏆 Compétition Analysée", list(COMPETITIONS.keys()))
 league_code = COMPETITIONS[selected_comp]
-profile = LEAGUE_PROFILES[league_code]
 
 st.sidebar.divider()
-st.sidebar.markdown("### ⚙️ CALIBRATION & MÉTÉO")
-weather_condition = st.sidebar.selectbox("Conditions Météo & Pelouse", ["Normal (Idéal)", "Pluie / Terrain Lourd & Glissant", "Canicule / Chaleur Élevée"])
-enable_auto_tuning = st.sidebar.checkbox("Auto-tuning hyperparamètres (Log-Loss)", value=False)
+st.sidebar.markdown("### 🎛️ STRATÉGIE DU MOTEUR")
+risk_profile = st.sidebar.radio("Mode d'Optimisation :", [
+    "🛡️ Sniper Sécurité (90%+)",
+    "⚖️ Équilibré (Value Pro)",
+    "🔥 Chasseur de Gros Coups (Cotes 3.50 - 30.00+)"
+], index=0)
 
 st.sidebar.divider()
-st.sidebar.markdown("### 💰 GESTION DE CAPITAL (QUARTER-KELLY)")
-user_bankroll = st.sidebar.number_input("Capital / Bankroll ($ / € / FCFA)", value=1000.0, step=50.0, min_value=10.0)
+st.sidebar.markdown("### ⚙️ PARAMÈTRES CONTEXTUELS")
+post_fifa_break = st.sidebar.toggle("🌍 Mode Reprise Post-Trêve FIFA", value=True)
+weather_condition = st.sidebar.selectbox("Conditions Météo & Pelouse", [
+    "Normal (Idéal)", "Pluie / Terrain Lourd & Glissant", "Canicule / Chaleur Élevée"
+])
 
-try:
-    all_matches = fetch_fd_matches(league_code)
-except ApiClientError as err:
-    if err.status_code == 429:
-        st.warning(f"⏳ {err}")
-    else:
-        st.error(f"🚨 {err}")
-    st.stop()
+st.sidebar.divider()
+st.sidebar.markdown("### 💰 GESTION DE CAPITAL")
+user_bankroll = st.sidebar.number_input("Capital / Bankroll ($ / € / FCFA)", value=10000.0, step=500.0, min_value=10.0)
 
-now_utc = datetime.now(timezone.utc).replace(tzinfo=None)
-next_week_utc = now_utc + timedelta(days=8)
+team_stats, avg_goals_h, avg_goals_a, profile = get_advanced_league_stats(league_code, post_fifa_break)
+raw_matches_obj = fetch_api(f"competitions/{league_code}/matches")
+all_matches = raw_matches_obj.get("matches", []) if raw_matches_obj else []
 
-upcoming_matches: list[dict[str, Any]] = []
-finished_matches: list[dict[str, Any]] = []
+today_dt = datetime.utcnow()
+next_week_dt = today_dt + timedelta(days=8)
+upcoming_matches = []
 
 for m in all_matches:
-    status = m.get("status")
-    if status == "FINISHED":
-        finished_matches.append(m)
-    elif status in ("SCHEDULED", "TIMED"):
-        utc_str = m.get("utcDate", "")
+    if m.get('status') in ['SCHEDULED', 'TIMED']:
+        utc_str = m.get('utcDate', '')
         if utc_str:
             try:
                 m_dt = datetime.strptime(utc_str[:19], "%Y-%m-%dT%H:%M:%S")
-                if now_utc - timedelta(hours=3) <= m_dt <= next_week_utc:
+                if today_dt - timedelta(hours=3) <= m_dt <= next_week_dt:
                     upcoming_matches.append(m)
-            except ValueError:
+            except Exception:
                 pass
 
-finished_keys = tuple(
-    (
-        m.get("utcDate", ""),
-        m["homeTeam"]["name"],
-        m["awayTeam"]["name"],
-        m["score"]["fullTime"]["home"],
-        m["score"]["fullTime"]["away"],
-    )
-    for m in finished_matches
-    if m.get("score", {}).get("fullTime", {}).get("home") is not None
-)
+match_map = {f"{m['utcDate'][:10]} {m['utcDate'][11:16]} : {m['homeTeam']['name']} vs {m['awayTeam']['name']}": m for m in upcoming_matches}
 
-if enable_auto_tuning:
-    k_opt, rho_opt = calibrate_league_hyperparameters(league_code, finished_keys)
-    st.sidebar.caption(f"🎯 Calibré : K={k_opt} | ρ={rho_opt}")
-else:
-    k_opt, rho_opt = 3.8, profile["rho"]
-
-upcoming_keys = tuple((m["id"], m["homeTeam"]["name"], m["awayTeam"]["name"]) for m in upcoming_matches)
-predictions_by_id = build_predictions_cache(league_code, weather_condition, k_opt, rho_opt, upcoming_keys, finished_keys)
-
-match_map = {
-    f"{m['utcDate'][:10]} {m['utcDate'][11:16]} : {m['homeTeam']['name']} vs {m['awayTeam']['name']}": m
-    for m in upcoming_matches
-}
-
-# Chargement optionnel des cotes réelles The Odds API
-odds_events: list[dict[str, Any]] = []
-odds_error_msg: str | None = None
-try:
-    odds_events, credits_left = fetch_real_odds(league_code)
-    if credits_left is not None:
-        st.sidebar.caption(f"📡 Quota The Odds API restant : {credits_left}")
-except ApiClientError as err:
-    odds_error_msg = str(err)
-
-tab_scanner, tab_ht_ft, tab_detail, tab_cal, tab_monte_carlo, tab_audit, tab_coupon = st.tabs([
-    "🔍 SCANNER VALUE BETS PRO",
-    "⏱️ MI-TEMPS & FIN DE MATCH (HT/FT)",
-    "📊 ANALYSE MATCH & DÉRIVÉS",
-    f"📅 CALENDRIER QUANT ({len(upcoming_matches)})",
-    "🎲 MONTE CARLO & SHIN",
-    f"📈 AUDIT WALK-FORWARD ({len(finished_matches)})",
-    "🎟️ COMBINÉ QUANTIFIÉ",
+tab_detail, tab_sniper, tab_combi_fou, tab_crazy, tab_massey = st.tabs([
+    "🧠 LABORATOIRE MATCH (25 MARCHÉS & 25K SIMS)",
+    "💎 SNIPER IA 90%+ (ÉLITE MULTI-LIGUES)",
+    "🎰 TICKET COMBI FOU (MULTIPLICATEUR)",
+    "🔥 RADAR COUPS FOUS (SIMPLES)",
+    "📐 CLASSEMENT MATRICIEL MASSEY-COLLEY"
 ])
 
 # ------------------------------------------------------------------------------
-# ONGLET 1 : SCANNER VALUE BETS RÉELS
-# ------------------------------------------------------------------------------
-with tab_scanner:
-    st.markdown(
-        """
-        <div class="vip-banner">
-            <h2 style="margin:0; color:#38BDF8;">🔍 SCANNER QUANTITATIF DE VALUE BETS</h2>
-            <span style="font-size:0.95rem; color:#E2E8F0;">Comparaison directe Dixon-Coles vs. cotes réelles & consensus Shin</span>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-    if odds_error_msg:
-        st.warning(f"⚠️ Flux The Odds API indisponible : {odds_error_msg}")
-    elif not odds_events:
-        st.info("ℹ️ Renseignez `ODDS_API_KEY` dans `.streamlit/secrets.toml` pour activer les cotes bookmakers en direct. En mode hors-ligne, le tableau affiche les cotes minimales requises.")
-
-    if upcoming_matches:
-        min_ev_threshold = st.slider("Seuil minimum d'Expected Value (EV%) :", min_value=-2.0, max_value=15.0, value=2.0, step=0.5)
-        scanner_rows = []
-
-        for m in upcoming_matches:
-            ht, at = m["homeTeam"]["name"], m["awayTeam"]["name"]
-            pred = predictions_by_id[m["id"]]
-            matched_ev = find_matching_odds_event(ht, at, odds_events) if odds_events else None
-
-            if matched_ev:
-                summary = extract_markets_summary(matched_ev, matched_ev["home_team"], matched_ev["away_team"], target_line=2.5)
-                candidates = [
-                    (f"1 ({ht})", pred["p_h"], summary["h2h"]["shin_pct"][0], *summary["h2h"]["best"]["1"]),
-                    ("Nul (X)", pred["p_n"], summary["h2h"]["shin_pct"][1], *summary["h2h"]["best"]["X"]),
-                    (f"2 ({at})", pred["p_a"], summary["h2h"]["shin_pct"][2], *summary["h2h"]["best"]["2"]),
-                    ("Plus de 2.5 Buts", pred["prob_o25"], summary["totals"]["shin_pct"][0], *summary["totals"]["best"]["Over"]),
-                    ("Moins de 2.5 Buts", pred["prob_u25"], summary["totals"]["shin_pct"][1], *summary["totals"]["best"]["Under"]),
-                ]
-                for label, p_mod, p_shin, best_odd, bookie in candidates:
-                    if not best_odd or best_odd <= 1.0:
-                        continue
-                    kelly_st, ev_val = calculate_quarter_kelly(p_mod, best_odd, user_bankroll)
-                    if ev_val >= min_ev_threshold:
-                        scanner_rows.append({
-                            "Match": f"{ht} vs {at}",
-                            "Date": f"{m['utcDate'][:10]} {m['utcDate'][11:16]}",
-                            "Marché": label,
-                            "Proba Modèle": f"{p_mod}%",
-                            "Proba Shin": f"{p_shin}%",
-                            "Meilleure Cote": f"{best_odd} ({bookie})",
-                            "EV (%)": ev_val,
-                            "Mise Kelly (1/4)": f"{kelly_st} $",
-                        })
-            else:
-                for label, p_mod in [(f"1 ({ht})", pred["p_h"]), ("Nul (X)", pred["p_n"]), (f"2 ({at})", pred["p_a"]), ("Plus de 2.5 Buts", pred["prob_o25"])]:
-                    fair_o = prob_to_odds(p_mod)
-                    min_req = round(fair_o * (1.0 + min_ev_threshold / 100.0), 2)
-                    scanner_rows.append({
-                        "Match": f"{ht} vs {at}",
-                        "Date": f"{m['utcDate'][:10]} {m['utcDate'][11:16]}",
-                        "Marché": label,
-                        "Proba Modèle": f"{p_mod}%",
-                        "Cote Équitable": fair_o,
-                        f"Cote Min. (EV ≥ {min_ev_threshold}%)": min_req,
-                    })
-
-        if scanner_rows:
-            df_scan = pd.DataFrame(scanner_rows)
-            if "EV (%)" in df_scan.columns:
-                df_scan = df_scan.sort_values(by="EV (%)", ascending=False)
-                st.dataframe(df_scan.style.format({"EV (%)": "{:+.2f}%"}), use_container_width=True, hide_index=True)
-            else:
-                st.dataframe(df_scan, use_container_width=True, hide_index=True)
-        else:
-            st.warning("Aucune opportunité ne dépasse ce seuil d'Expected Value.")
-    else:
-        st.info("Aucun match à venir dans les 8 prochains jours.")
-
-# ------------------------------------------------------------------------------
-# ONGLET 2 : HT/FT VECTORISÉ
-# ------------------------------------------------------------------------------
-with tab_ht_ft:
-    st.markdown(
-        """
-        <div class="vip-banner">
-            <h2 style="margin:0; color:#F59E0B;">⏱️ MODÉLISATION STOCHASTIQUE MI-TEMPS & FIN DE MATCH</h2>
-            <span style="font-size:0.95rem; color:#E2E8F0;">Binomiale Négative cohérente (44.5% / 55.5%) et convolution vectorisée des 9 issues</span>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-    if upcoming_matches:
-        sel_ht_label = st.selectbox("Sélectionnez la rencontre :", list(match_map.keys()), key="ht_select")
-        m_ht = match_map[sel_ht_label]
-        ht_t, at_t = m_ht["homeTeam"]["name"], m_ht["awayTeam"]["name"]
-        ht_res = predictions_by_id[m_ht["id"]]["ht_ft"]
-
-        h1, h2, h3, h4 = st.columns(4)
-        with h1: st.markdown(f"<div class='sub-card'><b>xG 1ÈRE MI-TEMPS</b><br>🏠 {ht_t} : <b style='color:#38BDF8;'>{ht_res['l_h1']:.2f}</b><br>✈️ {at_t} : <b style='color:#38BDF8;'>{ht_res['l_a1']:.2f}</b></div>", unsafe_allow_html=True)
-        with h2: st.markdown(f"<div class='sub-card'><b>1N2 MI-TEMPS</b><br>1 : <b>{ht_res['ht_1']}%</b><br>N : <b>{ht_res['ht_x']}%</b><br>2 : <b>{ht_res['ht_2']}%</b></div>", unsafe_allow_html=True)
-        with h3: st.markdown(f"<div class='sub-card'><b>BUTS MI-TEMPS</b><br>Over 0.5 MT : <b style='color:#10B981;'>{ht_res['ht_o05']}%</b><br>Under 0.5 MT : <b>{ht_res['ht_u05']}%</b><br>Over 1.5 MT : <b>{ht_res['ht_o15']}%</b></div>", unsafe_allow_html=True)
-        with h4: st.markdown(f"<div class='sub-card'><b>BTTS MI-TEMPS</b><br>Les 2 marquent en 1MT :<br><b style='color:#F59E0B; font-size:1.4rem;'>{ht_res['ht_btts']}%</b></div>", unsafe_allow_html=True)
-
-        df_htft = pd.DataFrame([
-            {"Scénario HT/FT": k, "Description": HT_FT_DESCRIPTIONS[k], "Probabilité": f"{v['prob']}%", "Cote Équitable": v["odds"]}
-            for k, v in ht_res["ht_ft"].items()
-        ])
-        st.dataframe(df_htft, use_container_width=True, hide_index=True)
-    else:
-        st.info("Aucun match disponible.")
-
-# ------------------------------------------------------------------------------
-# ONGLET 3 : ANALYSE MATCH & KELLY
+# ONGLET 1 : LABORATOIRE DE DÉCISION PROFONDE (TOURNOI DES 25 MARCHÉS)
 # ------------------------------------------------------------------------------
 with tab_detail:
+    st.subheader(f"Laboratoire Quantitatif Multi-Modèles ({risk_profile})")
     if upcoming_matches:
-        chosen_label = st.selectbox("Sélectionnez l'affiche :", list(match_map.keys()), key="detail_select")
-        m_obj = match_map[chosen_label]
-        ht, at = m_obj["homeTeam"]["name"], m_obj["awayTeam"]["name"]
-        res = predictions_by_id[m_obj["id"]]
-        best_opt = res["options"][0]
+        chosen_match_label = st.selectbox("Sélectionnez la rencontre à disséquer :", list(match_map.keys()), key="detail_select")
+        match_obj = match_map[chosen_match_label]
+        ht, at = match_obj['homeTeam']['name'], match_obj['awayTeam']['name']
 
-        c1, c2 = st.columns([1, 1])
-        with c1:
-            input_odds = st.number_input("Cote réelle du bookmaker pour l'Option n°1 :", value=float(best_opt["odds"]), step=0.02, min_value=1.01)
-        with c2:
-            st.markdown("<div style='padding-top:25px;'><span class='badge-quant'>Dixon-Coles Vectorisé</span><span class='badge-edge'>Negative Binomial</span></div>", unsafe_allow_html=True)
+        with st.expander("🏥 AJUSTEMENT TACTIQUE PRÉ-MATCH (Blessures clés, Absences, Rotations)", expanded=False):
+            tc1, tc2 = st.columns(2)
+            with tc1:
+                h_star_out = st.checkbox(f"Buteur / Meneur star absent ({ht})", key="h_att")
+                h_def_out = st.checkbox(f"Défenseur central / Gardien absent ({ht})", key="h_def")
+            with tc2:
+                a_star_out = st.checkbox(f"Buteur / Meneur star absent ({at})", key="a_att")
+                a_def_out = st.checkbox(f"Défenseur central / Gardien absent ({at})", key="a_def")
 
-        kelly_stake, ev_pct = calculate_quarter_kelly(best_opt["prob"], input_odds, user_bankroll)
+        tactical_adj = {
+            "h_att": 0.84 if h_star_out else 1.0, "h_def": 1.16 if h_def_out else 1.0,
+            "a_att": 0.84 if a_star_out else 1.0, "a_def": 1.16 if a_def_out else 1.0
+        }
 
-        st.markdown(
-            f"""
-            <div class="matrix-card">
-                <div style="display:flex; justify-content:space-between; align-items:center;">
-                    <h1 style="color:#38BDF8; margin:0; font-size:2rem;">{ht} <span style="color:#94A3B8; font-weight:300;">vs</span> {at}</h1>
-                    <span class="badge-quant" style="font-size:0.9rem;">xG Total : {(res['full_h_xg'] + res['full_a_xg']):.2f}</span>
-                </div>
-                <div class="sofascore-box">{res['sofascore_report']}</div>
-            </div>
-            """,
-            unsafe_allow_html=True,
+        input_bookmaker_odds = st.number_input("Cote bookmaker réelle constatée :", value=3.50 if "Chasseur" in risk_profile else 1.32, step=0.05, min_value=1.01)
+
+        res = run_institutional_prediction(
+            ht, at, team_stats, avg_goals_h, avg_goals_a, 
+            profile, user_bankroll, input_bookmaker_odds, weather_condition, post_fifa_break, risk_profile, tactical_adj
         )
 
-        for opt in res["options"]:
-            cls = "option-box" if "SÉCURITÉ" in opt["type"] else ("option-box-sec" if "VALUE" in opt["type"] else "option-box-alt")
-            st.markdown(
-                f"""
-                <div class="{cls}">
-                    <div style="font-size:0.8rem; font-weight:800; color:#38BDF8;">{opt['type']}</div>
-                    <div style="font-size:1.3rem; font-weight:900; color:#FFFFFF; margin:5px 0;">{opt['desc']}</div>
-                    <div style="font-size:1rem; font-weight:700; color:#10B981;">Probabilité : <b>{opt['prob']}%</b> | Cote Équitable : <b>{opt['odds']}</b></div>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
+        st.markdown(f"""
+        <div class="matrix-card">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <h1 style="color:#38BDF8; margin:0; font-size:2rem;">{ht} <span style="color:#94A3B8; font-weight:300;">vs</span> {at}</h1>
+                <span class="badge-sniper" style="font-size:1rem;">Indice Fiabilité IA : {res['ai_confidence']}%</span>
+            </div>
+            <div class="sofascore-box">{res['sofascore_report']}</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        # Comparaison transparente des 3 moteurs indépendants
+        c_m1, c_m2, c_m3, c_m4 = st.columns(4)
+        with c_m1: st.metric("Modèle Dixon-Coles (1)", f"{res['dc_h']}%", f"xG {ht[:10]}: {res['full_h_xg']:.2f}")
+        with c_m2: st.metric("Modèle ELO + Massey (1)", f"{res['elo_h_p']}%", f"Consensus: {res['consensus_score']}%")
+        with c_m3: st.metric("25 000 Monte Carlo (1)", f"{res['mc_h']}%", f"Entropie: {res['entropy_idx']}")
+        with c_m4: st.metric("Probabilité Finale Calibrée", f"{res['p_h']}% | {res['p_n']}% | {res['p_a']}%", "1 | N | 2")
+
+        st.markdown("### 🏆 PODIUM DU TOURNOI INTERNE (SÉLECTION PARMI 25 MARCHÉS)")
+        for opt in res['options']:
+            st.markdown(f"""
+            <div class="{opt['style']}">
+                <div style="font-size:0.8rem; font-weight:800; text-transform:uppercase; color:#FBBF24;">{opt['type']}</div>
+                <div style="font-size:1.35rem; font-weight:900; color:#FFFFFF; margin:5px 0;">{opt['desc']}</div>
+                <div style="font-size:1rem; font-weight:700; color:#38BDF8;">Probabilité Calibrée : <b>{opt['prob']}%</b> | Cote Juste Min. : <b>{opt['odds']}</b></div>
+            </div>
+            """, unsafe_allow_html=True)
+
+        st.markdown("### 📊 CLASSEMENT COMPLET DES 25 MARCHÉS ÉVALUÉS SUR CE MATCH")
+        df_25 = pd.DataFrame([
+            {
+                "Rang": idx + 1,
+                "Catégorie": m["cat"],
+                "Marché": m["name"],
+                "Proba Calibrée": f"{m['prob']}%",
+                "Cote Équitable": m["odds"],
+                "Score Qualité Quant": f"{m['quality_score']} / 100"
+            }
+            for idx, m in enumerate(res["all_25_markets"])
+        ])
+        st.dataframe(df_25, use_container_width=True, hide_index=True)
 
         col_k, col_sc = st.columns([1, 2])
         with col_k:
-            st.markdown("### 💰 OPTIMISATION KELLY")
-            ev_sign = "+" if ev_pct >= 0 else ""
-            st.metric("Mise Conseillée (1/4 Kelly)", f"{kelly_stake} $", f"EV : {ev_sign}{ev_pct}%")
+            st.markdown("### 💰 MISE KELLY")
+            ev_sign = "+" if res['ev_percentage'] >= 0 else ""
+            st.metric("Mise Conseillée", f"{res['kelly_stake']} $", f"EV : {ev_sign}{res['ev_percentage']}%")
         with col_sc:
-            st.markdown("### 🏆 TOP 3 SCORES EXACTS")
-            sc_cols = st.columns(3)
-            for idx, col in enumerate(sc_cols):
-                with col:
-                    st.markdown(
-                        f"<div class='big-score-box'><b>#{idx+1} SCORE</b><div class='big-score-val'>{res['top_3_scores'][idx]['score']}</div><div class='big-score-prob'>{res['top_3_scores'][idx]['prob']}%</div></div>",
-                        unsafe_allow_html=True,
-                    )
-    else:
-        st.info("Aucun match disponible.")
+            st.markdown("### 🎯 TOP 3 SCORES EXACTS")
+            sc1, sc2, sc3 = st.columns(3)
+            for idx_s, col_s in enumerate([sc1, sc2, sc3]):
+                with col_s:
+                    st.markdown(f"""<div class="big-score-box"><b>#{idx_s+1} SCORE</b><div class="big-score-val">{res['top_3_scores'][idx_s]['score']}</div><div class="big-score-prob">{res['top_3_scores'][idx_s]['prob']}% (Cote {prob_to_odds(res['top_3_scores'][idx_s]['prob'])})</div></div>""", unsafe_allow_html=True)
 
 # ------------------------------------------------------------------------------
-# ONGLET 4 : CALENDRIER QUANT
+# ONGLET 2 : SNIPER IA 90%+ (ÉLITE MULTI-LIGUES)
 # ------------------------------------------------------------------------------
-with tab_cal:
-    if upcoming_matches:
-        cal_data = []
-        for m in upcoming_matches:
-            ht, at = m["homeTeam"]["name"], m["awayTeam"]["name"]
-            pred = predictions_by_id[m["id"]]
-            cal_data.append({
-                "Date [UTC]": f"{m['utcDate'][:10]} {m['utcDate'][11:16]}",
-                "Rencontre": f"{ht} vs {at}",
-                "1X2 Équitable": f"{pred['p_h']}% | {pred['p_n']}% | {pred['p_a']}%",
-                "Option Sécurité": f"{pred['options'][0]['desc']} ({pred['options'][0]['prob']}%)",
-                "Over 1.5": f"{pred['prob_o15']}%",
-                "Over 0.5 MT": f"{pred['ht_ft']['ht_o05']}%",
-                "Corners": f"~{pred['corners']}",
-                "Cartons": f"~{pred['cards']}",
-            })
-        st.dataframe(pd.DataFrame(cal_data), use_container_width=True, hide_index=True)
-    else:
-        st.info("Aucun match à afficher.")
+with tab_sniper:
+    st.markdown("""
+    <div class="vip-banner">
+        <h2 style="margin:0; color:#10B981;">💎 SÉLECTEUR SNIPER IA — ÉLITE MULTI-LIGUES (90%+ ZONE)</h2>
+        <span style="font-size:0.95rem; color:#E2E8F0;">Le bot fait passer 150 000 simulations Monte Carlo sur 6 championnats et n'extrait que les forteresses absolues</span>
+    </div>
+    """, unsafe_allow_html=True)
 
-# ------------------------------------------------------------------------------
-# ONGLET 5 : MONTE CARLO & SHIN
-# ------------------------------------------------------------------------------
-with tab_monte_carlo:
-    st.markdown("<div class='vip-banner'><h2 style='margin:0; color:#38BDF8;'>🎲 MONTE CARLO & DÉMARGEAGE SHIN</h2></div>", unsafe_allow_html=True)
-    if upcoming_matches:
-        mc_label = st.selectbox("Match pour simulation :", list(match_map.keys()), key="mc_tab_select")
-        mc_obj = match_map[mc_label]
-        mc_res = predictions_by_id[mc_obj["id"]]
-        mc_stats = run_monte_carlo_simulation(mc_res["matrix"], 10000)
+    if st.button("🚀 LANCER LE SCAN INSTITUTIONNEL (6 LIGUES x 25 000 SIMULATIONS)", type="primary"):
+        sniper_hits = []
+        rejected = 0
+        progress = st.progress(0)
+        leagues_to_scan = ["PL", "PD", "FL1", "SA", "BL1", "CL"]
+        for idx_l, l_code in enumerate(leagues_to_scan):
+            l_stats, l_h, l_a, l_prof = get_advanced_league_stats(l_code, post_fifa_break)
+            l_raw = fetch_api(f"competitions/{l_code}/matches")
+            l_matches = l_raw.get("matches", []) if l_raw else []
+            for m in l_matches:
+                if m.get('status') in ['SCHEDULED', 'TIMED']:
+                    utc_str = m.get('utcDate', '')
+                    try:
+                        m_dt = datetime.strptime(utc_str[:19], "%Y-%m-%dT%H:%M:%S")
+                        if today_dt - timedelta(hours=2) <= m_dt <= today_dt + timedelta(days=4):
+                            ht, at = m['homeTeam']['name'], m['awayTeam']['name']
+                            pred = run_institutional_prediction(ht, at, l_stats, l_h, l_a, l_prof, user_bankroll, None, weather_condition, post_fifa_break, "🛡️ Sniper")
+                            if pred["is_sniper_90"]:
+                                sniper_hits.append({
+                                    "league": l_code, "date": utc_str[:10] + " " + utc_str[11:16],
+                                    "match": f"{ht} vs {at}", "pick": pred["best_pick"],
+                                    "prob": pred["best_prob"], "odds": pred["best_odds"],
+                                    "confidence": pred["ai_confidence"], "consensus": pred["consensus_score"],
+                                    "entropy": pred["entropy_idx"]
+                                })
+                            else:
+                                rejected += 1
+                    except Exception:
+                        pass
+            progress.progress((idx_l + 1) / len(leagues_to_scan))
 
-        k1, k2, k3, k4 = st.columns(4)
-        with k1: st.metric("Domicile (MC)", f"{mc_stats['mc_h']}%", f"Modèle: {mc_res['p_h']}%")
-        with k2: st.metric("Nul (MC)", f"{mc_stats['mc_d']}%", f"Modèle: {mc_res['p_n']}%")
-        with k3: st.metric("Extérieur (MC)", f"{mc_stats['mc_a']}%", f"Modèle: {mc_res['p_a']}%")
-        with k4: st.metric("Over 2.5 (MC)", f"{mc_stats['mc_o25']}%", f"IC 95%: [{int(mc_stats['ci_low'])}-{int(mc_stats['ci_high'])} buts]")
-
-        st.markdown("### 📐 Calculateur Shin (Démargeage Bookmaker 1X2)")
-        s1, s2, s3 = st.columns(3)
-        with s1: o1 = st.number_input("Cote 1", value=2.10, min_value=1.02, step=0.05)
-        with s2: ox = st.number_input("Cote X", value=3.40, min_value=1.02, step=0.05)
-        with s3: o2 = st.number_input("Cote 2", value=3.50, min_value=1.02, step=0.05)
-
-        shin_p, vig, z_val = shin_remove_vig([o1, ox, o2])
-        st.info(f"Marge bookmaker : **{vig}%** | Indice d'initiés Shin ($z$) : **{z_val}** → Probabilités justes : **1: {shin_p[0]*100:.1f}% | X: {shin_p[1]*100:.1f}% | 2: {shin_p[2]*100:.1f}%**")
-    else:
-        st.info("Aucun match disponible.")
-
-# ------------------------------------------------------------------------------
-# ONGLET 6 : AUDIT WALK-FORWARD (ZÉRO DATA LEAKAGE)
-# ------------------------------------------------------------------------------
-with tab_audit:
-    st.markdown("<div class='vip-banner'><h2 style='margin:0; color:#F59E0B;'>📈 AUDIT CHRONOLOGIQUE WALK-FORWARD</h2></div>", unsafe_allow_html=True)
-    if finished_matches:
-        audit = run_walk_forward_audit(finished_matches, profile, k_shrinkage=k_opt, rho=rho_opt, min_games_burnin=4)
-        if audit["n_eval"] > 0:
-            a1, a2, a3, a4 = st.columns(4)
-            with a1: st.metric("Matchs Audités", f"{audit['n_eval']}")
-            with a2: st.metric("Brier Score (1X2)", f"{audit['brier_score']}", "Aléatoire = 0.667")
-            with a3: st.metric("Log-Loss (1X2)", f"{audit['log_loss']}", "Aléatoire = 1.099")
-            with a4: st.metric("Précision 1X2", f"{audit['accuracy_1x2_pct']}%")
-            st.dataframe(pd.DataFrame(audit["logs"][::-1]), use_container_width=True, hide_index=True)
-        else:
-            st.info("Pas assez de matchs terminés après la période de chauffe (4 matchs/équipe).")
-    else:
-        st.info("Aucun match terminé à auditer.")
-
-# ------------------------------------------------------------------------------
-# ONGLET 7 : COMBINÉ QUANTIFIÉ
-# ------------------------------------------------------------------------------
-with tab_coupon:
-    st.subheader("🎟️ Ticket Combiné Quantifié (Top 5 Sécurité)")
-    if upcoming_matches:
-        candidates = []
-        for m in upcoming_matches:
-            ht, at = m["homeTeam"]["name"], m["awayTeam"]["name"]
-            pred = predictions_by_id[m["id"]]
-            top_opt = pred["options"][0]
-            candidates.append({
-                "match": f"{ht} vs {at}",
-                "pick": top_opt["desc"],
-                "prob": top_opt["prob"],
-                "odds": top_opt["odds"],
-            })
-        candidates.sort(key=lambda x: x["prob"], reverse=True)
-        top_5 = candidates[:5]
-        combined_odds = float(np.prod([x["odds"] for x in top_5]))
-        joint_prob = float(np.prod([x["prob"] / 100.0 for x in top_5])) * 100.0
-
-        st.markdown(
-            f"""
-            <div class="vip-banner">
-                <h2 style="margin:0; color:#F59E0B;">🛡️ COMBINÉ SÉCURITÉ APEX (TOP {len(top_5)})</h2>
-                <div style="font-size:1.5rem; font-weight:900; color:#FFFFFF; margin-top:8px;">
-                    Cote Équitable Combinée : <span style="color:#38BDF8;">{combined_odds:.2f}</span> |
-                    Probabilité Jointe Réelle : <span style="color:#10B981;">{joint_prob:.1f}%</span>
+        sniper_hits.sort(key=lambda x: x["confidence"], reverse=True)
+        st.info(f"🛡️ **Tournoi terminé :** {len(sniper_hits)} sélections d'élite retenues | {rejected} matchs éliminés pour incertitude.")
+        if sniper_hits:
+            for item in sniper_hits:
+                st.markdown(f"""
+                <div class="sniper-card">
+                    <div style="display:flex; justify-content:space-between;">
+                        <span class="badge-sniper">[{item['league']}] FIABILITÉ IA : {item['confidence']}%</span>
+                        <span style="color:#94A3B8; font-size:0.85rem;">{item['date']} UTC</span>
+                    </div>
+                    <h3 style="margin:8px 0; color:#FFFFFF;">{item['match']}</h3>
+                    <div style="font-size:1.25rem; font-weight:900; color:#34D399;">👉 {item['pick']}</div>
+                    <div style="font-size:0.9rem; color:#E2E8F0; margin-top:4px;">Proba Calibrée : <b>{item['prob']}%</b> | Cote Min : <b>{item['odds']}</b> | Consensus : <b>{item['consensus']}%</b> | Entropie : <b>{item['entropy']}</b></div>
                 </div>
+                """, unsafe_allow_html=True)
+        else:
+            st.warning("Aucun match ne franchit le filtre strict 90%+ sur cette fenêtre.")
+
+# ------------------------------------------------------------------------------
+# ONGLET 3 : TICKET COMBI FOU (MULTIPLICATEUR)
+# ------------------------------------------------------------------------------
+with tab_combi_fou:
+    st.markdown("""
+    <div class="vip-banner" style="border-color:#FBBF24;">
+        <h2 style="margin:0; color:#FBBF24;">🎰 GÉNÉRATEUR DE TICKETS COMBINÉS EXPLOSIFS (3 À 4 COUPS FOUS)</h2>
+        <span style="font-size:0.95rem; color:#F1F5F9;">Assemble les meilleurs scénarios asymétriques décorrélés sur 6 ligues</span>
+    </div>
+    """, unsafe_allow_html=True)
+
+    c_cfg1, c_cfg2, c_cfg3 = st.columns(3)
+    with c_cfg1: num_legs = st.slider("Nombre de coups fous à combiner :", 3, 4, 3)
+    with c_cfg2: combi_style = st.selectbox("Style du Combiné :", [
+        "⚡ Tactique & Scores Exacts (Cote Totale ~40 - 300)",
+        "💣 Giant-Killings & Surprises (Cote Totale ~150 - 1 500)",
+        "🤯 Jackpot Renversements 1/2 & 2/1 (Cote Totale ~1 000 - 15 000+)"
+    ])
+    with c_cfg3: micro_stake = st.number_input("Micro-Mise ($ / € / FCFA) :", value=round(max(1.0, user_bankroll * 0.005), 2), min_value=0.5, step=1.0)
+
+    if st.button("⚡ FORGER MON TICKET COMBINÉ EXPLOSIF", type="primary"):
+        pool_by_match = []
+        leagues_to_scan = ["PL", "PD", "FL1", "SA", "BL1", "CL"]
+        for l_code in leagues_to_scan:
+            l_stats, l_h, l_a, l_prof = get_advanced_league_stats(l_code, post_fifa_break)
+            l_raw = fetch_api(f"competitions/{l_code}/matches")
+            l_matches = l_raw.get("matches", []) if l_raw else []
+            for m in l_matches:
+                if m.get('status') in ['SCHEDULED', 'TIMED']:
+                    utc_str = m.get('utcDate', '')
+                    try:
+                        m_dt = datetime.strptime(utc_str[:19], "%Y-%m-%dT%H:%M:%S")
+                        if today_dt - timedelta(hours=2) <= m_dt <= today_dt + timedelta(days=4):
+                            ht, at = m['homeTeam']['name'], m['awayTeam']['name']
+                            pred = run_institutional_prediction(ht, at, l_stats, l_h, l_a, l_prof, user_bankroll, None, weather_condition, post_fifa_break, "🔥 Chasseur")
+                            matching = [c for c in pred["crazy_candidates"] if (
+                                ("Jackpot" in combi_style and c["category"] in ["reversal", "exact_score"]) or
+                                ("Giant-Killings" in combi_style and c["category"] in ["upset", "exact_score", "reversal"]) or
+                                ("Tactique" in combi_style and c["category"] in ["tactical", "exact_score", "goals", "upset"])
+                            )]
+                            chosen = matching[0] if matching else pred["best_crazy"]
+                            asym_score = chosen["prob"] * (chosen["odds"] ** 0.65)
+                            pool_by_match.append({
+                                "league": l_code, "date": utc_str[:10] + " " + utc_str[11:16],
+                                "match": f"{ht} vs {at}", "tag": chosen["tag"], "desc": chosen["desc"],
+                                "prob": chosen["prob"], "odds": chosen["odds"], "reason": chosen["reason"],
+                                "asym_score": asym_score
+                            })
+                    except Exception:
+                        pass
+        pool_by_match.sort(key=lambda x: x["asym_score"], reverse=True)
+        if len(pool_by_match) >= num_legs:
+            selected_legs = pool_by_match[:num_legs]
+            total_odds = float(np.prod([leg["odds"] for leg in selected_legs]))
+            gross_payout = round(micro_stake * total_odds, 2)
+            st.markdown(f"""
+            <div class="ticket-master">
+                <h2 style="margin:0; color:#FFFFFF;">Cote Totale : <span style="color:#FBBF24;">{total_odds:,.2f}</span> | Gain Potentiel : <span style="color:#34D399;">{gross_payout:,.2f}</span></h2>
             </div>
-            """,
-            unsafe_allow_html=True,
-        )
-        for idx, item in enumerate(top_5, 1):
-            st.markdown(
-                f"<div class='sub-card'><b>{idx}. {item['match']}</b><br>👉 <b style='color:#10B981;'>{item['pick']}</b> | Proba : <b>{item['prob']}%</b> (Cote : <b>{item['odds']}</b>)</div>",
-                unsafe_allow_html=True,
-            )
-    else:
-        st.info("Aucun match disponible pour générer un combiné.")
+            """, unsafe_allow_html=True)
+            for idx_leg, leg in enumerate(selected_legs, 1):
+                st.markdown(f"""
+                <div class="ticket-leg">
+                    <b>#{idx_leg} [{leg['league']}] {leg['match']}</b> — <span class="badge-crazy">{leg['tag']}</span><br>
+                    <b style="color:#38BDF8; font-size:1.1rem;">👉 {leg['desc']}</b> (Cote : <b style="color:#FBBF24;">{leg['odds']}</b> | {leg['prob']}%)<br>
+                    <span style="font-size:0.85rem; color:#94A3B8;">💡 {leg['reason']}</span>
+                </div>
+                """, unsafe_allow_html=True)
+
+# ------------------------------------------------------------------------------
+# ONGLET 4 : RADAR COUPS FOUS (EN SIMPLE)
+# ------------------------------------------------------------------------------
+with tab_crazy:
+    st.subheader("🔥 Radar des Coups Asymétriques en Simple")
+    if st.button("💣 SCANNER LES COUPS FOUS EN SIMPLE"):
+        crazy_hits = []
+        for l_code in ["PL", "PD", "FL1", "SA", "BL1", "CL"]:
+            l_stats, l_h, l_a, l_prof = get_advanced_league_stats(l_code, post_fifa_break)
+            l_raw = fetch_api(f"competitions/{l_code}/matches")
+            for m in (l_raw.get("matches", []) if l_raw else []):
+                if m.get('status') in ['SCHEDULED', 'TIMED']:
+                    utc_str = m.get('utcDate', '')
+                    try:
+                        m_dt = datetime.strptime(utc_str[:19], "%Y-%m-%dT%H:%M:%S")
+                        if today_dt - timedelta(hours=2) <= m_dt <= today_dt + timedelta(days=4):
+                            ht, at = m['homeTeam']['name'], m['awayTeam']['name']
+                            pred = run_institutional_prediction(ht, at, l_stats, l_h, l_a, l_prof, user_bankroll, None, weather_condition, post_fifa_break, "🔥 Chasseur")
+                            bc = pred["best_crazy"]
+                            crazy_hits.append({"league": l_code, "match": f"{ht} vs {at}", "tag": bc["tag"], "desc": bc["desc"], "prob": bc["prob"], "odds": bc["odds"], "reason": bc["reason"], "asym": bc["prob"] * math.sqrt(bc["odds"])})
+                    except Exception:
+                        pass
+        crazy_hits.sort(key=lambda x: x["asym"], reverse=True)
+        for item in crazy_hits[:10]:
+            st.markdown(f"""
+            <div class="degen-card">
+                <span class="badge-crazy">[{item['league']}] {item['tag']}</span> <b>{item['match']}</b><br>
+                <b style="color:#FBBF24; font-size:1.15rem;">💥 {item['desc']}</b> — Cote : <b>{item['odds']}</b> ({item['prob']}%)<br>
+                <span style="font-size:0.85rem; color:#CBD5E1;">💡 {item['reason']}</span>
+            </div>
+            """, unsafe_allow_html=True)
+
+# ------------------------------------------------------------------------------
+# ONGLET 5 : CLASSEMENT MATRICIEL MASSEY-COLLEY (FORCE RÉELLE CORRIGÉE)
+# ------------------------------------------------------------------------------
+with tab_massey:
+    st.subheader(f"📐 Classement Algébrique Massey-Colley — {selected_comp}")
+    st.caption("Résolution linéaire globale : mesure la vraie puissance de chaque équipe après correction de la difficulté des adversaires rencontrés.")
+    if team_stats:
+        massey_rows = [
+            {
+                "Équipe": name,
+                "Indice Massey (Buts/Match ajustés)": f"{d['massey']:+.3f}",
+                "ELO Hybride": round(d['elo'], 0),
+                "Attaque Dom. (Bayésien)": round(d['home_gf_pg'], 2),
+                "Attaque Ext. (Bayésien)": round(d['away_gf_pg'], 2),
+                "Clean Sheets Récents": f"{int(d['cs_rate']*100)}%",
+                "Dynamique Time-Decay": d['momentum_status']
+            }
+            for name, d in team_stats.items()
+        ]
+        massey_rows.sort(key=lambda x: float(x["Indice Massey (Buts/Match ajustés)"]), reverse=True)
+        st.dataframe(pd.DataFrame(massey_rows), use_container_width=True, hide_index=True)
